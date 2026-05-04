@@ -28,6 +28,12 @@ body {
   color: var(--ink);
 }
 
+.studio-loading .app-shell {
+  filter: blur(8px);
+  transform: scale(1.01);
+  pointer-events: none;
+}
+
 button,
 input {
   font: inherit;
@@ -138,10 +144,8 @@ output,
 
 .upload-zone {
   position: relative;
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
+  display: block;
+  min-height: 102px;
   border-style: dashed;
 }
 
@@ -157,7 +161,6 @@ output,
   pointer-events: none;
 }
 
-.upload-zone p,
 .toggle-row small {
   margin: 4px 0 0;
   color: var(--muted);
@@ -165,16 +168,35 @@ output,
   line-height: 1.35;
 }
 
+.upload-button {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  justify-items: start;
+  width: 100%;
+  min-height: 126px;
+  height: 100%;
+  padding: 16px;
+  text-align: left;
+  font-size: 18px;
+}
+
 .upload-mark {
   display: grid;
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   place-items: center;
   border-radius: 10px;
-  background: #fff1b6;
+  background: rgba(255, 255, 255, 0.52);
   color: #161616;
   font-size: 28px;
-  font-weight: 500;
+  font-weight: 800;
+}
+
+#chooseFileText {
+  min-width: 0;
+  line-height: 1.12;
 }
 
 .primary-button,
@@ -235,7 +257,6 @@ output,
 }
 
 .upload-zone .primary-button {
-  grid-column: 1 / -1;
   width: 100%;
   min-width: 0;
 }
@@ -320,10 +341,21 @@ output,
 
 .visualizer-light-toggle {
   position: absolute;
-  top: 16px;
+  top: 88px;
   right: 16px;
   z-index: 5;
-  display: block;
+  display: grid;
+  gap: 5px;
+  justify-items: center;
+}
+
+.light-toggle-label {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
+  text-transform: lowercase;
 }
 
 .visualizer-zoom-controls {
@@ -560,16 +592,9 @@ output,
 
 .submit-section {
   display: grid;
-  grid-template-columns: minmax(180px, 260px) 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: center;
-  gap: 12px;
-}
-
-.submit-section p {
-  margin-bottom: 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.22;
+  gap: 8px;
 }
 
 .project-section {
@@ -709,20 +734,33 @@ output,
 
 .preview-panel {
   display: grid;
-  grid-template-rows: auto minmax(360px, 1fr);
+  grid-template-rows: minmax(360px, 1fr);
   min-width: 0;
   min-height: 0;
-  padding: 16px;
+  padding: 0;
   background:
     linear-gradient(180deg, #faf7ef 0%, #f0ebe2 100%);
 }
 
 .preview-toolbar {
-  padding-bottom: 12px;
+  padding: 0;
 }
 
 .preview-toolbar h2 {
   font-size: 24px;
+}
+
+.stage-ribbon {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 7;
+  min-height: 78px;
+  padding: 16px 18px;
+  background: linear-gradient(180deg, rgba(18, 20, 20, 0.68), rgba(18, 20, 20, 0));
+  color: #fff;
+  backdrop-filter: blur(10px);
 }
 
 .preview-title-row {
@@ -737,6 +775,8 @@ output,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: #fff;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55);
 }
 
 .preview-title-input {
@@ -766,8 +806,8 @@ output,
   place-items: center;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: #fffdf7;
-  color: #4d4d4d;
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
   cursor: pointer;
 }
 
@@ -805,8 +845,8 @@ output,
   min-height: 0;
   place-items: center;
   overflow: hidden;
-  border: 1px solid #151515;
-  border-radius: 12px;
+  border: 0;
+  border-radius: 0;
   background:
     radial-gradient(circle at 50% 48%, rgba(255, 197, 41, 0.16), transparent 28%),
     radial-gradient(circle at 50% 48%, rgba(98, 110, 121, 0.34), transparent 38%),
@@ -816,32 +856,30 @@ output,
   user-select: none;
 }
 
-.stage-loading {
+.stage-note {
   position: absolute;
-  inset: 0;
-  z-index: 3;
-  display: grid;
-  place-items: center;
-  padding: 24px;
+  left: 18px;
+  right: auto;
+  bottom: 18px;
+  z-index: 6;
+  max-width: min(620px, calc(100% - 190px));
+  margin: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 9px 12px;
+  background: rgba(18, 20, 20, 0.66);
   color: rgba(255, 255, 255, 0.86);
-  font-size: clamp(18px, 2vw, 28px);
-  font-weight: 800;
-  text-align: center;
-  background:
-    radial-gradient(circle at 50% 48%, rgba(255, 197, 41, 0.12), transparent 28%),
-    rgba(30, 32, 31, 0.2);
-  pointer-events: none;
-}
-
-.stage.preview-ready .stage-loading {
-  display: none;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.3;
+  backdrop-filter: blur(12px);
 }
 
 .preview-alert {
   position: absolute;
   left: 18px;
   right: 18px;
-  top: 18px;
+  top: 88px;
   z-index: 4;
   max-width: 560px;
   border: 1px solid rgba(166, 95, 0, 0.28);
@@ -851,6 +889,59 @@ output,
   color: #5f3b00;
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.22);
   backdrop-filter: blur(10px);
+}
+
+.app-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(18, 20, 20, 0.38);
+  opacity: 1;
+  transition:
+    opacity 220ms ease,
+    visibility 220ms ease;
+}
+
+.app-loading.hidden {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.app-loading-card {
+  width: min(420px, calc(100vw - 48px));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  padding: 22px;
+  background: rgba(18, 20, 20, 0.82);
+  color: #fff;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(16px);
+}
+
+.app-loading-card h2 {
+  margin: 0 0 16px;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.loading-progress {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.loading-progress span {
+  display: block;
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--green);
+  transition: width 260ms ease;
 }
 
 .preview-alert-close {
@@ -1637,7 +1728,7 @@ output,
 
   .preview-panel {
     min-height: 620px;
-    padding: 18px;
+    padding: 0;
   }
 
   .preview-toolbar {
@@ -1647,6 +1738,12 @@ output,
 
   .stage {
     min-height: 360px;
+  }
+
+  .stage-note {
+    right: 18px;
+    bottom: 70px;
+    max-width: none;
   }
 
   .scene {
@@ -1679,6 +1776,10 @@ output,
   .control-panel,
   .preview-panel {
     padding: 14px;
+  }
+
+  .preview-panel {
+    padding: 0;
   }
 
   .brand-row,

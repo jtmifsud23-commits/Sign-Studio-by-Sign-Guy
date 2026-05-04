@@ -27,6 +27,7 @@ const SHOPIFY_CUSTOM_LOGO_BAR_LIGHT_VARIANTS = {
 
 const CONTACT_EMAIL = 'Hey@MySignGuy.ca';
 const SUBMISSION_SUBJECT = 'User submitted sign to print';
+const ORDER_SUBMISSION_SUBJECT = 'User placed a lightbox order';
 const DEFAULT_PREVIEW_SRC = './assets/sign-guy-logo-transparent.png';
 const DEFAULT_PREVIEW_DATA_URL = `data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyBpZD0iTGF5ZXJfMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2ZXJzaW9uPSIxLjEiIHZpZXdCb3g9IjAgMCAxMDI0IDEwMjQiIHdpZHRoPSIxMDI0IiBoZWlnaHQ9IjEwMjQiIHByZXNlcnZlQXNwZWN0UmF0aW89InhNaWRZTWlkIG1lZXQiPgogIDwhLS0gR2VuZXJhdG9yOiBBZG9iZSBJbGx1c3RyYXRvciAyOS4zLjAsIFNWRyBFeHBvcnQgUGx1Zy1JbiAuIFNWRyBWZXJzaW9uOiAyLjEuMCBCdWlsZCAxNDYpICAtLT4KICA8ZGVmcz4KICAgIDxzdHlsZT4KICAgICAgLnN0MCB7CiAgICAgICAgZmlsbDogIzY3NmI2ZjsKICAgICAgfQoKICAgICAgLnN0MSB7CiAgICAgICAgZmlsbDogIzJjMzMzNzsKICAgICAgfQoKICAgICAgLnN0MiB7CiAgICAgICAgZmlsbDogI2Y3YzAyNzsKICAgICAgfQoKICAgICAgLnN0MyB7CiAgICAgICAgZmlsbDogI2VhYmM5MzsKICAgICAgfQoKICAgICAgLnN0NCB7CiAgICAgICAgZmlsbDogI2ZkZmRmZDsKICAgICAgfQogICAgPC9zdHlsZT4KICA8L2RlZnM+CiAgPGc+CiAgICA8cGF0aCBjbGFzcz0ic3QxIiBkPSJNNTg3LjUsODguNWMyLjcsMi4zLDEzLjQsMy42LDE4LjMsNS4yLDE5LjYsNi40LDM2LjMsMTguMyw0OS4xLDMzLjksMjMuNCwyOC43LjMsNzAuOS0zMy45LDc2bDcuMSw4OC45YzEuMSwzOC45LDUuNCw3OS43LTE0LDExNSwzNS42LDEzLjYsNzEuNywzMi42LDkyLjcsNjUuNWg5OC44YzE1LjcsMS4yLDI1LjksMTEuMiwyOC40LDI2LjZ2NjYuNGMyMS41LjgsMzEuOCwyMiwzMC4xLDQxLjUtLjMsNC0zLjYsMTItMy42LDE0LDAsMyw2LjUsMTUuMSw2LjUsMjIuMS4xLDkuNy01LjMsMTUuMi02LjQsMjEuMy0uNSwyLjgsMS40LDgsMS41LDExLjYuMywxMy43LTcuMywyOC4xLTE4LjcsMzUuNHMtOC44LDIuOS05LjMsNS43djE3MWMtMy4xLDM0LjktNDAuMiwyNy45LTY1LjUsMjkuNC04My45LDUuMi0xNjcuOSw5LjctMjUxLjksMTQuMS00LjguMy0zLjYuMy04LjEuOXMtOCwxLTkuOSwxLjJjLTQuNC41LTE0LS4zLTIwLDAtNzcuMywyLjktMTU0LjcsOC41LTIzMiwxMi0yNi4xLDEuMi02Ni44LDExLjUtNzMuNS0yNC41di0xODIuOWMtMTEuOS0zLjgtMjMuMS0xMC4xLTMxLTIwLjEtMjEtMjYuOC0yMi42LTY0LjYtMTMuNy05Ni43czExLjgtMjYuMywxOS41LTM4LjUsMTMuMS0xOS4zLDI1LjEtMjIuNGMzLjMtMjYuOC0xMi4xLTgwLjQsMjUuNy04Ny44LDIuNi0uNSw1LjkuNiw4LjQtLjZzNi44LTExLjMsOS0xNGM2LjUtNy45LDE5LjItMTYuNSwyOC0yMiwyOS45LTE4LjUsNjUuMS0zMC40LDk4LjktMzkuNi0zLjMtMTItOC44LTIzLjQtMTAtMzUuOS0xMS40LS4zLTIzLjMtMS0zMy4yLTcuMS0xNC40LTguOC0yOS0yNy0zNC00My4yLTkuOC0zMS43LS42LTY1LjUsMjcuMi04NC41LTUuMi00Ny45LTguOS05MS45LDI0LjYtMTMwLjMsNjIuNS03MS43LDE5MC4yLTEwMC45LDI1OS0yMiwzLjQsMy45LDcuNywxMS43LDExLDE0LjVaTTU1Nyw4OWMtNDAtNDIuOC0xMDYtNTEuMS0xNTYuMy0yMC44LTMxLjgsMTkuMi0zNC40LDQxLjEtMzEuNyw3Ni4zczIuMiwxNS4xLDMsMjIuNWM1Mi4xLTQ0LDExNC45LTc4LjEsMTg1LTc4Wk0zNDgsMTAyYy0xLjEtMS4xLTguNCw2LjgtOS41LDgtMjcuNSwzMC4zLTI2LjIsNjYuOS0yMS41LDEwNS41LjEsMS4xLjMsMy4yLDEuNiwzLjUsMiwuNCwyNy41LTIzLjgsMzEuMy0yNi43LTMuMy0yOS44LTcuNy02MC41LTEuOS05MC4zWk02MzQsMTQ2Yy0yMy42LTMzLjYtNzMuMy0zNC43LTExMC40LTI5LjktNDAuOCw1LjMtOTAsMjYuOC0xMjAuNSw1NC41LTEuMSwxLTIuNSwxLjUtMi4xLDMuNCwyMC42LTkuOSw0MS4zLTE5LjUsNjMuMi0yNi4zLDUzLjItMTYuNSwxMTcuNS0yNS4xLDE2OS44LTEuN1pNMzk5LjUsMTc0bC0xLjUsMS41YzAsMSwyLjUtLjYsMS41LTEuNVpNMzk2LjUsMTc2djFjLjYtLjMuNi0uNywwLTFaTTMzNCwyOTl2LTE3LjVjMC0zLTMuNC0xNC4xLTQuOC0xNy4yLTguMy0xOC4xLTMwLjktMTkuMS0zOC45LS41LTEyLjgsMjkuNiw2LjMsNzAuMyw0MS4yLDcwLDMuNSwwLDE0LjMtMy4zLDE2LjEtMS45LDcuOCwyMi45LDE0LjQsNDUuNiwyOC4yLDY1LjgsNjMuOSw5NC4yLDIwOC4yLDg0LjksMjI4LjktMzcuNSw2LjYtMzguOC0xLjItMTEyLjYtNy45LTE1Mi41LS43LTQuMy0yLjUtMTYuOC0zLjktMTkuOS0yLjMtNS4yLTQ3LjEtMTEuNC01NC40LTExLjgtNDMuNy0yLjMtOTQuMiwzLjUtMTM0LjUsMjAuNi01LjUsMi4zLTQxLjIsMTkuNy00MS44LDIzLjEsMy4xLDE0LjgsMy4zLDMwLjgsMi44LDQ1LjlzMCwxMC4xLS4zLDEzLjdjLTEuNywyMC40LTExLjgsMjMuMi0zMC43LDE5LjhaTTM1MC44LDQyNC4yYy0zLjEtMS45LTIzLDQuMi0yNy42LDUuNi0zMC45LDkuMi02Mi44LDI1LjctODcsNDctLjcuNi0xLjksMC0xLjMsMi4zbDE0Ny0yLTE5LjItMjguM2MtMi44LTIuOC0xMC44LTIzLjgtMTItMjQuNVpNNjczLDQ3NWMxLjItMS0yLjgtNC4yLTMuNS01LTEwLjgtMTAuNC0zMC4xLTIyLjgtNDMuOC0yOS4ycy0yMC41LTguOS0yMy4yLTguOC0xMS41LDEzLjMtMTMuOSwxNmMtNi4xLDYuNi0xNC4zLDE0LjEtMjEuNiwxOS40cy04LjksNS4zLTEyLjksOC42bDExOS0xWk00MDguNSw0NzdjNS40LDEuNSwxNy4zLTEuMSwyMy41LDBsLTI0LjMtMTMuMi0xNi4yLTExLjhjMSwzLjcsMTUuMiwyNC41LDE3LDI1Wk0yMjEsNTcxdi00Ny41YzAtMi43LDYuMS04LjMsOS05czEyLjUtMS4zLDE2LjUtMS41YzczLjEtMy42LDE1MC41LS4yLDIyNC4xLS45LDEwNi41LTEsMjEzLjItMy44LDMxOS45LTMsNC4yLDAsMTEuNiw4LDExLjYsMTEuNHY1NS41bDEwLjEtMi42Yy0xLjYtMTkuNCwyLTQxLjksMC02MC45cy03LjgtMTMuOC0xNi41LTE0LjVjLTEzLjQtMS4yLTMxLjItLjEtNDUuMSwwLTk3LjkuOS0xOTYuMSwyLjUtMjkzLjksMy4xLTY5LC40LTEzOC4yLTEuMy0yMDcsMS0xNi40LjYtMzguNi01LjQtNDAuNiwxNy40czEuMSwzMy4xLDAsNDguOWwxMi4xLDIuNlpNNjAzLDYzMS41Yy44LTkuNC0uNi0xOS45LDAtMjkuNWwtNjIsMXYzMGgyNmMtMiwzMi40LTQxLjEsMzYuNi01OC44LDEzLjMtMjIuMS0yOC45LTcuMy04Mi4yLDM0LjItNzguMnMxOS4yLDUuOSwyNC42LDExLjQuNSw0LjcsNC4zLDQuMiwxOS45LTE2LjYsMjQuNi0xOS4zYy0xOC45LTI2LjItNTQuNy0zMy4yLTg0LjUtMjMuNS04Mi43LDI2LjktNjMuMSwxNjMsMzIuOSwxNTAuOSwzNC4zLTQuMyw1NS42LTI1LjYsNTguNi02MC40Wk03NTAsNTM3aC0zNnY4Ny41YzAsLjIsMi4zLDYuNy0xLDMuNXMtLjgtMi45LTEuNS00Yy0xNy42LTI4LjctMzQuMS01OC4xLTUzLTg2aC0zNS41djE1MWgzNXYtOTRjMS4zLDAsMS42LDEuNCwyLjIsMi4zLDE4LjgsMjkuNSwzNC4zLDYxLjMsNTMuMyw5MC43aDM3LjVsLTEtMTUxWk0yODAsNjUwYy0xLjQsNC40LTE1LjcsMjEuNC0xNC45LDI0LjMsMS4xLDQuMiwxOS44LDE0LDI0LjQsMTUuNywzOC44LDE0LjYsMTAwLjMtMS43LDg4LjItNTMuMi03LjItMzAuOS0zNS41LTI5LjQtNTgtMzlzLTIwLjUtMTUuNC05LjEtMjMuNiwzNC4yLS43LDQ1LjgsNy44YzMuMy02LjYsMTIuNS0xNS44LDE1LTIycy45LTEuNywwLTNjLTEuNS0yLjMtMTMuNy05LjctMTYuOS0xMS4yLTM3LjYtMTcuMy05Mi41LTIuOS04NS4yLDQ3LjIsNC42LDMxLjksMzIuNiwzMy41LDU2LjEsNDEuOXMxNS4zLDI3LjYtNSwyOS4xLTI3LjQtNy4yLTQwLjUtMTRaTTQzOCw1NDBoLTM4djE1MWgzOHYtMTUxWk0yMzcuNiw2NDIuNGMtNy03LTI0LjctMTAuNC0zNC40LTEyLjFzLTE3LS42LTIxLjUtMi41Yy03LjMtMy4xLjktOS4xLDYuOC05LjgsMTQuNi0xLjYsMjguMSw0LjEsNDEsNCwxMC4zLS4xLDE1LjgtOS4yLDkuOS0xNy45LTEwLjctMTUuOS01NS4yLTI2LjUtNjkuOS0xNC4xcy00LjgsOS41LTcuMSwxNC45LTcuNCwxMC44LTkuOSwxNy4xYy0xMCwyNC43LTkuMSw2Mi44LDkuNSw4My41czE5LjUsMTQuMywyOCw2LjVjLTUuMywxLjktOS45LTUuOS02LjEtOC42LDQuOC0zLjQsMzIuNyw0LjQsNDIuNS05LjVzLTQuNi0xNi40LTE1LjEtMTcuOC0zMCwuMi0zMy44LTQuMS0yLjEtNi41LjUtOC40YzcuMi01LjQsNDAuNiw2LjgsNTQuNSwxLjVzMTIuOC0xNSw1LjEtMjIuN1pNODI2LjgsNTg4LjJjLTEwLjguOS0zMy45LDExLjktMjYuMiwyNS43czI1LjUsOC40LDM0LjEsMy4zYzE1LTguOCwxMS4xLTMwLjUtNy45LTI5Wk04NDIuNyw2NTQuN2M1LjEtNSw1LjktMTUuMi4zLTIwLjFzLTE3LjYtLjctMjYuNC0uNWMtNi43LjEtMTAuNi0zLTE3LjUsMS41LTYuNyw0LjUtNS4zLDE0LjUsMSwxOC45LDcuOSw1LjQsMzUuNiw3LDQyLjYuMlpNNzk3LjcsNjY5LjFjLTQsMS4zLTMuOSw4LjEtMi43LDExLjUsNiwxNi43LDQ0LjMsMjQuOCw0NywyLjksMi0xNi44LTE4LjktMTItMjkuNC0xMi40cy0xMy4xLTIuNS0xNC44LTEuOVpNODEyLDcxM2MtMy41LDEuNS02LjQtLjItMTAsMHYxNjQuNWMwLC4zLTIuNSw0LjQtMyw1LTYuNSw3LjUtMjMuMyw0LjktMzIuNiw1LjQtMTcwLjgsOS42LTM0MS45LDE2LjctNTEzLDIzLTEwLjQuNC0yMS45LDQuNi0yOS41LTUuNS0uNi0uNy0zLTQuNy0zLTV2LTE4Mi41bC0xMCwxLC41LDE5M2M2LjMsMTUuNSwyNCwxMi4zLDM4LjEsMTIsMjcuOC0uNiw1Ni4xLTIuOCw4NC00LDEzNS42LTUuOCwyNzEuNS0xMi40LDQwNi45LTE5LjEsMTcuNS0uOSwzNi44LS4xLDU0LTJzMTcuNS02LjksMTcuNS0xMy41di0xNzIuNVpNNzI1LDcxNWgtMzguNWwtMjUsNTMtMjMuNS01MmgtNDFjMTIuNiwyNS45LDI2LjgsNTEuMSwzOS41LDc3LC45LDEuOSw2LjUsOS44LDYuNSwxMC41djYxYzAsLjQsMS42LDEuNywyLjQsMS41bDM0LjYtMXYtNjEuNWw0NS04OC41Wk0zODQsNzgzdjMwbDI4LTFjLS43LDM3LjctNTEuNSwzOC44LTY1LjUsOC0xMC40LTIyLjgtNi4zLTQ4LjksMTIuNi02NS40LDEyLjUtMTEsMzYuNS04LDQ4LjgsMnM2LjEsNy41LDYuNiw3LjRjNC40LS4xLDE5LjctMTcuNCwyNS41LTE5LTM1LjItNDcuOS0xMTUuMy0zNC41LTEzMi41LDIzLTE4LjgsNjIuOSwyMS44LDExOS4xLDg5LjcsMTAzLjdzNTEuNS00Ny45LDQ5LjgtODkuN2wtNjMsMVpNNTAyLDgwNy41Yy0yLTI5LjQsMS41LTYwLjksMC05MC41aC0zMy41Yy0uMywwLTMuNCwxLjItMy42LDEuNiwxLjEsMzEuNC0xLjMsNjMuNiwwLDk0LjksMS45LDQ3LjgsMzQuNCw2Ny4xLDgwLDUzLjksMjktOC4zLDM2LjYtMjksMzgtNTcsMS43LTMxLjQtMS44LTYzLjEtMS05NC41bC0zNiwxYy4yLDYuNS0uMiwxMywwLDE5LjUuNywyMi44LDQuNiw2Ni4yLTEsODYuOS01LjEsMTguOC0zMS4xLDIxLjctMzksNC4xcy0zLjYtMTQuNC00LTIwWiIvPgogICAgPHBhdGggY2xhc3M9InN0MCIgZD0iTTIyMSw1NzFsLTEyLjEtMi42YzEuMS0xNS44LTEuMy0zMy4zLDAtNDguOSwyLTIyLjksMjQuMS0xNi45LDQwLjYtMTcuNCw2OC44LTIuMywxMzgtLjYsMjA3LTEsOTcuOS0uNiwxOTYuMS0yLjIsMjkzLjktMy4xLDEzLjktLjEsMzEuNi0xLjIsNDUuMSwwczE1LjUsNS41LDE2LjUsMTQuNWMyLDE5LjEtMS42LDQxLjUsMCw2MC45bC0xMC4xLDIuNnYtNTUuNWMwLTMuNC03LjQtMTEuNS0xMS42LTExLjQtMTA2LjYtLjgtMjEzLjQsMS45LTMxOS45LDMtNzMuNi43LTE1MS0yLjctMjI0LjEuOXMtMTMuMi43LTE2LjUsMS41LTksNi4zLTksOXY0Ny41WiIvPgogICAgPHJlY3QgY2xhc3M9InN0NCIgeD0iNDAwIiB5PSI1NDAiIHdpZHRoPSIzOCIgaGVpZ2h0PSIxNTEiLz4KICAgIDxwYXRoIGNsYXNzPSJzdDAiIGQ9Ik0zNTAuOCw0MjQuMmMxLjIuNyw5LjIsMjEuNywxMiwyNC41bDE5LjIsMjguMy0xNDcsMmMtLjYtMi4zLjYtMS43LDEuMy0yLjMsMjQuMS0yMS4zLDU2LjEtMzcuOCw4Ny00Nyw0LjYtMS40LDI0LjYtNy41LDI3LjYtNS42WiIvPgogICAgPHBhdGggY2xhc3M9InN0MCIgZD0iTTY3Myw0NzVsLTExOSwxYzQtMy4zLDguOC01LjUsMTIuOS04LjYsNy4zLTUuMywxNS41LTEyLjgsMjEuNi0xOS40LDIuNS0yLjcsMTEuOS0xNS45LDEzLjktMTZzMTkuNiw3LjEsMjMuMiw4LjhjMTMuNyw2LjQsMzMsMTguOCw0My44LDI5LjIuOC43LDQuNyw0LDMuNSw1WiIvPgogICAgPHBhdGggY2xhc3M9InN0MyIgZD0iTTg0Mi43LDY1NC43Yy03LDYuOC0zNC43LDUuMi00Mi42LS4yLTYuMy00LjQtNy44LTE0LjQtMS0xOC45LDYuOC00LjUsMTAuNy0xLjMsMTcuNS0xLjUsOC45LS4yLDE4LjQtNi40LDI2LjQuNXM0LjgsMTUuMS0uMywyMC4xWiIvPgogICAgPHBhdGggY2xhc3M9InN0MyIgZD0iTTgyNi44LDU4OC4yYzE5LTEuNSwyMi45LDIwLjIsNy45LDI5cy0yOC41LDYuOC0zNC4xLTMuMywxNS40LTI0LjgsMjYuMi0yNS43WiIvPgogICAgPHBhdGggY2xhc3M9InN0MyIgZD0iTTc5Ny43LDY2OS4xYzEuOC0uNiwxMS45LDEuOCwxNC44LDEuOSwxMC41LjUsMzEuNC00LjQsMjkuNCwxMi40LTIuNiwyMS45LTQxLDEzLjktNDctMi45LTEuMi0zLjQtMS4zLTEwLjIsMi43LTExLjVaIi8+CiAgICA8cGF0aCBjbGFzcz0ic3Q0IiBkPSJNNzUwLDUzN2wxLDE1MWgtMzcuNWMtMTktMjkuNC0zNC42LTYxLjEtNTMuMy05MC43cy0uOS0yLjItMi4yLTIuM3Y5NGgtMzV2LTE1MWgzNS41YzE4LjksMjcuOSwzNS41LDU3LjMsNTMsODYsLjcsMS4xLDEuMywzLjksMS41LDQsMy4zLDMuMiwxLTMuMywxLTMuNXYtODcuNWgzNloiLz4KICAgIDxwYXRoIGNsYXNzPSJzdDQiIGQ9Ik02MDMsNjMxLjVjLTMuMSwzNC44LTI0LjMsNTYtNTguNiw2MC40LTk2LDEyLjEtMTE1LjYtMTI0LTMyLjktMTUwLjksMjkuOC05LjcsNjUuNy0yLjYsODQuNSwyMy41LTQuOCwyLjctMjAuOCwxOC43LTI0LjYsMTkuM3MtMy0yLjktNC4zLTQuMmMtNS41LTUuNS0xNi41LTEwLjYtMjQuNi0xMS40LTQxLjUtNC01Ni4zLDQ5LjMtMzQuMiw3OC4yLDE3LjgsMjMuMiw1Ni45LDE5LjEsNTguOC0xMy4zaC0yNnYtMzBsNjItMWMtLjYsOS42LjgsMjAuMSwwLDI5LjVaIi8+CiAgICA8cGF0aCBjbGFzcz0ic3Q0IiBkPSJNMjgwLDY1MGMxMy4xLDYuOCwyNC45LDE1LjEsNDAuNSwxNHMyNy0yMS4yLDUtMjkuMS01MS41LTEwLTU2LjEtNDEuOWMtNy4zLTUwLjEsNDcuNi02NC41LDg1LjItNDcuMiwzLjIsMS40LDE1LjQsOC44LDE2LjksMTEuMnMuNCwxLjgsMCwzYy0yLjUsNi4zLTExLjcsMTUuNS0xNSwyMi0xMS42LTguNi0zMi43LTE3LjItNDUuOC03LjhzLS4zLDE5LjYsOS4xLDIzLjZjMjIuNSw5LjYsNTAuOCw4LjEsNTgsMzksMTIsNTEuNS00OS41LDY3LjgtODguMiw1My4ycy0yMy4zLTExLjYtMjQuNC0xNS43LDEzLjUtMTkuOCwxNC45LTI0LjNaIi8+CiAgICA8Zz4KICAgICAgPHBhdGggY2xhc3M9InN0MCIgZD0iTTYzNCwxNDZjLTUyLjItMjMuNC0xMTYuNi0xNC44LTE2OS44LDEuNy0yMS45LDYuOC00Mi42LDE2LjMtNjMuMiwyNi4zLS40LTEuOSwxLTIuNCwyLjEtMy40LDMwLjUtMjcuNyw3OS44LTQ5LjIsMTIwLjUtNTQuNSwzNy4xLTQuOCw4Ni43LTMuNywxMTAuNCwyOS45WiIvPgogICAgICA8cGF0aCBjbGFzcz0ic3QwIiBkPSJNMzQ4LDEwMmMtNS44LDI5LjgtMS40LDYwLjQsMS45LDkwLjMtMy44LDIuOS0yOS4zLDI3LjEtMzEuMywyNi43cy0xLjQtMi40LTEuNi0zLjVjLTQuNy0zOC43LTYtNzUuMiwyMS41LTEwNS41LDEuMS0xLjIsOC40LTkuMSw5LjUtOFoiLz4KICAgICAgPHBhdGggY2xhc3M9InN0MyIgZD0iTTQwOC41LDQ3N2MtMS44LS41LTE2LTIxLjMtMTctMjVsMTYuMiwxMS44LDI0LjMsMTMuMmMtNi4yLTEuMS0xOC4xLDEuNS0yMy41LDBaIi8+CiAgICAgIDxwYXRoIGNsYXNzPSJzdDAiIGQ9Ik0zOTYuNSwxNzZjLjYuMy42LjcsMCwxdi0xWiIvPgogICAgICA8cGF0aCBjbGFzcz0ic3QwIiBkPSJNMzk5LjUsMTc0YzEsLjktMS41LDIuNS0xLjUsMS41bDEuNS0xLjVaIi8+CiAgICAgIDxwYXRoIGNsYXNzPSJzdDQiIGQ9Ik01NTcsODljLTcwLDAtMTMyLjksMzQuMS0xODUsNzgtLjgtNy40LTIuNC0xNS0zLTIyLjUtMi43LTM1LjItLjEtNTcuMSwzMS43LTc2LjMsNTAuMy0zMC4zLDExNi4zLTIyLDE1Ni4zLDIwLjhaIi8+CiAgICAgIDxnPgogICAgICAgIDxwYXRoIGNsYXNzPSJzdDMiIGQ9Ik0zMzQsMjk5YzE5LDMuNCwyOS4xLjcsMzAuNy0xOS44cy4yLTkuNi4zLTEzLjdjLjQtMTUuMi4yLTMxLjItMi44LTQ1LjkuNi0zLjQsMzYuMy0yMC43LDQxLjgtMjMuMSw0MC4zLTE3LjEsOTAuOC0yMi45LDEzNC41LTIwLjYsNy4zLjQsNTIuMiw2LjYsNTQuNCwxMS44czMuMSwxNS42LDMuOSwxOS45YzYuNywzOS45LDE0LjQsMTEzLjgsNy45LDE1Mi41LTIwLjgsMTIyLjQtMTY1LDEzMS43LTIyOC45LDM3LjUtMTMuOC0yMC4zLTIwLjQtNDMtMjguMi02NS44LTEuOC0xLjQtMTIuNiwxLjktMTYuMSwxLjktMzUsLjMtNTQtNDAuNC00MS4yLTcwLDgtMTguNiwzMC43LTE3LjYsMzguOS41czQuOCwxNC4yLDQuOCwxNy4ydjE3LjVaTTU3Ni42LDIwNS40Yy0xMS44LTkuNS01My4yLTExLTQ4LjQsOS45LDIuNiwxMS40LDEzLjgsMy42LDIwLjQsMi44LDQuMS0uNSwxMS44LS42LDE1LjktLjEsOC4xLjksMjYuMywxNC4yLDE5LTQtLjktMi4yLTUtNy4xLTYuOS04LjZaTTQxMS4xLDIyNy45YzIuMywxLjUsMjUuOC03LjIsMzEuNS03LjhzMTMuMy44LDE5LjksMWMxMS41LjIsMTguMy0xMi4xLDcuMi0xOC4zcy00My0xLjYtNTMuMiw5LjJjLTIuMywyLjQtOS40LDEzLjMtNS4zLDE1LjlaTTU1MS43LDI0NC4yYy0xMC4yLDIuMS0xMywxNy41LTExLjcsMjYuMnMxMS44LDE2LDE4LjQsMTUuNWMxNi42LTEuMSwxNi40LTQ2LjUtNi43LTQxLjdaTTQ0NS44LDI0Ni4yYy0yMS45LDMuMi0yMi40LDUzLjMsNi4yLDQzLjMsMTYuNC01LjgsMTMuMS00Ni4xLTYuMi00My4zWk01MTkuNywyNTAuM2MtMS43LTIuNi04LjQtMy4xLTkuNS40LTMuMiw5LjQsNC41LDI5LjIsMTEuMywzNi40LDguNyw5LjEsMzUuNywxOS4zLDIwLjEsMzZzLTM0LjcsMTMuNy00Ny42LDEuNS0xMC0xNy4xLTEyLjQtMTYuNS00LjMsNy45LTUuNSw5LjVjLTIuNiwzLjUtMTMsNy0xNy4zLDkuNy04LjQsNS4xLTIwLjksMTguOC0zMC44LDEwLjQtNS4yLTQuNS00LTE4LjMtMTMuMi0xNi40cy02LjcsMjMtMy42LDMwLjJjMTAuNSwyNCwzOSwyOC4yLDYyLjQsMjYuN3MzMC4yLTYuMiw0MS0xN2MyLS42LDEuNCwxLjcsMi45LDMsMjUuMywyMS40LDgwLjgsMTAsODQuNC0yNi42LjUtNS4xLTEuMi0xOS05LjItMTYuM3MtNC40LDExLjgtMTMuMSwxMS45LTIwLjktOS4xLTIyLjEtMTEsLjgtOSwuNS0xMS41Yy0xLjgtMTkuMy0yMi0yMi4yLTMwLjgtMzQuMnMtNS41LTEzLjUtNi44LTE5LC43LTUtLjctNy4xWk0zMDksMzA0YzE1LjcsMS4xLDE3LjctNi4zLDE1LjctMjAuMi0xLjItOC42LTUuMy0xMy4yLTE0LjMtOS44cy03LjIsOC4yLTUuNCwxNS4xYzEuNCwxLjIsOS40LTQuNywxMC44LS40cy40LDcuNy0uMyw5LjRjLTEuMiwyLjUtNi44LDIuNC02LjUsNlpNNTM3LjcsMzgyLjFjLTEuNy4zLTkuNiw0LjgtMTMuMiw1LjktOS42LDIuOS0xNS41LDMuNy0yNS4zLDEuMy00LjQtMS4xLTE0LjMtNi42LTE3LjMtMi45czIuNyw5LjQsNS42LDExLjZjMTIuOCw5LjYsNDAuOSw4LjMsNTEtNXM1LjktMTEuOS0uOC0xMC45WiIvPgogICAgICAgIDxwYXRoIGNsYXNzPSJzdDEiIGQ9Ik01MTkuNywyNTAuM2MxLjMsMi4xLjMsNS4zLjcsNy4xLDEuMyw1LjUsMy41LDE0LjUsNi44LDE5LDguOSwxMiwyOSwxNC45LDMwLjgsMzQuMnMtLjgsMTEtLjUsMTEuNWMxLjIsMS45LDE5LjIsMTEuMSwyMi4xLDExLDguOCwwLDEwLjUtMTEsMTMuMS0xMS45LDgtMi43LDkuNywxMS4xLDkuMiwxNi4zLTMuNywzNi43LTU5LjEsNDgtODQuNCwyNi42LTEuNi0xLjMtLjktMy42LTIuOS0zLTEwLjcsMTAuOC0yNiwxNi00MSwxNy0yMy40LDEuNS01MS45LTIuNi02Mi40LTI2LjctMy4xLTcuMS02LjctMjguMSwzLjYtMzAuMnM4LDExLjksMTMuMiwxNi40YzkuOCw4LjQsMjIuNC01LjMsMzAuOC0xMC40czE0LjctNi4yLDE3LjMtOS43LDMuNi05LjEsNS41LTkuNSw5LjUsMTMuOCwxMi40LDE2LjVjMTIuOSwxMi4yLDM1LjUsMTEuNSw0Ny42LTEuNXMtMTEuNC0yNi45LTIwLjEtMzZjLTYuOC03LjEtMTQuNS0yNi45LTExLjMtMzYuNHM3LjktMyw5LjUtLjRaIi8+CiAgICAgICAgPHBhdGggY2xhc3M9InN0MSIgZD0iTTQ0NS44LDI0Ni4yYzE5LjMtMi44LDIyLjcsMzcuNSw2LjIsNDMuMy0yOC42LDEwLjEtMjguMi00MC4xLTYuMi00My4zWiIvPgogICAgICAgIDxwYXRoIGNsYXNzPSJzdDEiIGQ9Ik00MTEuMSwyMjcuOWMtNC4xLTIuNiwzLTEzLjUsNS4zLTE1LjksMTAuMi0xMC44LDQwLjUtMTYuMyw1My4yLTkuMnM0LjIsMTguNS03LjIsMTguMy0xMi42LTEuNy0xOS45LTEtMjkuMiw5LjItMzEuNSw3LjhaIi8+CiAgICAgICAgPHBhdGggY2xhc3M9InN0MSIgZD0iTTU1MS43LDI0NC4yYzIzLjEtNC44LDIzLjMsNDAuNyw2LjcsNDEuNy02LjYuNC0xNy40LTkuMi0xOC40LTE1LjVzMS41LTI0LjEsMTEuNy0yNi4yWiIvPgogICAgICAgIDxwYXRoIGNsYXNzPSJzdDEiIGQ9Ik01NzYuNiwyMDUuNGMxLjksMS41LDYsNi40LDYuOSw4LjYsNy4zLDE4LjItMTAuOSw0LjktMTksNHMtMTEuOC0uNC0xNS45LjFjLTYuNi44LTE3LjgsOC42LTIwLjQtMi44LTQuOC0yMC45LDM2LjYtMTkuNCw0OC40LTkuOVoiLz4KICAgICAgICA8cGF0aCBjbGFzcz0ic3QxIiBkPSJNNTM3LjcsMzgyLjFjNi43LTEsMyw4LC44LDEwLjktMTAuMSwxMy4zLTM4LjIsMTQuNS01MSw1LTIuOS0yLjItOC42LTcuOS01LjYtMTEuNnMxMi45LDEuOSwxNy4zLDIuOWM5LjgsMi40LDE1LjcsMS42LDI1LjMtMS4zczExLjYtNS42LDEzLjItNS45WiIvPgogICAgICAgIDxwYXRoIGNsYXNzPSJzdDEiIGQ9Ik0zMDksMzA0Yy0uMy0zLjYsNS4zLTMuNCw2LjUtNnMuOS03LjcuMy05LjRjLTEuNC00LjQtOS41LDEuNS0xMC44LjQtMS44LTYuOS0yLjEtMTIuMyw1LjQtMTUuMXMxMy4xLDEuMiwxNC4zLDkuOGMyLDEzLjksMCwyMS40LTE1LjcsMjAuMloiLz4KICAgICAgPC9nPgogICAgPC9nPgogIDwvZz4KICA8Zz4KICAgIDxwYXRoIGNsYXNzPSJzdDIiIGQ9Ik02MzUuMSwzOTkuOWMzMC41LDEzLjYsNTguOSwzMi4yLDgwLjYsNTcuOSwyNC41LDEuMyw0OS4yLS43LDczLjYtLjQsMjAsLjMsMzYuNi0uMyw1MC4xLDE2LjdzOS4xLDI2LDkuNiw0MS40LS40LDI2LjYsMCwzOS45YzI1LjUsMTEuNiwyOS44LDMwLjEsMjksNTYuMSwwLDIuNi0xLjcsNS43LTEuNSw4LC4yLDMuNywzLjksMTAuNCw0LjQsMTUuMSwxLDguNywwLDE3LjMtMi4yLDI1LjZzLTEuNSw3LjMtMS42LDE2LjNjLS40LDE5LjEtMTEuMSwzOS4xLTI4LjEsNDguMnYxNjMuOGMtNSw0Ny4yLTQ0LjksNDQuMS04MS41LDQ2LjUtMTIwLjIsNy44LTI0MC44LDEyLjEtMzYxLDE4LTY0LjUsMy4yLTEzMC42LDguOC0xOTQuOSwxMC4xcy01MC43LTEzLjQtNTQuNS00NC42di0xNjkuOGMtMjIuNi0xMS0zOC45LTMzLjMtNDQuNS01Ny43cy00LTY4LjgsMTAuMy05NC43YzQuNi04LjMsOS43LTE2LjQsMTQuMy0yNC43czExLjMtMTUuNCwxOS44LTIwLjRjMS4yLTMxLjEtNy43LTY5LjgsMjQuNy04OC4xLDQuNS0yLjYsMTMuNC00LjQsMTUuOC02LjJzMy4yLTUuMiw0LjktNy4xYzMwLTMyLjksNzkuNS01MS4yLDEyMS41LTYzLC4zLS41LTIuOC05LjgtNC0xMC41cy0xMC44LTIuMi0xMy44LTMuMmMtNTQuOS0xOC40LTc5LTk1LjctNDIuNi0xNDEuMiwyLjYtMy4zLDExLjgtMTAuNywxMi40LTEzLjYsMS01LjEtMS44LTE2LjEtMi0yMS45LTIuMi01OS40LDkuMi05NS41LDU1LjYtMTMzLjUsNzguNi02NC41LDE5MC4zLTcyLjcsMjYzLDUsMS44LDEuOSwzLjIsNS43LDUuMSw2LjlzMTMuNiwzLjUsMTcuOSw1LjFjNTEuNSwxOC43LDkyLjUsNzUuNCw0NCwxMjItNi4xLDUuOS0xNCw5LjYtMjEuNCwxMy42bDYuOSwxMDIuOGMuMywyMC43LjQsNDAuNS00LjQsNjAuNy0uOCwzLjMtNi4zLDE5LjUtNS42LDIwLjdaTTU4Ny41LDg4LjVjLTMuMy0yLjgtNy42LTEwLjYtMTEtMTQuNS02OC45LTc4LjktMTk2LjYtNDkuNy0yNTksMjItMzMuNSwzOC40LTI5LjgsODIuNS0yNC42LDEzMC4zLTI3LjcsMTktMzcsNTIuOC0yNy4yLDg0LjVzMTkuNiwzNC40LDM0LDQzLjJjOS45LDYuMSwyMS44LDYuNywzMy4yLDcuMSwxLjIsMTIuNSw2LjgsMjQsMTAsMzUuOS0zMy45LDkuMi02OSwyMS4xLTk4LjksMzkuNi04LjgsNS40LTIxLjUsMTQuMS0yOCwyMnMtNy45LDEzLjQtOSwxNGMtMi41LDEuMi01LjgsMC04LjQuNi0zNy44LDcuNC0yMi4zLDYxLTI1LjcsODcuOC0xMiwzLjEtMTguOSwxMi42LTI1LjEsMjIuNHMtMTUuNiwyNC4yLTE5LjUsMzguNWMtOC45LDMyLjEtNy4yLDY5LjksMTMuNyw5Ni43czE5LjEsMTYuMywzMS4xLDIwLjF2MTgyLjljNi42LDM2LDQ3LjQsMjUuNyw3My40LDI0LjUsNzcuMy0zLjUsMTU0LjctOS4xLDIzMi0xMiw2LS4yLDE1LjYtLjUsMjAtLjlzOSwwLDEwLjktLjJjNC41LS42LDIuMy0uNiw3LjEtLjksODQtNC40LDE2OC04LjksMjUxLjktMTQuMSwyNS4zLTEuNiw2Mi41LDUuNSw2NS42LTI5LjR2LTE3MWMuNS0yLjgsNi42LTQsOS4zLTUuNywxMS41LTcuMywxOS4xLTIxLjcsMTguNy0zNS40LDAtMy41LTItOC43LTEuNS0xMS42LDEuMS02LjEsNi41LTExLjUsNi40LTIxLjMsMC03LTYuNS0xOS02LjUtMjIuMXMzLjMtMTAsMy42LTE0YzEuNy0xOS41LTguNi00MC42LTMwLTQxLjV2LTY2LjRjLTIuNi0xNS40LTEyLjctMjUuNC0yOC41LTI2LjZoLTk4LjhjLTIxLTMyLjktNTcuMS01MS45LTkyLjctNjUuNSwxOS40LTM1LjMsMTUuMS03Ni4yLDE0LTExNWwtNy4xLTg4LjljMzQuMi01LjEsNTcuNC00Ny4zLDMzLjktNzYtMTIuNy0xNS42LTI5LjUtMjcuNS00OS4xLTMzLjktNC45LTEuNi0xNS42LTMtMTguMy01LjJaIi8+CiAgICA8cGF0aCBjbGFzcz0ic3Q0IiBkPSJNMzg0LDc4M2w2My0xYzEuNyw0MS44LTMuMiw3OS4xLTQ5LjgsODkuNy02Ny45LDE1LjQtMTA4LjUtNDAuOC04OS43LTEwMy43LDE3LjItNTcuNSw5Ny4zLTcwLjksMTMyLjUtMjMtNS43LDEuNy0yMS4xLDE4LjktMjUuNSwxOXMtNC42LTUuOC02LjYtNy40Yy0xMi4zLTEwLTM2LjMtMTMtNDguOC0yLTE4LjksMTYuNS0yMyw0Mi42LTEyLjYsNjUuNCwxNCwzMC44LDY0LjgsMjkuNyw2NS41LThsLTI4LDF2LTMwWiIvPgogICAgPHBhdGggY2xhc3M9InN0NCIgZD0iTTUwMiw4MDcuNWMuNCw1LjcsMS42LDE0LjcsNCwyMCw3LjgsMTcuNiwzMy45LDE0LjcsMzktNC4xLDUuNi0yMC43LDEuNy02NC4xLDEtODYuOS0uMi02LjUuMi0xMy4xLDAtMTkuNWwzNi0xYy0uNywzMS40LDIuNyw2My4xLDEsOTQuNS0xLjUsMjgtOS4xLDQ4LjYtMzgsNTctNDUuNiwxMy4xLTc4LjEtNi4yLTgwLTUzLjlzMS4xLTYzLjUsMC05NC45Yy4xLS40LDMuMy0xLjYsMy42LTEuNmgzMy41YzEuNSwyOS42LTIsNjEuMSwwLDkwLjVaIi8+CiAgICA8cGF0aCBjbGFzcz0ic3QwIiBkPSJNODEyLDcxM3YxNzIuNWMwLDYuNi0xMS42LDEyLjktMTcuNSwxMy41LTE3LjIsMS44LTM2LjYsMS4xLTU0LDItMTM1LjUsNi43LTI3MS40LDEzLjMtNDA2LjksMTkuMS0yNy45LDEuMi01Ni4yLDMuNC04NCw0LTE0LC4zLTMxLjgsMy41LTM4LjEtMTJsLS41LTE5MywxMC0xdjE4Mi41YzAsLjMsMi40LDQuMywzLDUsNy41LDEwLDE5LjEsNS44LDI5LjUsNS41LDE3MS4xLTYuMywzNDIuMi0xMy40LDUxMy0yMyw5LjItLjUsMjYuMSwyLjEsMzIuNi01LjRzMy00LjcsMy01di0xNjQuNWMzLjYtLjIsNi41LDEuNSwxMCwwWiIvPgogICAgPHBhdGggY2xhc3M9InN0NCIgZD0iTTcyNSw3MTVsLTQ1LDg4LjV2NjEuNWwtMzQuNiwxYy0uOC4yLTIuNC0xLTIuNC0xLjV2LTYxYzAtLjYtNS42LTguNi02LjUtMTAuNS0xMi43LTI1LjktMjYuOS01MS4xLTM5LjUtNzdoNDFsMjMuNSw1MiwyNS01M2gzOC41WiIvPgogICAgPHBhdGggY2xhc3M9InN0MyIgZD0iTTIzNy42LDY0Mi40YzcuNyw3LjcsNC45LDE4LjktNS4xLDIyLjdzLTQ3LjMtNi45LTU0LjUtMS41LTIuNiw2LS41LDguNGMzLjgsNC40LDI2LjUsMy4xLDMzLjgsNC4xczI0LjcsNC4xLDE1LjEsMTcuOC0zNy42LDYuMS00Mi41LDkuNWMtMy44LDIuNy43LDEwLjQsNi4xLDguNi04LjUsNy44LTIxLjMuOS0yOC02LjUtMTguNy0yMC42LTE5LjUtNTguOC05LjUtODMuNXM3LjgtMTIsOS45LTE3LjEsMS40LTEwLjIsNy4xLTE0LjljMTQuOC0xMi40LDU5LjItMS44LDY5LjksMTQuMSw1LjksOC43LjQsMTcuOC05LjksMTcuOS0xMi45LjEtMjYuNC01LjYtNDEtNC01LjguNy0xNC4xLDYuNy02LjgsOS44czE1LjgsMS41LDIxLjUsMi41YzkuNywxLjcsMjcuNCw1LjEsMzQuNCwxMi4xWiIvPgogIDwvZz4KPC9zdmc+Cg==`;
 const PROJECT_FILE_VERSION = 1;
@@ -90,6 +91,7 @@ const state = {
 const els = {
   fileInput: document.querySelector('#fileInput'),
   chooseFile: document.querySelector('#chooseFile'),
+  chooseFileText: document.querySelector('#chooseFileText'),
   dropZone: document.querySelector('#dropZone'),
   statusPill: document.querySelector('#statusPill'),
   emailGate: document.querySelector('#emailGate'),
@@ -106,7 +108,8 @@ const els = {
   backColourHex: document.querySelector('#backColourHex'),
   warnings: document.querySelector('#warnings'),
   previewAlert: document.querySelector('#previewAlert'),
-  stageLoading: document.querySelector('#stageLoading'),
+  appLoading: document.querySelector('#appLoading'),
+  loadingProgressBar: document.querySelector('#loadingProgressBar'),
   complexityScore: document.querySelector('#complexityScore'),
   frontSvg: document.querySelector('#frontSvg'),
   modelStack: document.querySelector('#modelStack'),
@@ -117,6 +120,7 @@ const els = {
   dimensionStat: document.querySelector('#dimensionStat'),
   depthStat: document.querySelector('#depthStat'),
   illuminateToggle: document.querySelector('#illuminateToggle'),
+  lightToggleLabel: document.querySelector('#lightToggleLabel'),
   previewZoomOut: document.querySelector('#previewZoomOut'),
   previewZoomReset: document.querySelector('#previewZoomReset'),
   previewZoomIn: document.querySelector('#previewZoomIn'),
@@ -156,8 +160,10 @@ const els = {
 
 boot();
 
-function boot() {
+async function boot() {
+  setLoadingProgress(8);
   setupEmailGate();
+  setLoadingProgress(18);
   els.chooseFile.addEventListener('click', () => els.fileInput.click());
   els.fileInput.addEventListener('change', () => handleFiles(els.fileInput.files));
   els.illuminateToggle.addEventListener('change', () => {
@@ -228,15 +234,19 @@ function boot() {
     button.addEventListener('click', () => setPopoverTab(button.dataset.popoverTab));
   });
   buildPresetGrid();
+  setLoadingProgress(42);
   setupDropZone();
   setupDragRotation();
   setupCropInteraction();
   initThreeStage();
+  setLoadingProgress(62);
   updateStats();
   applyIllumination();
   renderShellColourControls();
   refreshProjectLog();
-  loadDefaultPreview();
+  await loadDefaultPreview();
+  setLoadingProgress(100);
+  window.setTimeout(hideAppLoading, 260);
 }
 
 function setupEmailGate() {
@@ -285,6 +295,11 @@ function normalizeEmail(value) {
 function renderSessionEmail() {
   if (!els.sessionEmailStat) return;
   els.sessionEmailStat.textContent = state.customerEmail || 'No email';
+}
+
+function renderUploadControl() {
+  if (!els.chooseFileText) return;
+  els.chooseFileText.textContent = state.uploadedFile ? 'Choose a different logo' : 'Upload logo';
 }
 
 function setupDropZone() {
@@ -340,6 +355,7 @@ async function handleFiles(fileList) {
   state.designName = '';
   els.designName.value = '';
   state.uploadedFile = file;
+  renderUploadControl();
   state.projectId = null;
   try {
     state.artwork = isSvg ? await readSvgArtwork(file) : await readPngArtwork(file);
@@ -547,6 +563,7 @@ async function loadDefaultPreview() {
     state.uploadedFile = null;
     state.projectId = null;
     state.fileName = '';
+    renderUploadControl();
     const image = await loadImage(DEFAULT_PREVIEW_DATA_URL);
     const artwork = {
       type: defaultType,
@@ -583,8 +600,11 @@ async function loadDefaultPreview() {
     console.error(error);
     state.isDefaultPreview = true;
     state.fileName = '';
+    renderUploadControl();
     renderPreviewTitle();
     renderEmptyPreview();
+  } finally {
+    setLoadingProgress(92);
   }
 }
 
@@ -811,7 +831,7 @@ function renderDetailsStep() {
       }).join('')}
     </div>
     <div class="section-heading plate-detail-heading">
-      <h3>Plate 2 - Back &amp; Side</h3>
+      <h3>Back and Sides</h3>
     </div>
     <div class="detail-list">
       <div class="detail-row">
@@ -1183,6 +1203,7 @@ function renderThree() {
 function applyIllumination() {
   els.stage.classList.toggle('lights-on', state.illuminated);
   els.stage.classList.toggle('lights-off', !state.illuminated);
+  if (els.lightToggleLabel) els.lightToggleLabel.textContent = state.illuminated ? 'lights on' : 'lights off';
 }
 
 function setPreviewZoom(value) {
@@ -2335,8 +2356,8 @@ function updateStats() {
   const usage = USAGE_PRESETS[state.usage] || USAGE_PRESETS.indoor;
   els.sizeOutput.textContent = preset.label;
   if (els.usageOutput) els.usageOutput.textContent = usage.label;
-  els.dimensionStat.textContent = `${preset.inches} in face`;
-  els.depthStat.textContent = `${preset.depth} mm depth`;
+  els.dimensionStat.textContent = `${preset.label} - ${usage.label}`;
+  if (els.depthStat) els.depthStat.textContent = `${preset.depth} mm depth`;
 }
 
 function applyShellColours() {
@@ -2416,22 +2437,70 @@ async function saveProjectFile() {
   try {
     const project = await buildSignGuyProject();
     state.projectId = project.id;
-    await uploadProjectFolder(project);
+    const localSave = isLocalTesting();
+    if (localSave) downloadProjectPayload(project);
+    else await uploadProjectFolder(project);
     try {
       await saveProjectRecord(project);
       await refreshProjectLog();
     } catch (storageError) {
       console.warn(storageError);
-      els.projectNote.textContent = 'The server folder was saved, but the local recent list could not be updated.';
+      els.projectNote.textContent = localSave
+        ? 'The .SignGuy file was downloaded, but the local recent list could not be updated.'
+        : 'The server folder was saved, but the local recent list could not be updated.';
     }
-    els.projectNote.textContent = `${project.name} saved to the ${state.customerEmail} server folder.`;
+    els.projectNote.textContent = localSave
+      ? `${project.name}.SignGuy downloaded and logged for local testing.`
+      : `${project.name} saved to the ${state.customerEmail} server folder.`;
     setStatus('Saved');
   } catch (error) {
     console.error(error);
-    els.projectNote.textContent = 'Could not save this project folder on the server.';
+    els.projectNote.textContent = isLocalTesting()
+      ? 'Could not download this .SignGuy file.'
+      : 'Could not save this project folder on the server.';
     setStatus('Save failed');
   } finally {
     updateProjectControls();
+  }
+}
+
+async function placeOrderRequest() {
+  if (!state.processed || !state.uploadedFile) return;
+  setStatus('Preparing order');
+  els.submitDesign.disabled = true;
+  els.placeOrder.disabled = true;
+  els.saveProject.disabled = true;
+  try {
+    const project = await buildSignGuyProject();
+    state.projectId = project.id;
+    const localOrder = isLocalTesting();
+    const screenshots = await captureSubmissionScreenshots();
+    const uploadResult = localOrder
+      ? { ok: true, localTesting: true, emailSent: false }
+      : await uploadProjectFolder(project, {
+        screenshots,
+        sendOrderEmail: true,
+        subject: ORDER_SUBMISSION_SUBJECT,
+        message: makeEmailBody('Shopify checkout order started'),
+      });
+    if (localOrder) downloadProjectPayload(project);
+    try {
+      await saveProjectRecord(project);
+      await refreshProjectLog();
+    } catch (storageError) {
+      console.warn(storageError);
+    }
+    els.submitNote.textContent = localOrder
+      ? `${project.name}.SignGuy downloaded for local checkout testing. Email is only sent from the deployed site.`
+      : `${project.name} saved. Redirecting to checkout.`;
+    setStatus('Checkout');
+    redirectToShopifyCheckout(project, uploadResult);
+  } catch (error) {
+    console.error(error);
+    els.submitNote.textContent = describeOrderError(error);
+    setStatus('Order failed');
+    updateProjectControls();
+    els.submitDesign.disabled = false;
   }
 }
 
@@ -2484,6 +2553,7 @@ async function buildSignGuyProject() {
     },
     config: {
       size: state.size,
+      usage: state.usage,
       designName: state.designName,
       illuminated: state.illuminated,
       removeBg: state.removeBg,
@@ -2510,6 +2580,7 @@ async function buildSignGuyProject() {
       dimensions: {
         faceInches: SIZE_PRESETS[state.size].inches,
         depthMm: SIZE_PRESETS[state.size].depth,
+        usage: USAGE_PRESETS[state.usage]?.label || USAGE_PRESETS.indoor.label,
       },
     },
   };
@@ -2535,7 +2606,9 @@ async function restoreSignGuyProject(project) {
     name: state.fileName,
   };
   state.uploadedFile = dataUrlToFile(source.dataUrl, state.fileName);
+  renderUploadControl();
   state.size = SIZE_PRESETS[config.size] ? config.size : 'large';
+  state.usage = USAGE_PRESETS[config.usage] ? config.usage : 'indoor';
   state.illuminated = Boolean(config.illuminated);
   state.removeBg = Boolean(config.removeBg);
   state.tolerance = clamp(Number(config.tolerance) || 64, 18, 90);
@@ -2575,6 +2648,9 @@ function applyStateToControls() {
   els.designName.value = state.designName || '';
   document.querySelectorAll('[data-size]').forEach((button) => {
     button.classList.toggle('active', button.dataset.size === state.size);
+  });
+  document.querySelectorAll('[data-usage]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.usage === state.usage);
   });
   applyIllumination();
   applyPreviewZoom();
@@ -2650,15 +2726,20 @@ function downloadProjectPayload(project) {
   downloadBlob(blob, `${projectFileBaseName(project)}.SignGuy`, 'application/x-signguy+json');
 }
 
-async function uploadProjectFolder(project) {
+async function uploadProjectFolder(project, options = {}) {
   const endpoint = getProjectSaveEndpoint();
   if (!endpoint) throw new Error('Project save endpoint is unavailable.');
   const projectName = `${projectFileBaseName(project)}.SignGuy`;
   const logoFile = state.uploadedFile || dataUrlToFile(project.source.dataUrl, project.source.fileName || `${baseName()}.png`);
-  const screenshots = await captureSubmissionScreenshots();
+  const screenshots = options.screenshots || await captureSubmissionScreenshots();
   const form = new FormData();
   form.append('customerEmail', project.customerEmail || state.customerEmail);
   form.append('projectName', projectName);
+  if (options.sendOrderEmail) {
+    form.append('sendOrderEmail', 'true');
+    form.append('subject', options.subject || ORDER_SUBMISSION_SUBJECT);
+    form.append('message', options.message || makeEmailBody('Shopify checkout order started'));
+  }
   form.append('projectFile', new Blob([JSON.stringify(project, null, 2)], { type: 'application/x-signguy+json' }), projectName);
   form.append('logo', logoFile, logoFile.name || project.source.fileName || 'uploaded-logo');
   screenshots.forEach((shot, idx) => {
@@ -2678,12 +2759,65 @@ async function uploadProjectFolder(project) {
     }
     throw new Error(`Project save endpoint returned ${response.status}${detail ? `: ${detail.slice(0, 160)}` : ''}`);
   }
+  try {
+    return await response.json();
+  } catch {
+    return { ok: true, projectName };
+  }
 }
 
 function getProjectSaveEndpoint() {
   if (window.SIGN_GUY_PROJECT_SAVE_ENDPOINT) return window.SIGN_GUY_PROJECT_SAVE_ENDPOINT;
+  if (isLocalTesting()) return '';
   if (!window.location.protocol.startsWith('http')) return '';
   return new URL('/api/save-project', window.location.href).href;
+}
+
+function isLocalTesting() {
+  const { protocol, hostname } = window.location;
+  return protocol === 'file:' || hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+}
+
+function redirectToShopifyCheckout(project, uploadResult = {}) {
+  const variantId = getShopifyVariantId();
+  if (!variantId) throw new Error('No matching Shopify variant was found.');
+  const projectName = `${projectFileBaseName(project)}.SignGuy`;
+  const params = new URLSearchParams();
+  if (state.customerEmail) params.set('checkout[email]', state.customerEmail);
+  params.set('attributes[Customer email]', state.customerEmail || '');
+  params.set('attributes[Design name]', project.name || getDesignName());
+  params.set('attributes[Studio size]', SIZE_PRESETS[state.size].label);
+  params.set('attributes[Usage]', USAGE_PRESETS[state.usage]?.label || USAGE_PRESETS.indoor.label);
+  params.set('attributes[SignGuy file]', projectName);
+  window.location.href = `${SHOPIFY_CHECKOUT_BASE_URL}/${variantId}:1?${params.toString()}`;
+}
+
+function getShopifyVariantId() {
+  return SHOPIFY_CUSTOM_LOGO_BAR_LIGHT_VARIANTS[state.size]?.[state.usage] || '';
+}
+
+function describeOrderError(error) {
+  if (error?.message?.includes('Project save endpoint is unavailable')) {
+    return isLocalTesting()
+      ? 'Could not prepare the local checkout test. Try saving the design first, then place the order again.'
+      : 'Could not reach the project save endpoint. The order was not started because the design folder must be saved first.';
+  }
+  if (error?.message?.includes('Project save endpoint returned')) {
+    return `${error.message}. The order was not started because the design folder must be saved first.`;
+  }
+  if (error?.message?.includes('Failed to fetch')) {
+    return 'Could not reach /api/save-project. The order was not started because the design folder must be saved first.';
+  }
+  if (error?.message?.includes('Submission endpoint')) {
+    return `${error.message}. The order was not started because the logo and visualizer screenshots email could not be sent.`;
+  }
+  if (error?.message?.includes('send submission')) {
+    return `${error.message}. The order was not started because the logo and visualizer screenshots email could not be sent.`;
+  }
+  if (error?.message?.includes('Shopify variant')) {
+    return 'Could not match this size and usage to a checkout product variant.';
+  }
+  return 'Could not prepare this order. Try again after the preview finishes loading.';
 }
 
 function projectFileBaseName(project) {
@@ -2880,6 +3014,7 @@ async function submitDesignToEndpoint({ endpoint, subject, body, screenshots }) 
   form.append('signName', getDesignName());
   form.append('uploadedFileName', state.fileName || state.uploadedFile?.name || 'logo file');
   form.append('size', SIZE_PRESETS[state.size].label);
+  form.append('usage', USAGE_PRESETS[state.usage]?.label || USAGE_PRESETS.indoor.label);
   form.append('depthMm', String(SIZE_PRESETS[state.size].depth));
   form.append('sideColour', normalizeHex(state.shellColours.side));
   form.append('backColour', normalizeHex(state.shellColours.back));
@@ -2937,18 +3072,21 @@ function captureVisualizerBlob() {
   });
 }
 
-function makeEmailBody() {
+function makeEmailBody(context = 'Design submission') {
   const preset = SIZE_PRESETS[state.size];
+  const usage = USAGE_PRESETS[state.usage] || USAGE_PRESETS.indoor;
   const colours = (state.processed?.colours || [])
     .map((region, idx) => `Colour ${idx + 1}: ${getDisplayColour(idx, region.hex)}`)
     .join('\n');
   return [
     'Custom lightbox request',
     '',
+    `Context: ${context}`,
     `Customer email: ${state.customerEmail || 'Not provided'}`,
     `Sign name: ${getDesignName()}`,
     `Uploaded file: ${state.fileName || 'logo file'}`,
     `Size: ${preset.label}`,
+    `Usage: ${usage.label}`,
     `Depth: ${preset.depth} mm`,
     `Preview lighting: ${state.illuminated ? 'Illuminated' : 'Not illuminated'}`,
     `Side colour: ${normalizeHex(state.shellColours.side)}`,
@@ -3277,6 +3415,16 @@ function clamp(value, min, max) {
 
 function waitFrame() {
   return new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+function setLoadingProgress(value) {
+  if (!els.loadingProgressBar) return;
+  els.loadingProgressBar.style.width = `${clamp(Number(value) || 0, 0, 100)}%`;
+}
+
+function hideAppLoading() {
+  document.body.classList.remove('studio-loading');
+  if (els.appLoading) els.appLoading.classList.add('hidden');
 }
 
 function setStatus(text) {

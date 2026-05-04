@@ -48,8 +48,8 @@ export default async function handler(req, res) {
     await transporter.sendMail({
       from: process.env.FROM_EMAIL || TO_EMAIL,
       to: TO_EMAIL,
-      subject: SUBJECT,
-      text: String(fields.message || ''),
+      subject: getField(fields.subject) || SUBJECT,
+      text: getField(fields.message),
       attachments,
     });
 
@@ -68,6 +68,10 @@ function parseMultipart(req) {
       else resolve({ fields, files });
     });
   });
+}
+
+function getField(value) {
+  return String(Array.isArray(value) ? value[0] : value || '');
 }
 
 async function collectAttachments(files) {

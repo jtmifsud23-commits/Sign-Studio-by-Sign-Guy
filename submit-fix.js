@@ -39,9 +39,11 @@ async function submitDesignToEndpoint({ endpoint, subject, body, screenshots }) 
   form.append('to', CONTACT_EMAIL);
   form.append('subject', subject);
   form.append('message', body);
+  form.append('customerEmail', state.customerEmail);
   form.append('signName', getDesignName());
   form.append('uploadedFileName', state.fileName || state.uploadedFile?.name || 'logo file');
   form.append('size', SIZE_PRESETS[state.size].label);
+  form.append('usage', USAGE_PRESETS[state.usage]?.label || USAGE_PRESETS.indoor.label);
   form.append('depthMm', String(SIZE_PRESETS[state.size].depth));
   form.append('sideColour', normalizeHex(state.shellColours.side));
   form.append('backColour', normalizeHex(state.shellColours.back));

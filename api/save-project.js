@@ -13,6 +13,7 @@
 
 import formidable from 'formidable';
 import fs from 'node:fs/promises';
+import nodemailer from 'nodemailer';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -23,6 +24,8 @@ export const config = {
 };
 
 const DEFAULT_UPLOAD_DIR = path.join(os.tmpdir(), 'sign-guy-designs');
+const TO_EMAIL = 'Hey@MySignGuy.ca';
+const ORDER_SUBJECT = 'User placed a lightbox order';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -44,16 +47,56 @@ export default async function handler(req, res) {
     const customerDir = path.join(uploadRoot, folderName);
     await fs.mkdir(customerDir, { recursive: true });
     const savedFiles = await saveFiles(customerDir, files);
+    let emailSent = false;
+    if (getField(fields.sendOrderEmail) === 'true') {
+      await sendOrderEmail(fields, files);
+      emailSent = true;
+    }
 
     res.status(200).json({
       ok: true,
       folder: customerDir,
       files: savedFiles,
+      emailSent,
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Could not save project files.' });
+    res.status(500).json({ error: 'Could not save project files or send the order email.' });
   }
+}
+
+async function sendOrderEmail(fields, files) {
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT || 587),
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+  await transporter.sendMail({
+    from: process.env.FROM_EMAIL || TO_EMAIL,
+    to: TO_EMAIL,
+    subject: getField(fields.subject) || ORDER_SUBJECT,
+    text: getField(fields.message),
+    attachments: await collectAttachments(files),
+  });
+}
+
+async function collectAttachments(files) {
+  const uploadFields = ['projectFile', 'logo', 'renderScreenshot1', 'renderScreenshot2'];
+  const attachments = [];
+  for (const field of uploadFields) {
+    const file = Array.isArray(files[field]) ? files[field][0] : files[field];
+    if (!file) continue;
+    attachments.push({
+      filename: file.originalFilename || `${field}.png`,
+      content: await fs.readFile(file.filepath),
+      contentType: file.mimetype || undefined,
+    });
+  }
+  return attachments;
 }
 
 function parseMultipart(req) {
