@@ -1,0 +1,16 @@
+{
+  "name": "sign-studio-by-sign-guy",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "echo \"Static site ready\""
+  },
+  "dependencies": {
+    "formidable": "^3.5.4",
+    "nodemailer": "^6.9.16"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
