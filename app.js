@@ -35,6 +35,8 @@ const PROJECT_DB_NAME = 'SignGuyLightboxStudio';
 const PROJECT_STORE_NAME = 'projects';
 const PROJECT_LOG_LIMIT = 12;
 const EMAIL_STORAGE_KEY = 'signGuyCustomerEmail';
+const ADMIN_SESSION_KEY = 'signGuyAdminMode';
+const LOCAL_ADMIN_PASSWORD = '77\\r(~68dKTE';
 let projectDbPromise = null;
 
 const CROP_PRESETS = [
@@ -56,6 +58,7 @@ const state = {
   fileName: '',
   designName: '',
   customerEmail: '',
+  isAdmin: false,
   isDefaultPreview: false,
   size: 'large',
   usage: 'indoor',
@@ -118,6 +121,12 @@ const els = {
   editDesignName: document.querySelector('#editDesignName'),
   sessionEmailStat: document.querySelector('#sessionEmailStat'),
   dimensionStat: document.querySelector('#dimensionStat'),
+  adminLoginButton: document.querySelector('#adminLoginButton'),
+  adminGate: document.querySelector('#adminGate'),
+  adminGateForm: document.querySelector('#adminGateForm'),
+  adminPassword: document.querySelector('#adminPassword'),
+  adminGateError: document.querySelector('#adminGateError'),
+  adminCancel: document.querySelector('#adminCancel'),
   depthStat: document.querySelector('#depthStat'),
   illuminateToggle: document.querySelector('#illuminateToggle'),
   lightToggleLabel: document.querySelector('#lightToggleLabel'),
@@ -163,6 +172,7 @@ boot();
 async function boot() {
   setLoadingProgress(8);
   setupEmailGate();
+  setupAdminMode();
   setLoadingProgress(18);
   els.chooseFile.addEventListener('click', () => els.fileInput.click());
   els.fileInput.addEventListener('change', () => handleFiles(els.fileInput.files));
@@ -295,6 +305,104 @@ function normalizeEmail(value) {
 function renderSessionEmail() {
   if (!els.sessionEmailStat) return;
   els.sessionEmailStat.textContent = state.customerEmail || 'No email';
+}
+
+function setupAdminMode() {
+  state.isAdmin = sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true';
+  renderAdminMode();
+  els.adminLoginButton?.addEventListener('click', () => {
+    if (state.isAdmin) {
+      logoutAdmin();
+      return;
+    }
+    openAdminGate();
+  });
+  els.adminCancel?.addEventListener('click', closeAdminGate);
+  els.adminGateForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    await loginAdmin();
+  });
+  els.adminPassword?.addEventListener('input', () => {
+    els.adminGate?.classList.remove('invalid');
+    if (els.adminGateError) els.adminGateError.textContent = '';
+  });
+}
+
+function renderAdminMode() {
+  if (els.adminLoginButton) {
+    els.adminLoginButton.textContent = state.isAdmin ? 'Admin: Logout' : 'Login';
+    els.adminLoginButton.classList.toggle('active', state.isAdmin);
+  }
+  renderProjectLog();
+}
+
+function openAdminGate() {
+  if (!els.adminGate || !els.adminPassword) return;
+  els.adminGate.classList.remove('hidden', 'invalid');
+  if (els.adminGateError) els.adminGateError.textContent = '';
+  els.adminPassword.value = '';
+  window.setTimeout(() => els.adminPassword.focus(), 0);
+}
+
+function closeAdminGate() {
+  els.adminGate?.classList.add('hidden');
+}
+
+async function loginAdmin() {
+  const password = els.adminPassword?.value || '';
+  if (!password.trim()) {
+    showAdminLoginError('Enter the admin password.');
+    return;
+  }
+  try {
+    const ok = await verifyAdminPassword(password);
+    if (!ok) {
+      showAdminLoginError('Incorrect admin password.');
+      return;
+    }
+    state.isAdmin = true;
+    sessionStorage.setItem(ADMIN_SESSION_KEY, 'true');
+    closeAdminGate();
+    renderAdminMode();
+    setStatus('Admin mode');
+  } catch (error) {
+    console.error(error);
+    showAdminLoginError('Admin login is unavailable.');
+  }
+}
+
+function logoutAdmin() {
+  state.isAdmin = false;
+  sessionStorage.removeItem(ADMIN_SESSION_KEY);
+  renderAdminMode();
+  setStatus('Ready');
+}
+
+function showAdminLoginError(message) {
+  els.adminGate?.classList.add('invalid');
+  if (els.adminGateError) els.adminGateError.textContent = message;
+  els.adminPassword?.focus();
+}
+
+async function verifyAdminPassword(password) {
+  if (isLocalTesting()) {
+    const localPassword = window.SIGN_GUY_LOCAL_ADMIN_PASSWORD || LOCAL_ADMIN_PASSWORD;
+    return password === localPassword;
+  }
+  const endpoint = getAdminLoginEndpoint();
+  if (!endpoint) return false;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+  return response.ok;
+}
+
+function getAdminLoginEndpoint() {
+  if (window.SIGN_GUY_ADMIN_LOGIN_ENDPOINT) return window.SIGN_GUY_ADMIN_LOGIN_ENDPOINT;
+  if (!window.location.protocol.startsWith('http')) return '';
+  return new URL('/api/admin-login', window.location.href).href;
 }
 
 function renderUploadControl() {
@@ -2438,8 +2546,11 @@ async function saveProjectFile() {
     const project = await buildSignGuyProject();
     state.projectId = project.id;
     const localSave = isLocalTesting();
-    if (localSave) downloadProjectPayload(project);
-    else await uploadProjectFolder(project);
+    if (localSave) {
+      if (state.isAdmin) downloadProjectPayload(project);
+    } else {
+      await uploadProjectFolder(project);
+    }
     try {
       await saveProjectRecord(project);
       await refreshProjectLog();
@@ -2450,7 +2561,9 @@ async function saveProjectFile() {
         : 'The server folder was saved, but the local recent list could not be updated.';
     }
     els.projectNote.textContent = localSave
-      ? `${project.name}.SignGuy downloaded and logged for local testing.`
+      ? state.isAdmin
+        ? `${project.name}.SignGuy downloaded and logged for local testing.`
+        : `${project.name} saved to the local Saved designs list. Login as admin to download .SignGuy files.`
       : `${project.name} saved to the ${state.customerEmail} server folder.`;
     setStatus('Saved');
   } catch (error) {
@@ -2692,7 +2805,7 @@ function renderProjectLog() {
         <span>${escapeHtml(project.source?.fileName || 'Lightbox Studio project')} · ${formatProjectDate(project.savedAt)}</span>
         <div class="project-item-actions">
           <button class="project-mini" type="button" data-load-project="${escapeHtml(project.id)}">Open</button>
-          <button class="project-mini" type="button" data-download-project="${escapeHtml(project.id)}">Download</button>
+          ${state.isAdmin ? `<button class="project-mini" type="button" data-download-project="${escapeHtml(project.id)}">Download</button>` : ''}
         </div>
       </div>
     </article>
@@ -2707,6 +2820,7 @@ function renderProjectLog() {
   });
   els.projectList.querySelectorAll('[data-download-project]').forEach((button) => {
     button.addEventListener('click', async () => {
+      if (!state.isAdmin) return;
       const project = await getProjectRecord(button.dataset.downloadProject);
       downloadProjectPayload(project);
       els.projectNote.textContent = `${project.name}.SignGuy downloaded.`;

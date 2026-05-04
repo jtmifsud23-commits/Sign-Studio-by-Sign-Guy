@@ -732,6 +732,11 @@ output,
   font-weight: 700;
 }
 
+.project-mini:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+}
+
 .preview-panel {
   display: grid;
   grid-template-rows: minmax(360px, 1fr);
@@ -837,6 +842,27 @@ output,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.admin-login-button {
+  flex: 0 0 auto;
+  min-height: 31px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  padding: 0 12px;
+  background: rgba(18, 20, 20, 0.48);
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+}
+
+.admin-login-button:hover,
+.admin-login-button.active {
+  border-color: var(--green);
+  background: rgba(255, 197, 41, 0.94);
+  color: #111;
 }
 
 .stage {
@@ -1184,6 +1210,38 @@ output,
   padding: 24px;
   background: rgba(22, 22, 22, 0.42);
   backdrop-filter: blur(4px);
+}
+
+.admin-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 28;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(18, 20, 20, 0.46);
+  backdrop-filter: blur(8px);
+}
+
+.admin-gate-card {
+  width: min(360px, calc(100vw - 48px));
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 20px;
+  background: #fffdf7;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.26);
+}
+
+.admin-gate-card h2 {
+  margin-bottom: 14px;
+  font-size: 22px;
+}
+
+.admin-gate-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 14px;
 }
 
 .email-gate-card {
@@ -1715,29 +1773,46 @@ output,
   }
 
   .app-shell {
+    display: flex;
+    flex-direction: column;
     grid-template-columns: 1fr;
     height: auto;
+    min-height: 100vh;
   }
 
   .control-panel {
+    order: 2;
     grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 12px;
     overflow: visible;
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
 
+  .control-panel > * {
+    grid-column: 1 / -1 !important;
+    width: 100%;
+  }
+
+  .brand-row {
+    align-items: center;
+  }
+
   .preview-panel {
-    min-height: 620px;
+    order: 1;
+    min-height: clamp(420px, 82vh, 680px);
     padding: 0;
   }
 
   .preview-toolbar {
     align-items: flex-start;
     flex-direction: column;
+    gap: 10px;
   }
 
   .stage {
-    min-height: 360px;
+    min-height: clamp(420px, 82vh, 680px);
   }
 
   .stage-note {
@@ -1747,8 +1822,78 @@ output,
   }
 
   .scene {
-    width: 86vw;
-    height: 86vw;
+    width: min(88vw, 520px);
+    height: min(88vw, 520px);
+  }
+
+  .upload-zone,
+  .lightbox-settings,
+  .plate-colours,
+  .project-section,
+  .submit-section {
+    width: 100%;
+  }
+
+  .upload-zone {
+    min-height: 116px;
+  }
+
+  .upload-button {
+    min-height: 116px;
+    justify-items: center;
+    text-align: center;
+  }
+
+  .segmented,
+  .usage-segmented {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .seg {
+    width: 100%;
+    min-height: 54px;
+  }
+
+  .plate-colours {
+    grid-template-columns: 1fr;
+  }
+
+  .plate-colours > .section-heading,
+  .plate-colours > .plate-card:nth-child(2),
+  .plate-colours > .plate-card:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+
+  .plate-card {
+    width: 100%;
+    min-height: 106px;
+  }
+
+  .shell-colour {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .project-actions,
+  .submit-section {
+    grid-template-columns: 1fr;
+  }
+
+  .submit-section .primary-button {
+    width: 100%;
+    min-height: 48px;
+  }
+
+  .project-icon-button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .project-list {
+    width: 100%;
+    max-height: none;
+    min-height: 120px;
   }
 
   .wizard {

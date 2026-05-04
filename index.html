@@ -123,6 +123,7 @@
             <div class="preview-stats">
               <span id="sessionEmailStat">No email</span>
               <span id="dimensionStat">Large 13&quot; - Indoor</span>
+              <button class="admin-login-button" id="adminLoginButton" type="button">Login</button>
             </div>
           </div>
           <div class="preview-alert" id="previewAlert" hidden></div>
@@ -170,6 +171,22 @@
         </label>
         <p class="email-gate-error" id="emailGateError" role="alert"></p>
         <button class="primary-button" type="submit">Continue to studio</button>
+      </form>
+    </div>
+
+    <div class="admin-gate hidden" id="adminGate" role="dialog" aria-modal="true" aria-labelledby="adminGateTitle">
+      <form class="admin-gate-card" id="adminGateForm" novalidate>
+        <p class="eyebrow">Admin mode</p>
+        <h2 id="adminGateTitle">Admin login</h2>
+        <label class="email-gate-field">
+          <span>Password</span>
+          <input id="adminPassword" type="password" name="adminPassword" autocomplete="current-password" required />
+        </label>
+        <p class="email-gate-error" id="adminGateError" role="alert"></p>
+        <div class="admin-gate-actions">
+          <button class="secondary-button" id="adminCancel" type="button">Cancel</button>
+          <button class="primary-button" type="submit">Login</button>
+        </div>
       </form>
     </div>
 
