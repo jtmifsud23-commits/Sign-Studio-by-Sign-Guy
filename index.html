@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Custom LED Lightbox Generator</title>
+    <link rel="stylesheet" href="./styles.css?v=20260504-03" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="control-panel" aria-label="Lightbox controls">
+        <div class="brand-row">
+          <div>
+            <p class="eyebrow">Custom shaped LED lightbox</p>
+            <h1>Lightbox Studio</h1>
+          </div>
+          <span class="status-pill" id="statusPill">Ready</span>
+        </div>
+
+        <section class="panel-section upload-zone" id="dropZone">
+          <input id="fileInput" type="file" accept=".svg,image/svg+xml,image/png" />
+          <div class="upload-mark">+</div>
+          <div>
+            <h2>Upload logo</h2>
+          </div>
+          <button class="primary-button" id="chooseFile" type="button">Choose file</button>
+        </section>
+
+        <section class="panel-section lightbox-settings">
+          <div class="section-heading">
+            <h2>Lightbox size</h2>
+            <output id="sizeOutput">Large 13"</output>
+          </div>
+          <div class="segmented" role="radiogroup" aria-label="Lightbox size">
+            <button class="seg" type="button" data-size="small">Small<br /><span>10"</span></button>
+            <button class="seg active" type="button" data-size="large">Large<br /><span>13"</span></button>
+            <button class="seg" type="button" data-size="xl">XL<br /><span>16"</span></button>
+          </div>
+          <input id="removeBg" type="checkbox" checked hidden />
+        </section>
+
+        <section class="panel-section plate-colours">
+          <div class="section-heading">
+            <h2>Plate colours</h2>
+            <output>33 mm</output>
+          </div>
+          <div class="plate-card">
+            <p>Plate 1 - Front</p>
+            <div id="frontPlateColours" class="plate-colour-row"></div>
+          </div>
+          <div class="plate-card">
+            <p>Plate 2 - Back &amp; Side</p>
+            <button class="shell-colour" id="sideColourButton" type="button">
+              <span>Side</span><i></i><strong id="sideColourHex">#000000</strong>
+            </button>
+            <button class="shell-colour" id="backColourButton" type="button">
+              <span>Back</span><i></i><strong id="backColourHex">#000000</strong>
+            </button>
+          </div>
+        </section>
+
+        <section class="panel-section diagnostics">
+          <div class="section-heading">
+            <h2>Print checks</h2>
+            <output id="complexityScore">Waiting</output>
+          </div>
+          <ul id="warnings">
+            <li>Upload artwork to run geometry checks.</li>
+          </ul>
+        </section>
+
+        <section class="panel-section submit-section">
+          <button class="primary-button" id="submitDesign" type="button" disabled>Submit design</button>
+          <p id="submitNote">Uploads are attached with a visualizer screenshot when your browser supports file sharing.</p>
+        </section>
+
+        <section class="panel-section project-section">
+          <input id="projectFileInput" type="file" accept=".SignGuy,.signguy,application/json" />
+          <div class="section-heading">
+            <h2>Saved designs</h2>
+            <output id="projectCount">0</output>
+          </div>
+          <div class="project-actions">
+            <button class="secondary-button project-icon-button" id="saveProject" type="button" disabled aria-label="Save .SignGuy">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 3h12l2 2v16H5z"></path>
+                <path d="M8 3v6h8V3"></path>
+                <path d="M8 17h8"></path>
+              </svg>
+            </button>
+            <button class="secondary-button project-icon-button" id="openProject" type="button" aria-label="Open .SignGuy">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 6h7l2 2h9v10a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z"></path>
+                <path d="M3 10h18"></path>
+              </svg>
+            </button>
+          </div>
+          <div class="project-list" id="projectList"></div>
+          <p id="projectNote"></p>
+        </section>
+      </aside>
+
+      <section class="preview-panel" aria-label="3D lightbox preview">
+        <div class="preview-toolbar">
+          <div>
+            <p class="eyebrow">Interactive 3D preview</p>
+            <div class="preview-title-row" id="previewTitleRow">
+              <h2 id="previewTitle">Example lightbox preview</h2>
+              <input class="preview-title-input" id="designName" type="text" placeholder="My Custom LED Sign" autocomplete="off" aria-label="Sign name" hidden />
+              <button class="title-edit-button" id="editDesignName" type="button" aria-label="Edit sign name">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 20h9"></path>
+                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="preview-stats">
+            <span id="dimensionStat">13 in face</span>
+            <span id="depthStat">33 mm depth</span>
+          </div>
+        </div>
+
+        <div class="stage" id="stage">
+          <div class="stage-loading" id="stageLoading">Sign Guy Sign Studio is loading.</div>
+          <div class="preview-alert" id="previewAlert" hidden></div>
+          <label class="visualizer-light-toggle" aria-label="Illuminated preview">
+            <input id="illuminateToggle" type="checkbox" checked />
+            <span class="light-switch" aria-hidden="true"><i></i></span>
+          </label>
+          <div class="visualizer-zoom-controls" aria-label="Visualizer zoom controls">
+            <button class="zoom-button" id="previewZoomOut" type="button" aria-label="Zoom out">-</button>
+            <button class="zoom-button" id="previewZoomReset" type="button" aria-label="Reset zoom">100%</button>
+            <button class="zoom-button" id="previewZoomIn" type="button" aria-label="Zoom in">+</button>
+          </div>
+          <div class="scene" id="scene">
+            <div class="model-stack" id="modelStack">
+              <div class="shadow"></div>
+              <div class="back-shell model-layer"></div>
+              <div class="side-wall model-layer"></div>
+              <div class="side-wall model-layer offset-1"></div>
+              <div class="side-wall model-layer offset-2"></div>
+              <div class="side-wall model-layer offset-3"></div>
+              <div class="side-wall model-layer offset-4"></div>
+              <div class="side-wall model-layer offset-5"></div>
+              <div class="side-wall model-layer offset-6"></div>
+              <div class="side-wall model-layer offset-7"></div>
+              <div class="side-wall model-layer offset-8"></div>
+              <svg id="frontSvg" class="front-face model-layer" viewBox="-500 -500 1000 1000" role="img" aria-label="Processed lightbox front"></svg>
+              <div class="glow model-layer"></div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+    </main>
+
+    <div class="wizard hidden" id="wizard" aria-hidden="true">
+      <div class="wizard-card" role="dialog" aria-modal="true" aria-labelledby="wizardTitle">
+        <header class="wizard-header">
+          <h2 id="wizardTitle">Edit Your Image</h2>
+          <button class="icon-button" id="wizardClose" type="button" aria-label="Close">x</button>
+        </header>
+
+        <div class="wizard-body">
+          <section class="wizard-main">
+            <div class="artboard checkerboard" id="wizardArtboard">
+              <img id="wizardImage" alt="Uploaded logo preview" />
+              <div class="crop-box" id="cropBox">
+                <span class="crop-handle crop-nw" data-handle="nw"></span>
+                <span class="crop-handle crop-ne" data-handle="ne"></span>
+                <span class="crop-handle crop-sw" data-handle="sw"></span>
+                <span class="crop-handle crop-se" data-handle="se"></span>
+              </div>
+            </div>
+            <div class="preview-tools" id="previewTools">
+              <button class="secondary-button mini" id="zoomOut" type="button">-</button>
+              <button class="secondary-button mini" id="zoomIn" type="button">+</button>
+            </div>
+          </section>
+
+          <aside class="wizard-side" id="wizardSide"></aside>
+        </div>
+
+        <footer class="wizard-footer" id="wizardFooter"></footer>
+      </div>
+    </div>
+
+    <div class="colour-popover hidden" id="colourPopover">
+      <div class="popover-tabs">
+        <button class="active" type="button" data-popover-tab="preset">Preset</button>
+        <button type="button" data-popover-tab="custom">Custom</button>
+        <button class="icon-button" id="closeColourPopover" type="button" aria-label="Close">x</button>
+      </div>
+      <div class="colour-current">
+        <i id="popoverSwatch"></i>
+        <input id="popoverHex" type="text" value="#001c42" aria-label="Selected colour hex" />
+      </div>
+      <div class="preset-pane" id="presetPane">
+        <p>PLA Basic</p>
+        <div class="preset-grid" id="presetGrid"></div>
+      </div>
+      <div class="custom-pane hidden" id="customPane">
+        <input id="customColourInput" type="color" value="#001c42" aria-label="Custom colour picker" />
+        <div class="rgb-row">
+          <span>RGB</span>
+          <input id="rgbR" type="number" min="0" max="255" value="0" aria-label="Red" />
+          <input id="rgbG" type="number" min="0" max="255" value="28" aria-label="Green" />
+          <input id="rgbB" type="number" min="0" max="255" value="66" aria-label="Blue" />
+        </div>
+      </div>
+    </div>
+
+    <script defer src="./vendor/three.min.js?v=20260504-03"></script>
+    <script defer src="./app.js?v=20260504-03"></script>
+  </body>
+</html>
