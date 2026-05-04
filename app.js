@@ -12,6 +12,7 @@ const PROJECT_FILE_VERSION = 1;
 const PROJECT_DB_NAME = 'SignGuyLightboxStudio';
 const PROJECT_STORE_NAME = 'projects';
 const PROJECT_LOG_LIMIT = 12;
+const EMAIL_STORAGE_KEY = 'signGuyCustomerEmail';
 let projectDbPromise = null;
 
 const CROP_PRESETS = [
@@ -32,6 +33,7 @@ const PRESET_COLOURS = [
 const state = {
   fileName: '',
   designName: '',
+  customerEmail: '',
   isDefaultPreview: false,
   size: 'large',
   illuminated: true,
@@ -68,6 +70,10 @@ const els = {
   chooseFile: document.querySelector('#chooseFile'),
   dropZone: document.querySelector('#dropZone'),
   statusPill: document.querySelector('#statusPill'),
+  emailGate: document.querySelector('#emailGate'),
+  emailGateForm: document.querySelector('#emailGateForm'),
+  emailGateError: document.querySelector('#emailGateError'),
+  customerEmail: document.querySelector('#customerEmail'),
   designName: document.querySelector('#designName'),
   sizeOutput: document.querySelector('#sizeOutput'),
   frontPlateColours: document.querySelector('#frontPlateColours'),
@@ -84,6 +90,7 @@ const els = {
   stage: document.querySelector('#stage'),
   previewTitle: document.querySelector('#previewTitle'),
   editDesignName: document.querySelector('#editDesignName'),
+  sessionEmailStat: document.querySelector('#sessionEmailStat'),
   dimensionStat: document.querySelector('#dimensionStat'),
   depthStat: document.querySelector('#depthStat'),
   illuminateToggle: document.querySelector('#illuminateToggle'),
@@ -126,6 +133,7 @@ const els = {
 boot();
 
 function boot() {
+  setupEmailGate();
   els.chooseFile.addEventListener('click', () => els.fileInput.click());
   els.fileInput.addEventListener('change', () => handleFiles(els.fileInput.files));
   els.illuminateToggle.addEventListener('change', () => {
@@ -195,6 +203,54 @@ function boot() {
   renderShellColourControls();
   refreshProjectLog();
   loadDefaultPreview();
+}
+
+function setupEmailGate() {
+  if (!els.emailGate || !els.emailGateForm || !els.customerEmail) return;
+  const savedEmail = normalizeEmail(localStorage.getItem(EMAIL_STORAGE_KEY));
+  if (savedEmail && isValidEmail(savedEmail)) {
+    state.customerEmail = savedEmail;
+    els.customerEmail.value = savedEmail;
+    els.emailGate.classList.add('hidden');
+    renderSessionEmail();
+    refreshProjectLog();
+    return;
+  }
+  window.setTimeout(() => els.customerEmail.focus(), 0);
+  els.emailGateForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const email = els.customerEmail.value.trim();
+    if (!isValidEmail(email)) {
+      els.emailGate.classList.add('invalid');
+      els.emailGateError.textContent = 'Enter a valid email address to continue.';
+      els.customerEmail.focus();
+      return;
+    }
+    state.customerEmail = normalizeEmail(email);
+    localStorage.setItem(EMAIL_STORAGE_KEY, state.customerEmail);
+    renderSessionEmail();
+    els.emailGate.classList.add('hidden');
+    els.emailGateError.textContent = '';
+    setStatus('Ready');
+    refreshProjectLog();
+  });
+  els.customerEmail.addEventListener('input', () => {
+    els.emailGate.classList.remove('invalid');
+    els.emailGateError.textContent = '';
+  });
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function renderSessionEmail() {
+  if (!els.sessionEmailStat) return;
+  els.sessionEmailStat.textContent = state.customerEmail || 'No email';
 }
 
 function setupDropZone() {
@@ -2265,19 +2321,19 @@ async function saveProjectFile() {
   try {
     const project = await buildSignGuyProject();
     state.projectId = project.id;
-    downloadProjectPayload(project);
+    await uploadProjectFolder(project);
     try {
       await saveProjectRecord(project);
       await refreshProjectLog();
     } catch (storageError) {
       console.warn(storageError);
-      els.projectNote.textContent = 'The .SignGuy file was saved, but the local recent list could not be updated.';
+      els.projectNote.textContent = 'The server folder was saved, but the local recent list could not be updated.';
     }
-    els.projectNote.textContent = `${project.name}.SignGuy saved and logged.`;
+    els.projectNote.textContent = `${project.name} saved to the ${state.customerEmail} server folder.`;
     setStatus('Saved');
   } catch (error) {
     console.error(error);
-    els.projectNote.textContent = 'Could not save this .SignGuy file.';
+    els.projectNote.textContent = 'Could not save this project folder on the server.';
     setStatus('Save failed');
   } finally {
     updateProjectControls();
@@ -2290,6 +2346,7 @@ async function openProjectFiles(fileList) {
   setStatus('Opening');
   try {
     const project = JSON.parse(await file.text());
+    project.customerEmail = state.customerEmail;
     await restoreSignGuyProject(project);
     try {
       await saveProjectRecord(project);
@@ -2319,6 +2376,7 @@ async function buildSignGuyProject() {
     version: PROJECT_FILE_VERSION,
     id: state.projectId || makeProjectId(),
     name: getDesignName(),
+    customerEmail: state.customerEmail,
     savedAt: now,
     source: {
       fileName: sourceName,
@@ -2431,6 +2489,11 @@ function applyStateToControls() {
 }
 
 async function refreshProjectLog() {
+  if (!state.customerEmail) {
+    state.savedProjects = [];
+    renderProjectLog();
+    return;
+  }
   try {
     state.savedProjects = await getProjectRecords();
     renderProjectLog();
@@ -2445,7 +2508,7 @@ function renderProjectLog() {
   const projects = state.savedProjects || [];
   els.projectCount.textContent = String(projects.length);
   if (!projects.length) {
-    els.projectList.innerHTML = '<p class="project-empty">No saved designs yet.</p>';
+    els.projectList.innerHTML = `<p class="project-empty">No saved designs for ${escapeHtml(state.customerEmail || 'this email')} yet.</p>`;
     els.projectNote.textContent = '';
     return;
   }
@@ -2492,6 +2555,42 @@ function downloadProjectPayload(project) {
   downloadBlob(blob, `${projectFileBaseName(project)}.SignGuy`, 'application/x-signguy+json');
 }
 
+async function uploadProjectFolder(project) {
+  const endpoint = getProjectSaveEndpoint();
+  if (!endpoint) throw new Error('Project save endpoint is unavailable.');
+  const projectName = `${projectFileBaseName(project)}.SignGuy`;
+  const logoFile = state.uploadedFile || dataUrlToFile(project.source.dataUrl, project.source.fileName || `${baseName()}.png`);
+  const screenshots = await captureSubmissionScreenshots();
+  const form = new FormData();
+  form.append('customerEmail', project.customerEmail || state.customerEmail);
+  form.append('projectName', projectName);
+  form.append('projectFile', new Blob([JSON.stringify(project, null, 2)], { type: 'application/x-signguy+json' }), projectName);
+  form.append('logo', logoFile, logoFile.name || project.source.fileName || 'uploaded-logo');
+  screenshots.forEach((shot, idx) => {
+    form.append(`renderScreenshot${idx + 1}`, shot.file, shot.file.name);
+    form.append(`renderScreenshot${idx + 1}Label`, shot.label);
+  });
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    body: form,
+  });
+  if (!response.ok) {
+    let detail = '';
+    try {
+      detail = await response.text();
+    } catch {
+      detail = '';
+    }
+    throw new Error(`Project save endpoint returned ${response.status}${detail ? `: ${detail.slice(0, 160)}` : ''}`);
+  }
+}
+
+function getProjectSaveEndpoint() {
+  if (window.SIGN_GUY_PROJECT_SAVE_ENDPOINT) return window.SIGN_GUY_PROJECT_SAVE_ENDPOINT;
+  if (!window.location.protocol.startsWith('http')) return '';
+  return new URL('/api/save-project', window.location.href).href;
+}
+
 function projectFileBaseName(project) {
   const date = (project.savedAt || new Date().toISOString()).slice(0, 10);
   return `${project.name || 'lightbox-design'}-${date}`.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
@@ -2536,8 +2635,10 @@ async function getProjectRecords() {
   const db = await openProjectDb();
   const tx = db.transaction(PROJECT_STORE_NAME, 'readonly');
   const records = await requestResult(tx.objectStore(PROJECT_STORE_NAME).getAll());
+  const email = normalizeEmail(state.customerEmail);
   await transactionDone(tx);
   return records
+    .filter((project) => normalizeEmail(project.customerEmail) === email)
     .sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')))
     .slice(0, PROJECT_LOG_LIMIT);
 }
@@ -2548,6 +2649,9 @@ async function getProjectRecord(id) {
   const project = await requestResult(tx.objectStore(PROJECT_STORE_NAME).get(id));
   await transactionDone(tx);
   if (!project) throw new Error('Saved project was not found.');
+  if (normalizeEmail(project.customerEmail) !== normalizeEmail(state.customerEmail)) {
+    throw new Error('Saved project belongs to a different email address.');
+  }
   return project;
 }
 
@@ -2563,7 +2667,9 @@ async function pruneProjectRecords() {
   const tx = db.transaction(PROJECT_STORE_NAME, 'readwrite');
   const store = tx.objectStore(PROJECT_STORE_NAME);
   const records = await requestResult(store.getAll());
+  const email = normalizeEmail(state.customerEmail);
   records
+    .filter((project) => normalizeEmail(project.customerEmail) === email)
     .sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')))
     .slice(PROJECT_LOG_LIMIT)
     .forEach((project) => store.delete(project.id));
@@ -2666,6 +2772,7 @@ async function submitDesignToEndpoint({ endpoint, subject, body, screenshots }) 
   form.append('to', CONTACT_EMAIL);
   form.append('subject', subject);
   form.append('message', body);
+  form.append('customerEmail', state.customerEmail);
   form.append('signName', getDesignName());
   form.append('uploadedFileName', state.fileName || state.uploadedFile?.name || 'logo file');
   form.append('size', SIZE_PRESETS[state.size].label);
@@ -2734,6 +2841,7 @@ function makeEmailBody() {
   return [
     'Custom lightbox request',
     '',
+    `Customer email: ${state.customerEmail || 'Not provided'}`,
     `Sign name: ${getDesignName()}`,
     `Uploaded file: ${state.fileName || 'logo file'}`,
     `Size: ${preset.label}`,
@@ -3007,6 +3115,10 @@ function concatBytes(parts) {
 
 function textBytes(text) {
   return new TextEncoder().encode(text);
+}
+
+function safeFileName(value) {
+  return String(value || 'file').replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, '-').replace(/^-|-$/g, '') || 'file';
 }
 
 function downloadBlob(blob, filename, type) {
