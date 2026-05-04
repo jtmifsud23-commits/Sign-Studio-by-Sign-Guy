@@ -4,6 +4,27 @@ const SIZE_PRESETS = {
   xl: { label: 'XL 16"', inches: 16, depth: 33 },
 };
 
+const USAGE_PRESETS = {
+  indoor: { label: 'Indoor' },
+  outdoor: { label: 'Outdoor' },
+};
+
+const SHOPIFY_CHECKOUT_BASE_URL = 'https://mysignguy.ca/cart';
+const SHOPIFY_CUSTOM_LOGO_BAR_LIGHT_VARIANTS = {
+  small: {
+    indoor: '48516981588108',
+    outdoor: '48516981620876',
+  },
+  large: {
+    indoor: '48516981653644',
+    outdoor: '48516981686412',
+  },
+  xl: {
+    indoor: '48516981719180',
+    outdoor: '48516981751948',
+  },
+};
+
 const CONTACT_EMAIL = 'Hey@MySignGuy.ca';
 const SUBMISSION_SUBJECT = 'User submitted sign to print';
 const DEFAULT_PREVIEW_SRC = './assets/sign-guy-logo-transparent.png';
@@ -36,6 +57,7 @@ const state = {
   customerEmail: '',
   isDefaultPreview: false,
   size: 'large',
+  usage: 'indoor',
   illuminated: true,
   removeBg: true,
   tolerance: 64,
@@ -76,6 +98,7 @@ const els = {
   customerEmail: document.querySelector('#customerEmail'),
   designName: document.querySelector('#designName'),
   sizeOutput: document.querySelector('#sizeOutput'),
+  usageOutput: document.querySelector('#usageOutput'),
   frontPlateColours: document.querySelector('#frontPlateColours'),
   sideColourButton: document.querySelector('#sideColourButton'),
   backColourButton: document.querySelector('#backColourButton'),
@@ -99,6 +122,7 @@ const els = {
   previewZoomIn: document.querySelector('#previewZoomIn'),
   removeBg: document.querySelector('#removeBg'),
   submitDesign: document.querySelector('#submitDesign'),
+  placeOrder: document.querySelector('#placeOrder'),
   submitNote: document.querySelector('#submitNote'),
   projectFileInput: document.querySelector('#projectFileInput'),
   saveProject: document.querySelector('#saveProject'),
@@ -154,7 +178,17 @@ function boot() {
       renderPreview();
     });
   });
+  document.querySelectorAll('[data-usage]').forEach((button) => {
+    button.addEventListener('click', () => {
+      document.querySelectorAll('[data-usage]').forEach((b) => b.classList.remove('active'));
+      button.classList.add('active');
+      state.usage = USAGE_PRESETS[button.dataset.usage] ? button.dataset.usage : 'indoor';
+      updateStats();
+      updateProjectControls();
+    });
+  });
   els.submitDesign.addEventListener('click', () => submitDesignRequest());
+  els.placeOrder.addEventListener('click', () => placeOrderRequest());
   els.saveProject.addEventListener('click', () => saveProjectFile());
   els.openProject.addEventListener('click', () => els.projectFileInput.click());
   els.projectFileInput.addEventListener('change', () => openProjectFiles(els.projectFileInput.files));
@@ -1240,9 +1274,11 @@ function buildThreeModel() {
   resources.push(shellGeometry);
 
   const shellBounds = getThreePointBounds(backPoints);
+  const keyholeAnchor = getBackPlateKeyholeAnchor(processed, bounds) || { x: shellBounds.centerX, y: shellBounds.centerY };
   const keyholeBounds = {
     ...bounds,
-    keyholeX: shellBounds.centerX,
+    keyholeX: keyholeAnchor.x,
+    keyholeY: keyholeAnchor.y,
   };
 
   const backLipGeometry = new THREE.ExtrudeBufferGeometry(makeBackPlateShape(backPoints, keyholeBounds), {
@@ -1261,8 +1297,7 @@ function buildThreeModel() {
 
   const keyholeShadowGeometry = new THREE.ShapeBufferGeometry(makeKeyholeCutoutShape(keyholeBounds, 1.18));
   const keyholeShadow = new THREE.Mesh(keyholeShadowGeometry, keyholeShadowMaterial);
-  keyholeShadow.position.z = -shellDepth - 2.18;
-  keyholeShadow.renderOrder = 5;
+  keyholeShadow.position.z = -shellDepth - 2.86;
   group.add(keyholeShadow);
   resources.push(keyholeShadowGeometry);
 
@@ -1374,6 +1409,62 @@ function getThreePointBounds(points) {
   };
 }
 
+function getBackPlateKeyholeAnchor(processed, bounds) {
+  if (!processed?.alphaMask || !processed.width || !processed.height) return null;
+  const width = processed.width;
+  const height = processed.height;
+  const mask = processed.alphaMask;
+  const rowCounts = new Uint32Array(height);
+  let maxRowCount = 0;
+  for (let y = 0; y < height; y += 1) {
+    let count = 0;
+    const rowStart = y * width;
+    for (let x = 0; x < width; x += 1) {
+      if (mask[rowStart + x]) count += 1;
+    }
+    rowCounts[y] = count;
+    maxRowCount = Math.max(maxRowCount, count);
+  }
+  if (!maxRowCount) return null;
+
+  const threshold = Math.max(8, Math.round(maxRowCount * 0.55));
+  let best = null;
+  let current = null;
+  for (let y = 0; y <= height; y += 1) {
+    const inBand = y < height && rowCounts[y] >= threshold;
+    if (inBand && !current) current = { start: y, end: y, area: 0 };
+    if (inBand && current) {
+      current.end = y;
+      current.area += rowCounts[y];
+    }
+    if ((!inBand || y === height) && current) {
+      if (!best || current.area > best.area) best = current;
+      current = null;
+    }
+  }
+  if (!best) return null;
+
+  let minX = width;
+  let maxX = -1;
+  let pixelCount = 0;
+  let yTotal = 0;
+  for (let y = best.start; y <= best.end; y += 1) {
+    const rowStart = y * width;
+    for (let x = 0; x < width; x += 1) {
+      if (!mask[rowStart + x]) continue;
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      yTotal += y;
+      pixelCount += 1;
+    }
+  }
+  if (!pixelCount || maxX < minX) return null;
+
+  const centerX = ((minX + maxX + 1) / 2 / width - 0.5) * bounds.width;
+  const centerY = (0.5 - (yTotal / pixelCount + 0.5) / height) * bounds.height;
+  return { x: centerX, y: centerY };
+}
+
 function getPreviewSvgSize(aspect) {
   const width = aspect >= 1 ? 1000 : 1000 * aspect;
   const height = aspect >= 1 ? 1000 / aspect : 1000;
@@ -1447,12 +1538,12 @@ function makeBackPlateShape(backPoints, bounds) {
 
 function makeKeyholeCutoutPath(bounds, visualScale = 1) {
   const centerX = Number.isFinite(bounds.keyholeX) ? bounds.keyholeX : 0;
+  const centerY = Number.isFinite(bounds.keyholeY) ? bounds.keyholeY : 0;
   const lowerRadius = 4.5 * visualScale;
   const stemWidth = 5.16 * visualScale;
   const topRadius = stemWidth / 2;
   const centerGap = (15 - 4.5 - 2.58) * visualScale;
-  const cutoutTopY = bounds.height / 2 - bounds.height * 0.15;
-  const topY = cutoutTopY - topRadius;
+  const topY = centerY - (topRadius - centerGap - lowerRadius) / 2;
   const lowerY = topY - centerGap;
   const left = centerX - stemWidth / 2;
   const right = centerX + stemWidth / 2;
@@ -2241,7 +2332,9 @@ function resetRotation() {
 
 function updateStats() {
   const preset = SIZE_PRESETS[state.size];
+  const usage = USAGE_PRESETS[state.usage] || USAGE_PRESETS.indoor;
   els.sizeOutput.textContent = preset.label;
+  if (els.usageOutput) els.usageOutput.textContent = usage.label;
   els.dimensionStat.textContent = `${preset.inches} in face`;
   els.depthStat.textContent = `${preset.depth} mm depth`;
 }
@@ -2279,7 +2372,9 @@ function renderShellColourControls() {
 
 function updateProjectControls() {
   if (!els.saveProject) return;
-  els.saveProject.disabled = !state.processed || !state.artwork;
+  const disabled = !state.processed || !state.artwork;
+  els.saveProject.disabled = disabled;
+  if (els.placeOrder) els.placeOrder.disabled = disabled || !state.uploadedFile;
 }
 
 function getDesignName() {
@@ -2592,8 +2687,17 @@ function getProjectSaveEndpoint() {
 }
 
 function projectFileBaseName(project) {
-  const date = (project.savedAt || new Date().toISOString()).slice(0, 10);
-  return `${project.name || 'lightbox-design'}-${date}`.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+  return projectExportBaseName(project).replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'lightbox-design';
+}
+
+function projectExportBaseName(project) {
+  const customName = String(project.config?.designName || '').trim();
+  if (customName) return customName;
+  const sourceName = String(project.source?.fileName || '').replace(/\.[^.]+$/, '').trim();
+  if (sourceName) return sourceName;
+  const projectName = String(project.name || '').trim();
+  if (projectName && projectName !== 'My Custom LED Sign') return projectName;
+  return 'lightbox-design';
 }
 
 function formatProjectDate(value) {
@@ -3180,7 +3284,8 @@ function setStatus(text) {
 }
 
 function baseName() {
-  return getDesignName().replace(/\.[^.]+$/, '').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'my-custom-led-sign';
+  const name = state.designName.trim() || state.fileName || getDesignName();
+  return name.replace(/\.[^.]+$/, '').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'my-custom-led-sign';
 }
 
 function formatNumber(value) {

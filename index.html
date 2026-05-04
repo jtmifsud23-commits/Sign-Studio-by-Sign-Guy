@@ -36,6 +36,14 @@
             <button class="seg active" type="button" data-size="large">Large<br /><span>13"</span></button>
             <button class="seg" type="button" data-size="xl">XL<br /><span>16"</span></button>
           </div>
+          <div class="section-heading usage-heading">
+            <h2>Usage</h2>
+            <output id="usageOutput">Indoor</output>
+          </div>
+          <div class="segmented usage-segmented" role="radiogroup" aria-label="Lightbox usage">
+            <button class="seg active" type="button" data-usage="indoor">Indoor</button>
+            <button class="seg" type="button" data-usage="outdoor">Outdoor</button>
+          </div>
           <input id="removeBg" type="checkbox" checked hidden />
         </section>
 
@@ -71,6 +79,7 @@
 
         <section class="panel-section submit-section">
           <button class="primary-button" id="submitDesign" type="button" disabled>Submit design</button>
+          <button class="primary-button order-button" id="placeOrder" type="button" disabled>Place Order</button>
           <p id="submitNote">Uploads are emailed with the logo and visualizer screenshots from the deployed site.</p>
         </section>
 
