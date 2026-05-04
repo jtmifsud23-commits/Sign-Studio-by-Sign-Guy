@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Custom LED Lightbox Generator</title>
-    <link rel="stylesheet" href="./styles.css?v=20260504-03" />
+    <link rel="stylesheet" href="./styles.css?v=20260504-05" />
   </head>
   <body>
     <main class="app-shell">
@@ -71,7 +71,7 @@
 
         <section class="panel-section submit-section">
           <button class="primary-button" id="submitDesign" type="button" disabled>Submit design</button>
-          <p id="submitNote">Uploads are attached with a visualizer screenshot when your browser supports file sharing.</p>
+          <p id="submitNote">Uploads are emailed with the logo and visualizer screenshots from the deployed site.</p>
         </section>
 
         <section class="panel-section project-section">
@@ -211,7 +211,8 @@
       </div>
     </div>
 
-    <script defer src="./vendor/three.min.js?v=20260504-03"></script>
-    <script defer src="./app.js?v=20260504-03"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script defer src="./app.js?v=20260504-05"></script>
+    <script defer src="./submit-fix.js?v=20260504-05"></script>
   </body>
 </html>
