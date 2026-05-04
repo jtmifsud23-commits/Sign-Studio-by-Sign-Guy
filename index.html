@@ -189,6 +189,7 @@
     <div class="colour-popover hidden" id="colourPopover">
       <div class="popover-tabs">
         <button class="active" type="button" data-popover-tab="preset">Preset</button>
+        <button type="button" data-popover-tab="used">Used</button>
         <button type="button" data-popover-tab="custom">Custom</button>
         <button class="icon-button" id="closeColourPopover" type="button" aria-label="Close">x</button>
       </div>
@@ -199,6 +200,10 @@
       <div class="preset-pane" id="presetPane">
         <p>PLA Basic</p>
         <div class="preset-grid" id="presetGrid"></div>
+      </div>
+      <div class="used-pane hidden" id="usedPane">
+        <p>Plate 1 - Front</p>
+        <div class="used-grid" id="usedGrid"></div>
       </div>
       <div class="custom-pane hidden" id="customPane">
         <input id="customColourInput" type="color" value="#001c42" aria-label="Custom colour picker" />
@@ -214,5 +219,6 @@
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script defer src="./app.js?v=20260504-05"></script>
     <script defer src="./submit-fix.js?v=20260504-05"></script>
+    <script defer src="./used-colours.js?v=20260504-05"></script>
   </body>
 </html>

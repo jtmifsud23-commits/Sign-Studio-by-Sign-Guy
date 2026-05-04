@@ -1453,24 +1453,33 @@ output,
   background: transparent;
 }
 
-.preset-pane p {
+.preset-pane p,
+.used-pane p {
   margin-bottom: 8px;
   color: #8a908b;
   font-size: 12px;
 }
 
-.preset-grid {
+.preset-grid,
+.used-grid {
   display: grid;
   grid-template-columns: repeat(9, 1fr);
   gap: 5px;
 }
 
-.preset-grid button {
+.preset-grid button,
+.used-grid button {
   width: 20px;
   height: 20px;
   border: 1px solid rgba(0, 0, 0, 0.14);
   border-radius: 2px;
   cursor: pointer;
+}
+
+.used-empty {
+  grid-column: 1 / -1;
+  color: #8a908b;
+  font-size: 12px;
 }
 
 .custom-pane input[type='color'] {
