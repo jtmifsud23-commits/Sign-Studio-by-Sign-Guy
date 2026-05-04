@@ -3,15 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Custom LED Lightbox Generator</title>
+    <title>MySignGuy.ca Sign Studio</title>
     <link rel="stylesheet" href="./styles.css?v=20260504-06" />
   </head>
   <body class="studio-loading">
     <main class="app-shell">
-      <aside class="control-panel" aria-label="Lightbox controls">
+      <aside class="control-panel" aria-label="Sign Studio controls">
         <div class="brand-row">
           <div>
-            <h1>Lightbox Studio</h1>
+            <h1>MySignGuy.ca Sign Studio</h1>
           </div>
           <span class="status-pill" id="statusPill">Ready</span>
         </div>
@@ -27,21 +27,21 @@
         <section class="panel-section lightbox-settings">
           <div class="section-heading">
             <h2>LED Sign size</h2>
-            <output id="sizeOutput">Large 13"</output>
           </div>
           <div class="segmented" role="radiogroup" aria-label="LED Sign size">
             <button class="seg" type="button" data-size="small">Small<br /><span>10"</span></button>
             <button class="seg active" type="button" data-size="large">Large<br /><span>13"</span></button>
             <button class="seg" type="button" data-size="xl">XL<br /><span>16"</span></button>
           </div>
+          <output class="setting-pill" id="sizeOutput">Large 13"</output>
           <div class="section-heading usage-heading">
             <h2>Where will the sign be used?</h2>
-            <output id="usageOutput">Indoor</output>
           </div>
-          <div class="segmented usage-segmented" role="radiogroup" aria-label="Lightbox usage">
+          <div class="segmented usage-segmented" role="radiogroup" aria-label="Sign usage">
             <button class="seg active" type="button" data-usage="indoor">Indoor</button>
             <button class="seg" type="button" data-usage="outdoor">Outdoor</button>
           </div>
+          <output class="setting-pill" id="usageOutput">Indoor</output>
           <input id="removeBg" type="checkbox" checked hidden />
         </section>
 
@@ -54,12 +54,15 @@
             <div id="frontPlateColours" class="plate-colour-row"></div>
           </div>
           <div class="plate-card">
-            <p>Back and Sides</p>
+            <p>Side</p>
             <button class="shell-colour" id="sideColourButton" type="button">
-              <span>Side</span><i></i><strong id="sideColourHex">#000000</strong>
+              <span>Side colour</span><i></i><strong id="sideColourHex">#000000</strong>
             </button>
+          </div>
+          <div class="plate-card">
+            <p>Back</p>
             <button class="shell-colour" id="backColourButton" type="button">
-              <span>Back</span><i></i><strong id="backColourHex">#000000</strong>
+              <span>Back colour</span><i></i><strong id="backColourHex">#000000</strong>
             </button>
           </div>
         </section>
@@ -75,7 +78,6 @@
         </section>
 
         <section class="panel-section submit-section">
-          <button class="primary-button" id="submitDesign" type="button" disabled>Submit design</button>
           <button class="primary-button order-button" id="placeOrder" type="button" disabled>Place Order</button>
         </section>
 
@@ -83,20 +85,20 @@
           <input id="projectFileInput" type="file" accept=".SignGuy,.signguy,application/json" />
           <div class="section-heading">
             <h2>Saved designs</h2>
-            <output id="projectCount">0</output>
+            <output class="setting-pill project-count-pill" id="projectCount">0</output>
           </div>
           <div class="project-actions">
+            <button class="secondary-button project-icon-button" id="openProject" type="button" aria-label="Open .SignGuy">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 6h7l2 2h9v10a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z"></path>
+                <path d="M3 10h18"></path>
+              </svg>
+            </button>
             <button class="secondary-button project-icon-button" id="saveProject" type="button" disabled aria-label="Save .SignGuy">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M5 3h12l2 2v16H5z"></path>
                 <path d="M8 3v6h8V3"></path>
                 <path d="M8 17h8"></path>
-              </svg>
-            </button>
-            <button class="secondary-button project-icon-button" id="openProject" type="button" aria-label="Open .SignGuy">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M3 6h7l2 2h9v10a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z"></path>
-                <path d="M3 10h18"></path>
               </svg>
             </button>
           </div>
@@ -109,6 +111,7 @@
         <div class="stage" id="stage">
           <div class="preview-toolbar stage-ribbon">
             <div>
+              <h1 class="mobile-studio-title">MySignGuy.ca Sign Studio</h1>
               <div class="preview-title-row" id="previewTitleRow">
                 <h2 id="previewTitle">Example lightbox preview</h2>
                 <input class="preview-title-input" id="designName" type="text" placeholder="My Custom LED Sign" autocomplete="off" aria-label="Sign name" hidden />
@@ -154,7 +157,7 @@
               <div class="glow model-layer"></div>
             </div>
           </div>
-          <p class="stage-note" id="submitNote">Uploads are emailed with the logo and visualizer screenshots from the deployed site.</p>
+          <p class="stage-note" id="submitNote"></p>
         </div>
 
       </section>
@@ -251,9 +254,9 @@
       </div>
     </div>
 
-    <div class="app-loading" id="appLoading" role="status" aria-live="polite" aria-label="Sign Guy Sign Studio is loading">
+    <div class="app-loading" id="appLoading" role="status" aria-live="polite" aria-label="MySignGuy.ca Sign Studio is loading">
       <div class="app-loading-card">
-        <h2>Sign Guy Sign Studio is Loading...</h2>
+        <h2>MySignGuy.ca Sign Studio is Loading...</h2>
         <div class="loading-progress" aria-hidden="true">
           <span id="loadingProgressBar"></span>
         </div>

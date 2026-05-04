@@ -37,7 +37,14 @@ const PROJECT_LOG_LIMIT = 12;
 const EMAIL_STORAGE_KEY = 'signGuyCustomerEmail';
 const ADMIN_SESSION_KEY = 'signGuyAdminMode';
 const LOCAL_ADMIN_PASSWORD = '77\\r(~68dKTE';
+const LOADING_MIN_VISIBLE_MS = 1500;
 let projectDbPromise = null;
+const loadingProgress = {
+  current: 0,
+  target: 0,
+  raf: null,
+  startedAt: performance.now(),
+};
 
 const CROP_PRESETS = [
   { id: '1:1', label: '1:1', ratio: 1, icon: 'ratio-1' },
@@ -203,7 +210,7 @@ async function boot() {
       updateProjectControls();
     });
   });
-  els.submitDesign.addEventListener('click', () => submitDesignRequest());
+  els.submitDesign?.addEventListener('click', () => submitDesignRequest());
   els.placeOrder.addEventListener('click', () => placeOrderRequest());
   els.saveProject.addEventListener('click', () => saveProjectFile());
   els.openProject.addEventListener('click', () => els.projectFileInput.click());
@@ -232,7 +239,15 @@ async function boot() {
     setPreviewZoom(state.previewZoom + (event.deltaY < 0 ? 0.12 : -0.12));
   }, { passive: false });
   els.stage.addEventListener('click', (event) => {
+    if (event.target.closest('[data-open-preview-alert]')) {
+      els.previewAlert.classList.add('expanded');
+      return;
+    }
     if (!event.target.closest('[data-close-preview-alert]')) return;
+    if (isResponsiveViewport()) {
+      els.previewAlert.classList.remove('expanded');
+      return;
+    }
     state.dismissedPreviewAlert = els.previewAlert.dataset.signature || '';
     els.previewAlert.hidden = true;
   });
@@ -255,8 +270,7 @@ async function boot() {
   renderShellColourControls();
   refreshProjectLog();
   await loadDefaultPreview();
-  setLoadingProgress(100);
-  window.setTimeout(hideAppLoading, 260);
+  await finishAppLoading();
 }
 
 function setupEmailGate() {
@@ -431,19 +445,24 @@ function setupDragRotation() {
   let start = null;
   els.stage.addEventListener('pointerdown', (event) => {
     if (event.target.closest('button, label, input, .preview-alert')) return;
+    event.preventDefault();
     dragging = true;
     start = { x: event.clientX, y: event.clientY, rx: state.rotation.x, ry: state.rotation.y };
     els.stage.setPointerCapture(event.pointerId);
   });
   els.stage.addEventListener('pointermove', (event) => {
     if (!dragging) return;
+    event.preventDefault();
     state.rotation.x = clamp(start.rx - (event.clientY - start.y) * 0.24, -58, 58);
     state.rotation.y = start.ry + (event.clientX - start.x) * 0.42;
     applyRotation();
   });
-  els.stage.addEventListener('pointerup', () => {
+  const stopDrag = () => {
     dragging = false;
-  });
+  };
+  els.stage.addEventListener('pointerup', stopDrag);
+  els.stage.addEventListener('pointercancel', stopDrag);
+  els.stage.addEventListener('lostpointercapture', stopDrag);
 }
 
 async function handleFiles(fileList) {
@@ -658,7 +677,7 @@ async function reprocess(options = {}) {
   syncColorOverrides();
   renderPreview();
   renderDiagnostics();
-  els.submitDesign.disabled = state.isDefaultPreview || !state.uploadedFile;
+  if (els.submitDesign) els.submitDesign.disabled = state.isDefaultPreview || !state.uploadedFile;
   updateProjectControls();
   setStatus('Ready');
   if (state.wizardStep) renderWizardStep();
@@ -701,7 +720,7 @@ async function loadDefaultPreview() {
     syncColorOverrides();
     renderPreview();
     renderDiagnostics();
-    els.submitDesign.disabled = true;
+    if (els.submitDesign) els.submitDesign.disabled = true;
     updateProjectControls();
     setStatus('Ready');
   } catch (error) {
@@ -875,7 +894,7 @@ function renderMappingStep() {
     <p>Adjust the number of colours to match your filaments. You can edit colours manually in the next step.</p>
     <div class="colour-count-row">
       <input id="mapColorCount" type="range" min="1" max="8" value="${state.targetColorCount}" />
-      <span class="count-badge">${colours.length}</span>
+      <span class="count-badge">${state.targetColorCount}</span>
     </div>
     <h3>Mapping</h3>
     <div class="mapping-list">
@@ -899,8 +918,10 @@ function renderMappingStep() {
   `;
   bindWizardButtons();
   const colorCount = document.querySelector('#mapColorCount');
+  const colorCountBadge = els.wizardSide.querySelector('.count-badge');
   colorCount.addEventListener('input', async () => {
     state.targetColorCount = Number(colorCount.value);
+    if (colorCountBadge) colorCountBadge.textContent = String(state.targetColorCount);
     state.colorOverrides = [];
     state.frontColoursCustomized = true;
     await reprocess();
@@ -1287,9 +1308,13 @@ function initThreeStage() {
   floor.receiveShadow = true;
   scene.add(floor);
 
-  state.three = { renderer, scene, camera, floor, group: null, resources: [] };
+  state.three = { renderer, scene, camera, floor, group: null, resources: [], resizeObserver: null };
   resizeThree();
   window.addEventListener('resize', resizeThree);
+  if (window.ResizeObserver) {
+    state.three.resizeObserver = new ResizeObserver(() => resizeThree());
+    state.three.resizeObserver.observe(els.stage);
+  }
   renderThree();
 }
 
@@ -1299,6 +1324,7 @@ function resizeThree() {
   state.three.renderer.setSize(Math.max(1, rect.width), Math.max(1, rect.height), false);
   state.three.camera.aspect = Math.max(1, rect.width) / Math.max(1, rect.height);
   applyPreviewZoom();
+  updateThreeModelPosition();
   state.three.camera.updateProjectionMatrix();
   renderThree();
 }
@@ -1345,6 +1371,19 @@ function clearThreeModel() {
   renderThree();
 }
 
+function updateThreeModelPosition() {
+  if (!state.three?.group) return;
+  state.three.group.position.y = getThreeModelYOffset();
+}
+
+function getThreeModelYOffset() {
+  return isResponsiveViewport() ? -26 : 10;
+}
+
+function isResponsiveViewport() {
+  return window.matchMedia('(max-width: 880px)').matches;
+}
+
 function buildThreeModel() {
   if (!state.three || !state.processed || !window.THREE) return;
   clearThreeModel();
@@ -1363,7 +1402,7 @@ function buildThreeModel() {
   const resources = state.three.resources;
 
   const group = new THREE.Group();
-  group.position.y = 10;
+  group.position.y = getThreeModelYOffset();
 
   const sideMaterial = new THREE.MeshStandardMaterial({
     color: makeThreeColour(sideColour),
@@ -1764,6 +1803,7 @@ function processArtwork(artwork) {
     ? artwork.palette.map((rgb, idx) => ({ original: idx, rgb: rgb.map(Number), count: 0 }))
     : null;
   let clusters = paletteClusters || [];
+  const clusterTolerance = getColourClusterTolerance();
   const alphaMask = new Uint8Array(width * height);
   const alphaValues = new Uint8Array(width * height);
   const regionIndex = new Int16Array(width * height).fill(-1);
@@ -1777,7 +1817,7 @@ function processArtwork(artwork) {
         continue;
       }
       const rgb = [data[i], data[i + 1], data[i + 2]];
-      const idx = paletteClusters ? paletteClusters[nearestCluster(paletteClusters, rgb)].original : findOrCreateCluster(clusters, rgb, a, state.tolerance);
+      const idx = paletteClusters ? paletteClusters[nearestCluster(paletteClusters, rgb)].original : findOrCreateCluster(clusters, rgb, a, clusterTolerance);
       if (paletteClusters) paletteClusters[idx].count += a / 255;
       alphaMask[y * width + x] = 1;
       alphaValues[y * width + x] = a;
@@ -1790,9 +1830,11 @@ function processArtwork(artwork) {
   clusters.sort((a, b) => b.count - a.count);
   const sourceClusters = clusters;
   const stableClusters = selectStableColourClusters(sourceClusters, regionIndex, alphaMask, alphaValues, width, height);
-  const activeClusters = stableClusters.length >= 2 ? stableClusters : sourceClusters;
+  const activeClusters = rankActiveColourClusters(sourceClusters, stableClusters);
   const sourceByOriginal = new Map(sourceClusters.map((cluster) => [cluster.original, cluster]));
-  const colourLimit = clamp(Number(state.targetColorCount) || 8, 1, 8);
+  const naturalColourCount = Math.min(Math.max(stableClusters.length || sourceClusters.length, 1), 8);
+  const requestedColourCount = clamp(Number(state.targetColorCount) || 8, 1, 8);
+  const colourLimit = state.frontColoursCustomized ? requestedColourCount : naturalColourCount;
   const main = activeClusters.slice(0, colourLimit);
   const remap = new Map(main.map((cluster, idx) => [cluster.original, idx]));
   for (let i = 0; i < regionIndex.length; i += 1) {
@@ -1827,7 +1869,7 @@ function processArtwork(artwork) {
     artworkType: artwork.type,
     artworkUrl: canvas.toDataURL('image/png'),
     artworkCanvas: canvas,
-    naturalColourCount: Math.min(activeClusters.length, 8),
+    naturalColourCount,
     alphaMask,
     alphaValues,
     regionIndex,
@@ -1835,6 +1877,13 @@ function processArtwork(artwork) {
     silhouette,
     warnings: buildWarnings({ artwork, clusters: sourceClusters, main, islands, tinyShapes, opaqueCount, width, height }),
   };
+}
+
+function getColourClusterTolerance() {
+  const requested = clamp(Number(state.targetColorCount) || 8, 1, 8);
+  if (requested >= 4) return Math.min(state.tolerance, 34);
+  if (requested === 3) return Math.min(state.tolerance, 46);
+  return state.tolerance;
 }
 
 function selectStableColourClusters(clusters, regionIndex, alphaMask, alphaValues, width, height) {
@@ -1857,7 +1906,7 @@ function selectStableColourClusters(clusters, regionIndex, alphaMask, alphaValue
   }
   if (!opaqueCount) return clusters;
   const minInterior = Math.max(10, Math.round(opaqueCount * 0.0015));
-  const minShare = Math.max(10, opaqueCount * 0.003);
+  const minShare = Math.max(10, opaqueCount * 0.006);
   const stable = clusters.filter((cluster) => {
     const stat = stats.get(cluster.original);
     const interiorRatio = stat ? stat.interior / Math.max(cluster.count, 1) : 0;
@@ -1866,6 +1915,21 @@ function selectStableColourClusters(clusters, regionIndex, alphaMask, alphaValue
       && ((stat.interior >= minInterior && interiorRatio >= 0.22) || cluster.count >= opaqueCount * 0.18);
   });
   return stable.length ? stable : clusters;
+}
+
+function rankActiveColourClusters(sourceClusters, stableClusters) {
+  const ranked = [];
+  const seen = new Set();
+  stableClusters.forEach((cluster) => {
+    ranked.push(cluster);
+    seen.add(cluster.original);
+  });
+  sourceClusters.forEach((cluster) => {
+    if (seen.has(cluster.original)) return;
+    ranked.push(cluster);
+    seen.add(cluster.original);
+  });
+  return ranked.length ? ranked : sourceClusters;
 }
 
 function averageCornerColour(data, width, height) {
@@ -2431,10 +2495,14 @@ function renderPreviewAlert(warnings) {
   els.previewAlert.hidden = false;
   els.previewAlert.dataset.signature = signature;
   els.previewAlert.classList.toggle('error', hasError);
+  els.previewAlert.classList.remove('expanded');
   els.previewAlert.innerHTML = `
+    <button class="preview-alert-trigger" type="button" data-open-preview-alert aria-label="Open print checks"><span aria-hidden="true">!</span></button>
     <button class="preview-alert-close" type="button" data-close-preview-alert aria-label="Close print checks">x</button>
-    <strong>${hasError ? 'Needs attention' : 'Print checks'}</strong>
-    <ul>${visibleWarnings.slice(0, 3).map((warning) => `<li>${escapeHtml(warning.text)}</li>`).join('')}</ul>
+    <div class="preview-alert-content">
+      <strong>${hasError ? 'Needs attention' : 'Print checks'}</strong>
+      <ul>${visibleWarnings.slice(0, 3).map((warning) => `<li>${escapeHtml(warning.text)}</li>`).join('')}</ul>
+    </div>
   `;
 }
 
@@ -2580,7 +2648,7 @@ async function saveProjectFile() {
 async function placeOrderRequest() {
   if (!state.processed || !state.uploadedFile) return;
   setStatus('Preparing order');
-  els.submitDesign.disabled = true;
+  if (els.submitDesign) els.submitDesign.disabled = true;
   els.placeOrder.disabled = true;
   els.saveProject.disabled = true;
   try {
@@ -2613,7 +2681,7 @@ async function placeOrderRequest() {
     els.submitNote.textContent = describeOrderError(error);
     setStatus('Order failed');
     updateProjectControls();
-    els.submitDesign.disabled = false;
+    if (els.submitDesign) els.submitDesign.disabled = false;
   }
 }
 
@@ -2746,7 +2814,7 @@ async function restoreSignGuyProject(project) {
   applyStateToControls();
   closeWizard();
   await reprocess({ preserveTargetColorCount: true });
-  els.submitDesign.disabled = !state.uploadedFile;
+  if (els.submitDesign) els.submitDesign.disabled = !state.uploadedFile;
 }
 
 function validateSignGuyProject(project) {
@@ -2797,12 +2865,12 @@ function renderProjectLog() {
     return;
   }
   els.projectList.innerHTML = projects.map((project) => `
-    <article class="project-item">
+    <article class="project-item" data-load-project="${escapeHtml(project.id)}">
       <button class="project-delete" type="button" data-delete-project="${escapeHtml(project.id)}" aria-label="Delete ${escapeHtml(project.name || 'saved design')}">x</button>
       <img class="project-thumb" src="${escapeHtml(project.preview?.screenshotDataUrl || project.source?.dataUrl || '')}" alt="" />
       <div class="project-meta">
         <strong>${escapeHtml(project.name || 'saved-design')}</strong>
-        <span>${escapeHtml(project.source?.fileName || 'Lightbox Studio project')} · ${formatProjectDate(project.savedAt)}</span>
+        <span>${escapeHtml(project.source?.fileName || 'Sign Studio project')} · ${formatProjectDate(project.savedAt)}</span>
         <div class="project-item-actions">
           <button class="project-mini" type="button" data-load-project="${escapeHtml(project.id)}">Open</button>
           ${state.isAdmin ? `<button class="project-mini" type="button" data-download-project="${escapeHtml(project.id)}">Download</button>` : ''}
@@ -2810,9 +2878,10 @@ function renderProjectLog() {
       </div>
     </article>
   `).join('');
-  els.projectList.querySelectorAll('[data-load-project]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      const project = await getProjectRecord(button.dataset.loadProject);
+  els.projectList.querySelectorAll('article[data-load-project]').forEach((item) => {
+    item.addEventListener('click', async (event) => {
+      if (event.target.closest('[data-delete-project], [data-download-project]')) return;
+      const project = await getProjectRecord(item.dataset.loadProject);
       await restoreSignGuyProject(project);
       els.projectNote.textContent = `${project.name}.SignGuy restored from recent saves.`;
       setStatus('Project open');
@@ -3046,7 +3115,7 @@ function transactionDone(tx) {
 async function submitDesignRequest() {
   if (!state.processed || !state.uploadedFile) return;
   setStatus('Submitting');
-  els.submitDesign.disabled = true;
+  if (els.submitDesign) els.submitDesign.disabled = true;
   try {
     const screenshots = await captureSubmissionScreenshots();
     const subject = SUBMISSION_SUBJECT;
@@ -3069,7 +3138,7 @@ async function submitDesignRequest() {
     els.submitNote.textContent = describeSubmitError(error);
     setStatus('Submit failed');
   } finally {
-    els.submitDesign.disabled = false;
+    if (els.submitDesign) els.submitDesign.disabled = false;
   }
 }
 
@@ -3531,9 +3600,44 @@ function waitFrame() {
   return new Promise((resolve) => requestAnimationFrame(resolve));
 }
 
+function waitMs(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 function setLoadingProgress(value) {
   if (!els.loadingProgressBar) return;
-  els.loadingProgressBar.style.width = `${clamp(Number(value) || 0, 0, 100)}%`;
+  loadingProgress.target = Math.max(loadingProgress.target, clamp(Number(value) || 0, 0, 100));
+  if (!loadingProgress.raf) {
+    loadingProgress.raf = requestAnimationFrame(animateLoadingProgress);
+  }
+}
+
+function animateLoadingProgress() {
+  const distance = loadingProgress.target - loadingProgress.current;
+  loadingProgress.current += distance * 0.08;
+  if (loadingProgress.target >= 100 && loadingProgress.current > 99.3) {
+    loadingProgress.current = 100;
+  }
+  if (els.loadingProgressBar) {
+    els.loadingProgressBar.style.width = `${loadingProgress.current.toFixed(2)}%`;
+  }
+  if (Math.abs(loadingProgress.target - loadingProgress.current) > 0.15) {
+    loadingProgress.raf = requestAnimationFrame(animateLoadingProgress);
+    return;
+  }
+  loadingProgress.current = loadingProgress.target;
+  if (els.loadingProgressBar) {
+    els.loadingProgressBar.style.width = `${loadingProgress.current.toFixed(2)}%`;
+  }
+  loadingProgress.raf = null;
+}
+
+async function finishAppLoading() {
+  setLoadingProgress(100);
+  while (performance.now() - loadingProgress.startedAt < LOADING_MIN_VISIBLE_MS || loadingProgress.current < 99) {
+    await waitMs(50);
+  }
+  hideAppLoading();
 }
 
 function hideAppLoading() {

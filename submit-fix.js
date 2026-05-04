@@ -7,7 +7,7 @@ function getSubmissionEndpoint() {
 async function submitDesignRequest() {
   if (!state.processed || !state.uploadedFile) return;
   setStatus('Submitting');
-  els.submitDesign.disabled = true;
+  if (els.submitDesign) els.submitDesign.disabled = true;
   try {
     const endpoint = getSubmissionEndpoint();
     const screenshots = await captureSubmissionScreenshots();
@@ -30,7 +30,7 @@ async function submitDesignRequest() {
     els.submitNote.textContent = describeSubmitError(error);
     setStatus('Submit failed');
   } finally {
-    els.submitDesign.disabled = false;
+    if (els.submitDesign) els.submitDesign.disabled = false;
   }
 }
 
