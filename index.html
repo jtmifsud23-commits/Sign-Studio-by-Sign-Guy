@@ -116,6 +116,7 @@
             </div>
           </div>
           <div class="preview-stats">
+            <span id="sessionEmailStat">No email</span>
             <span id="dimensionStat">13 in face</span>
             <span id="depthStat">33 mm depth</span>
           </div>
@@ -154,6 +155,20 @@
 
       </section>
     </main>
+
+    <div class="email-gate" id="emailGate" role="dialog" aria-modal="true" aria-labelledby="emailGateTitle">
+      <form class="email-gate-card" id="emailGateForm" novalidate>
+        <p class="eyebrow">Start your design</p>
+        <h2 id="emailGateTitle">Enter your email address</h2>
+        <p>We need your email before you begin so your lightbox design can be connected to you.</p>
+        <label class="email-gate-field">
+          <span>Email address</span>
+          <input id="customerEmail" type="email" name="customerEmail" autocomplete="email" inputmode="email" placeholder="you@example.com" required />
+        </label>
+        <p class="email-gate-error" id="emailGateError" role="alert"></p>
+        <button class="primary-button" type="submit">Continue to studio</button>
+      </form>
+    </div>
 
     <div class="wizard hidden" id="wizard" aria-hidden="true">
       <div class="wizard-card" role="dialog" aria-modal="true" aria-labelledby="wizardTitle">
