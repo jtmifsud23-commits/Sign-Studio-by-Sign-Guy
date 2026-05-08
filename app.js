@@ -178,10 +178,15 @@ boot();
 
 async function boot() {
   setLoadingProgress(8);
+  setupViewportUnits();
   setupEmailGate();
   setupAdminMode();
   setLoadingProgress(18);
-  els.chooseFile.addEventListener('click', () => els.fileInput.click());
+  els.chooseFile.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    els.fileInput.click();
+  });
   els.fileInput.addEventListener('change', () => handleFiles(els.fileInput.files));
   els.illuminateToggle.addEventListener('change', () => {
     state.illuminated = els.illuminateToggle.checked;
@@ -340,6 +345,18 @@ function setupAdminMode() {
     els.adminGate?.classList.remove('invalid');
     if (els.adminGateError) els.adminGateError.textContent = '';
   });
+}
+
+function setupViewportUnits() {
+  updateViewportUnits();
+  window.addEventListener('resize', updateViewportUnits);
+  window.visualViewport?.addEventListener('resize', updateViewportUnits);
+  window.visualViewport?.addEventListener('scroll', updateViewportUnits);
+}
+
+function updateViewportUnits() {
+  const height = window.visualViewport?.height || window.innerHeight;
+  document.documentElement.style.setProperty('--app-vh', `${height}px`);
 }
 
 function renderAdminMode() {
@@ -788,6 +805,8 @@ function detectDefaultCrop(artwork) {
 
 function openWizard(step) {
   state.wizardStep = step;
+  document.body.classList.add('wizard-open');
+  updateViewportUnits();
   els.wizard.classList.remove('hidden');
   els.wizard.setAttribute('aria-hidden', 'false');
   renderWizardStep();
@@ -796,6 +815,7 @@ function openWizard(step) {
 function closeWizard() {
   state.wizardStep = null;
   closeColourPopover();
+  document.body.classList.remove('wizard-open');
   els.wizard.classList.add('hidden');
   els.wizard.setAttribute('aria-hidden', 'true');
 }

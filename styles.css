@@ -28,6 +28,11 @@ body {
   color: var(--ink);
 }
 
+body.wizard-open {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 .studio-loading .app-shell {
   filter: blur(8px);
   transform: scale(1.01);
@@ -178,8 +183,10 @@ output,
   min-height: 126px;
   height: 100%;
   padding: 16px;
+  cursor: pointer;
   text-align: left;
   font-size: 18px;
+  user-select: none;
 }
 
 .upload-mark {
@@ -2186,23 +2193,49 @@ output,
   }
 
   .wizard {
-    padding: 12px;
+    align-items: start;
+    padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom));
+    overflow: hidden;
+    overscroll-behavior: contain;
   }
 
   .wizard-card {
-    width: calc(100vw - 24px);
-    height: calc(100vh - 24px);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    width: calc(100vw - 16px);
+    height: calc(var(--app-vh, 100dvh) - max(16px, env(safe-area-inset-top) + env(safe-area-inset-bottom)));
+    max-height: calc(var(--app-vh, 100dvh) - max(16px, env(safe-area-inset-top) + env(safe-area-inset-bottom)));
+    min-height: 0;
   }
 
   .wizard-body {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(320px, 1fr) auto;
+    grid-template-rows: minmax(150px, 42%) minmax(0, 1fr);
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .wizard-main {
+    min-height: 0;
+  }
+
+  .preview-tools {
+    left: 14px;
+    bottom: 12px;
   }
 
   .wizard-side {
-    max-height: 260px;
+    max-height: none;
+    min-height: 0;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
     border-left: 0;
     border-top: 1px solid var(--line);
+    padding: 12px;
+  }
+
+  .wizard-footer {
+    flex: 0 0 auto;
+    min-height: 52px;
   }
 }
 
@@ -2233,7 +2266,38 @@ output,
     padding: 0 14px;
   }
 
+  .wizard-header {
+    min-height: 50px;
+  }
+
+  .wizard-header h2 {
+    font-size: 18px;
+  }
+
   .crop-presets {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
+    margin: 8px 0 12px;
+  }
+
+  .crop-preset {
+    min-width: 0;
+    gap: 4px;
+    padding: 6px 2px;
+    font-size: 10px;
+  }
+
+  .crop-icon {
+    transform: scale(0.72);
+  }
+
+  .wizard-side p {
+    margin-bottom: 8px;
+    font-size: 12px;
+    line-height: 1.25;
+  }
+
+  .switch-row {
+    min-height: 38px;
   }
 }
