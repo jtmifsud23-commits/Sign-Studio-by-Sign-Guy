@@ -2209,13 +2209,18 @@ output,
 
   .wizard-body {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(150px, 42%) minmax(0, 1fr);
+    grid-template-rows: minmax(260px, 52%) minmax(0, 1fr);
     min-height: 0;
     overflow: hidden;
   }
 
   .wizard-main {
     min-height: 0;
+  }
+
+  #wizardImage {
+    max-width: 70%;
+    max-height: 70%;
   }
 
   .preview-tools {
@@ -2295,6 +2300,11 @@ output,
     margin-bottom: 8px;
     font-size: 12px;
     line-height: 1.25;
+  }
+
+  #wizardImage {
+    max-width: 66%;
+    max-height: 66%;
   }
 
   .switch-row {

@@ -857,6 +857,7 @@ function renderEditStep() {
     <button class="primary-button" type="button" data-wizard-action="to-vector">Next</button>
   `;
   bindWizardButtons();
+  requestAnimationFrame(centerWizardPreview);
   requestAnimationFrame(updateCropBox);
 }
 
@@ -1004,10 +1005,18 @@ function renderDetailsStep() {
 
 function setWizardPreview(src) {
   els.wizardImage.onload = null;
+  els.wizardImage.onload = () => {
+    if (state.wizardStep !== 'edit') centerWizardPreview();
+  };
   els.wizardImage.src = src;
   els.wizardImage.style.setProperty('--wizard-zoom', state.edit.zoom);
   els.cropBox.classList.remove('visible', 'circle');
   els.previewTools.classList.remove('hidden');
+  requestAnimationFrame(centerWizardPreview);
+}
+
+function centerWizardPreview() {
+  els.wizardImage.scrollIntoView({ block: 'center', inline: 'center' });
 }
 
 function bindWizardButtons() {
