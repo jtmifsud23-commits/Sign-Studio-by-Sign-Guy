@@ -37,14 +37,9 @@ const PROJECT_LOG_LIMIT = 12;
 const EMAIL_STORAGE_KEY = 'signGuyCustomerEmail';
 const ADMIN_SESSION_KEY = 'signGuyAdminMode';
 const LOCAL_ADMIN_PASSWORD = '77\\r(~68dKTE';
-const LOADING_MIN_VISIBLE_MS = 1500;
+const LOADING_MIN_VISIBLE_MS = 900;
 let projectDbPromise = null;
-const loadingProgress = {
-  current: 0,
-  target: 0,
-  raf: null,
-  startedAt: performance.now(),
-};
+const loadingStartedAt = performance.now();
 
 const CROP_PRESETS = [
   { id: '1:1', label: '1:1', ratio: 1, icon: 'ratio-1' },
@@ -93,9 +88,12 @@ const state = {
   artwork: null,
   uploadedFile: null,
   processed: null,
+  processingDirty: false,
   rotation: { x: 0, y: 0, z: 0 },
   previewZoom: 1,
   dismissedPreviewAlert: '',
+  loadingReady: false,
+  requiresEmailGate: false,
 };
 
 const els = {
@@ -104,7 +102,6 @@ const els = {
   chooseFileText: document.querySelector('#chooseFileText'),
   dropZone: document.querySelector('#dropZone'),
   statusPill: document.querySelector('#statusPill'),
-  emailGate: document.querySelector('#emailGate'),
   emailGateForm: document.querySelector('#emailGateForm'),
   emailGateError: document.querySelector('#emailGateError'),
   customerEmail: document.querySelector('#customerEmail'),
@@ -119,7 +116,8 @@ const els = {
   warnings: document.querySelector('#warnings'),
   previewAlert: document.querySelector('#previewAlert'),
   appLoading: document.querySelector('#appLoading'),
-  loadingProgressBar: document.querySelector('#loadingProgressBar'),
+  appLoadingCard: document.querySelector('#appLoadingCard'),
+  loadingStartButton: document.querySelector('#loadingStartButton'),
   complexityScore: document.querySelector('#complexityScore'),
   frontSvg: document.querySelector('#frontSvg'),
   modelStack: document.querySelector('#modelStack'),
@@ -177,11 +175,9 @@ const els = {
 boot();
 
 async function boot() {
-  setLoadingProgress(8);
   setupViewportUnits();
   setupEmailGate();
   setupAdminMode();
-  setLoadingProgress(18);
   els.chooseFile.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
@@ -249,12 +245,7 @@ async function boot() {
       return;
     }
     if (!event.target.closest('[data-close-preview-alert]')) return;
-    if (isResponsiveViewport()) {
-      els.previewAlert.classList.remove('expanded');
-      return;
-    }
-    state.dismissedPreviewAlert = els.previewAlert.dataset.signature || '';
-    els.previewAlert.hidden = true;
+    els.previewAlert.classList.remove('expanded');
   });
   els.closeColourPopover.addEventListener('click', closeColourPopover);
   els.popoverHex.addEventListener('change', () => applySelectedColour(normalizeHex(els.popoverHex.value)));
@@ -264,12 +255,10 @@ async function boot() {
     button.addEventListener('click', () => setPopoverTab(button.dataset.popoverTab));
   });
   buildPresetGrid();
-  setLoadingProgress(42);
   setupDropZone();
   setupDragRotation();
   setupCropInteraction();
   initThreeStage();
-  setLoadingProgress(62);
   updateStats();
   applyIllumination();
   renderShellColourControls();
@@ -279,22 +268,29 @@ async function boot() {
 }
 
 function setupEmailGate() {
-  if (!els.emailGate || !els.emailGateForm || !els.customerEmail) return;
+  if (!els.emailGateForm || !els.customerEmail) return;
   const savedEmail = normalizeEmail(localStorage.getItem(EMAIL_STORAGE_KEY));
   if (savedEmail && isValidEmail(savedEmail)) {
     state.customerEmail = savedEmail;
     els.customerEmail.value = savedEmail;
-    els.emailGate.classList.add('hidden');
+    state.requiresEmailGate = false;
+    els.emailGateForm.classList.add('hidden');
     renderSessionEmail();
     refreshProjectLog();
     return;
   }
-  window.setTimeout(() => els.customerEmail.focus(), 0);
+  state.requiresEmailGate = true;
+  els.emailGateForm.classList.remove('hidden');
+  els.appLoadingCard?.classList.add('needs-email');
+  if (els.loadingStartButton) {
+    els.loadingStartButton.disabled = true;
+    els.loadingStartButton.textContent = 'Loading...';
+  }
   els.emailGateForm.addEventListener('submit', (event) => {
     event.preventDefault();
     const email = els.customerEmail.value.trim();
     if (!isValidEmail(email)) {
-      els.emailGate.classList.add('invalid');
+      els.emailGateForm.classList.add('invalid');
       els.emailGateError.textContent = 'Enter a valid email address to continue.';
       els.customerEmail.focus();
       return;
@@ -302,13 +298,18 @@ function setupEmailGate() {
     state.customerEmail = normalizeEmail(email);
     localStorage.setItem(EMAIL_STORAGE_KEY, state.customerEmail);
     renderSessionEmail();
-    els.emailGate.classList.add('hidden');
+    if (!state.loadingReady) {
+      els.emailGateError.textContent = 'Almost ready...';
+      return;
+    }
+    els.emailGateForm.classList.add('hidden');
     els.emailGateError.textContent = '';
     setStatus('Ready');
     refreshProjectLog();
+    hideAppLoading();
   });
   els.customerEmail.addEventListener('input', () => {
-    els.emailGate.classList.remove('invalid');
+    els.emailGateForm.classList.remove('invalid');
     els.emailGateError.textContent = '';
   });
 }
@@ -688,6 +689,7 @@ async function reprocess(options = {}) {
   setStatus('Processing');
   await waitFrame();
   state.processed = processArtwork(state.artwork);
+  state.processingDirty = false;
   if (!options.preserveTargetColorCount && !state.frontColoursCustomized && state.processed.naturalColourCount) {
     state.targetColorCount = state.processed.naturalColourCount;
   }
@@ -748,7 +750,6 @@ async function loadDefaultPreview() {
     renderPreviewTitle();
     renderEmptyPreview();
   } finally {
-    setLoadingProgress(92);
   }
 }
 
@@ -770,6 +771,9 @@ function detectDefaultCrop(artwork) {
   ctx.clearRect(0, 0, width, height);
   ctx.drawImage(artwork.image, 0, 0, width, height);
   const data = ctx.getImageData(0, 0, width, height).data;
+  if (artwork.hasTransparency) {
+    return cropFromBounds(getImageDataAlphaBounds(data, width, height, 4), width, height, 0.075);
+  }
   const bg = averageCornerColour(data, width, height);
   const backgroundMask = state.removeBg ? buildConnectedBackgroundMask(data, width, height, bg, state.tolerance) : null;
   let minX = width;
@@ -789,12 +793,17 @@ function detectDefaultCrop(artwork) {
     }
   }
   if (maxX < 0) return { x: 0, y: 0, w: 1, h: 1 };
-  const padX = width * 0.035;
-  const padY = height * 0.035;
-  minX = clamp(minX - padX, 0, width);
-  minY = clamp(minY - padY, 0, height);
-  maxX = clamp(maxX + padX, 0, width);
-  maxY = clamp(maxY + padY, 0, height);
+  return cropFromBounds({ x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 }, width, height, 0.075);
+}
+
+function cropFromBounds(bounds, width, height, padRatio = 0.04) {
+  if (!bounds) return { x: 0, y: 0, w: 1, h: 1 };
+  const padX = width * padRatio;
+  const padY = height * padRatio;
+  const minX = clamp(bounds.x - padX, 0, width);
+  const minY = clamp(bounds.y - padY, 0, height);
+  const maxX = clamp(bounds.x + bounds.w + padX, 0, width);
+  const maxY = clamp(bounds.y + bounds.h + padY, 0, height);
   return {
     x: minX / width,
     y: minY / height,
@@ -897,21 +906,33 @@ function renderVectorStep() {
       <div class="detail-row"><span class="map-number">${state.processed?.colours.length || 0}</span><span>detected colours</span><strong>max 8</strong></div>
       <div class="detail-row"><span class="map-number">${state.tolerance}</span><span>merge tolerance</span><strong>auto</strong></div>
     </div>
+    ${renderMappingControlsMarkup()}
   `;
   els.wizardFooter.innerHTML = `
     <button class="secondary-button" type="button" data-wizard-action="to-edit">Back</button>
     <button class="secondary-button" type="button" data-wizard-action="try-vector">Try Again</button>
-    <button class="primary-button" type="button" data-wizard-action="to-mapping">Next</button>
+    <button class="primary-button" type="button" data-wizard-action="to-details">Next</button>
   `;
   bindWizardButtons();
+  bindMappingControls();
 }
 
 function renderMappingStep() {
   els.wizardTitle.textContent = 'Auto Color Mapping';
   setWizardPreview(renderMappedArtworkUrl(state.processed) || state.processed?.artworkUrl || state.artwork.dataUrl);
+  els.wizardSide.innerHTML = renderMappingControlsMarkup();
+  els.wizardFooter.innerHTML = `
+    <button class="secondary-button" type="button" data-wizard-action="to-vector">Back</button>
+    <button class="primary-button" type="button" data-wizard-action="to-details">Next</button>
+  `;
+  bindWizardButtons();
+  bindMappingControls();
+}
+
+function renderMappingControlsMarkup() {
   const colours = state.processed?.colours || [];
-  els.wizardSide.innerHTML = `
-    <h3>Color Count</h3>
+  return `
+    <h3 class="mapping-controls-title">Color Count</h3>
     <p>Adjust the number of colours to match your filaments. You can edit colours manually in the next step.</p>
     <div class="colour-count-row">
       <input id="mapColorCount" type="range" min="1" max="8" value="${state.targetColorCount}" />
@@ -924,21 +945,19 @@ function renderMappingStep() {
         return `
           <div class="mapping-row">
             <span class="map-dot" style="background:${region.hex}"></span>
-            <span>-></span>
-            <span class="map-number">${idx + 1}</span>
+            <span class="map-arrow">&rarr;</span>
+            <span class="map-number" style="${colourTokenStyle(region.hex)}">${idx + 1}</span>
             <span class="colour-dot" style="background:${hex}"></span>
-            <span class="map-number dark">${idx + 1}</span>
           </div>
         `;
       }).join('')}
     </div>
   `;
-  els.wizardFooter.innerHTML = `
-    <button class="secondary-button" type="button" data-wizard-action="to-vector">Back</button>
-    <button class="primary-button" type="button" data-wizard-action="to-details">Next</button>
-  `;
-  bindWizardButtons();
+}
+
+function bindMappingControls() {
   const colorCount = document.querySelector('#mapColorCount');
+  if (!colorCount) return;
   const colorCountBadge = els.wizardSide.querySelector('.count-badge');
   colorCount.addEventListener('input', async () => {
     state.targetColorCount = Number(colorCount.value);
@@ -955,52 +974,47 @@ function renderDetailsStep() {
   const colours = state.processed?.colours || [];
   els.wizardSide.innerHTML = `
     <div class="section-heading">
-      <h3>Colors</h3>
-      <button class="icon-button" type="button" data-wizard-action="add-colour" aria-label="Add colour">+</button>
+      <h3>Colors Being Used</h3>
     </div>
-    <p>Being used:</p>
     <div class="colour-chips">
-      ${colours.map((region, idx) => `
-        <button class="colour-chip ${state.selectedColor === idx ? 'active' : ''}" type="button" data-select-colour="${idx}">${idx + 1}</button>
-      `).join('')}
+      ${colours.map((region, idx) => {
+        const hex = getDisplayColour(idx, region.hex);
+        return `<button class="colour-chip ${state.selectedColor === idx ? 'active' : ''}" type="button" data-select-colour="${idx}" style="${colourTokenStyle(hex)}">${idx + 1}</button>`;
+      }).join('')}
+      <button class="colour-chip colour-add-chip" type="button" data-wizard-action="add-colour" aria-label="Add colour">+</button>
     </div>
     <div class="section-heading">
       <h3>Mapping</h3>
-      <button class="reset-button" type="button" data-wizard-action="reset-colours">Reset mapping</button>
+      <button class="reset-button" type="button" data-wizard-action="reset-colours">Reset</button>
     </div>
-    <div class="detail-list">
+    <div class="detail-list colour-detail-list">
       ${colours.map((region, idx) => {
         const hex = getDisplayColour(idx, region.hex);
         return `
-          <div class="detail-row">
-            <button class="colour-dot" type="button" data-edit-colour="${idx}" style="background:${hex}" aria-label="Edit colour ${idx + 1}"></button>
-            <span>Colour ${idx + 1}</span>
+          <button class="detail-row colour-detail-row" type="button" data-edit-colour="${idx}" style="${colourTokenStyle(hex)}" aria-label="Edit colour ${idx + 1}">
+            <span>${idx + 1}</span>
             <strong>${hex}</strong>
-          </div>
+          </button>
         `;
       }).join('')}
     </div>
-    <div class="section-heading plate-detail-heading">
-      <h3>Back and Sides</h3>
-    </div>
-    <div class="detail-list">
-      <div class="detail-row">
-        <button class="colour-dot" type="button" data-edit-shell="side" style="background:${state.shellColours.side}" aria-label="Edit side colour"></button>
-        <span>Side wall</span>
-        <strong>${normalizeHex(state.shellColours.side)}</strong>
-      </div>
-      <div class="detail-row">
-        <button class="colour-dot" type="button" data-edit-shell="back" style="background:${state.shellColours.back}" aria-label="Edit back colour"></button>
-        <span>Back plate</span>
-        <strong>${normalizeHex(state.shellColours.back)}</strong>
-      </div>
-    </div>
   `;
   els.wizardFooter.innerHTML = `
-    <button class="secondary-button" type="button" data-wizard-action="to-mapping">Back</button>
+    <button class="secondary-button" type="button" data-wizard-action="to-vector">Back</button>
     <button class="primary-button" type="button" data-wizard-action="confirm">Confirm</button>
   `;
   bindWizardButtons();
+}
+
+function colourTokenStyle(hex) {
+  const normalized = normalizeHex(hex);
+  const ink = readableTextColour(normalized);
+  return `--token-color:${normalized};--token-ink:${ink};color:${ink};`;
+}
+
+function readableTextColour(hex) {
+  const [r, g, b] = hexToRgb(normalizeHex(hex));
+  return ((r * 299 + g * 587 + b * 114) / 1000) > 150 ? '#111111' : '#ffffff';
 }
 
 function setWizardPreview(src) {
@@ -1051,7 +1065,9 @@ async function handleWizardAction(action) {
   if (action === 'cancel') closeWizard();
   if (action === 'to-edit') openWizard('edit');
   if (action === 'to-vector') {
-    await reprocess();
+    if (!state.processed || state.processingDirty) {
+      await reprocess();
+    }
     openWizard('vector');
   }
   if (action === 'try-vector') {
@@ -1081,6 +1097,7 @@ function setCropPreset(id) {
   const preset = CROP_PRESETS.find((item) => item.id === id);
   if (!preset) return;
   state.edit.cropAspect = id;
+  state.processingDirty = true;
   if (preset.ratio) {
     const imageRatio = state.artwork.image.naturalWidth / state.artwork.image.naturalHeight;
     let w = 1;
@@ -1133,6 +1150,7 @@ function setupCropInteraction() {
       crop = enforceCropAspect(crop, drag.handle);
     }
     state.edit.crop = normalizeCrop(crop);
+    state.processingDirty = true;
     updateCropBox();
   });
   els.cropBox.addEventListener('pointerup', () => {
@@ -1293,6 +1311,7 @@ function applySelectedColour(hex) {
   renderPreview();
   if (state.wizardStep === 'details') renderDetailsStep();
   if (state.wizardStep === 'mapping') renderMappingStep();
+  if (state.wizardStep === 'vector') renderVectorStep();
 }
 
 function applyRgbInputs() {
@@ -1554,23 +1573,58 @@ function buildThreeModel() {
   group.add(face);
   resources.push(faceGeometry, faceMaterial);
 
+  const illuminatedFaceGeometry = faceGeometry.clone();
+  const illuminatedFaceMaterial = new THREE.MeshBasicMaterial({
+    map: texture,
+    color: 0xfff0bf,
+    transparent: true,
+    opacity: state.illuminated ? 0.08 : 0,
+    alphaTest: 0.03,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    toneMapped: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const illuminatedFace = new THREE.Mesh(illuminatedFaceGeometry, illuminatedFaceMaterial);
+  illuminatedFace.position.z = 3.22;
+  illuminatedFace.renderOrder = 5;
+  group.add(illuminatedFace);
+  resources.push(illuminatedFaceGeometry, illuminatedFaceMaterial);
+
+  const diffusionTexture = makeLedDiffusionTexture(bounds);
+  resources.push(diffusionTexture);
+  const diffusionGeometry = faceGeometry.clone();
+  const diffusionMaterial = new THREE.MeshBasicMaterial({
+    map: diffusionTexture,
+    transparent: true,
+    opacity: state.illuminated ? 0.28 : 0.06,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const diffusion = new THREE.Mesh(diffusionGeometry, diffusionMaterial);
+  diffusion.position.z = 3.26;
+  diffusion.renderOrder = 6;
+  group.add(diffusion);
+  resources.push(diffusionGeometry, diffusionMaterial);
+
   const glowGeometry = new THREE.ShapeBufferGeometry(faceShape);
   const glowMaterial = new THREE.MeshBasicMaterial({
-    color: 0xdce8ff,
+    color: 0xffe8b0,
     transparent: true,
-    opacity: state.illuminated ? 0.26 : 0.015,
+    opacity: state.illuminated ? 0.1 : 0.008,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   });
   const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-  glow.position.z = 3;
-  glow.scale.set(1.015, 1.015, 1);
+  glow.position.z = 3.08;
+  glow.scale.set(1.02, 1.02, 1);
   glow.renderOrder = 3;
   group.add(glow);
   resources.push(glowGeometry, glowMaterial);
 
-  const innerLight = new THREE.PointLight(0xd9e6ff, state.illuminated ? 1.15 : 0.04, 280);
-  innerLight.position.set(0, 0, -8);
+  const innerLight = new THREE.PointLight(0xffedbd, state.illuminated ? 0.38 : 0.025, 140);
+  innerLight.position.set(0, 0, 6);
   group.add(innerLight);
 
   state.three.group = group;
@@ -1579,6 +1633,41 @@ function buildThreeModel() {
   applyRotation();
   renderThree();
   requestAnimationFrame(() => els.stage.classList.add('preview-ready'));
+}
+
+function makeLedDiffusionTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const softSpots = [
+    [0.22, 0.22, 0.18, 0.09],
+    [0.76, 0.28, 0.16, 0.07],
+    [0.42, 0.55, 0.22, 0.08],
+    [0.66, 0.72, 0.2, 0.07],
+    [0.28, 0.78, 0.14, 0.06],
+  ];
+  softSpots.forEach(([x, y, radius, alpha]) => {
+    const gradient = ctx.createRadialGradient(
+      x * canvas.width,
+      y * canvas.height,
+      0,
+      x * canvas.width,
+      y * canvas.height,
+      radius * canvas.width,
+    );
+    gradient.addColorStop(0, `rgba(0,0,0,${alpha})`);
+    gradient.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  });
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  return texture;
 }
 
 function getModelBounds(processed) {
@@ -2515,18 +2604,13 @@ function renderPreviewAlert(warnings) {
     els.previewAlert.dataset.signature = '';
     return;
   }
-  if (state.dismissedPreviewAlert === signature) {
-    els.previewAlert.hidden = true;
-    els.previewAlert.dataset.signature = signature;
-    return;
-  }
   const hasError = visibleWarnings.some((warning) => warning.level === 'error');
   els.previewAlert.hidden = false;
   els.previewAlert.dataset.signature = signature;
   els.previewAlert.classList.toggle('error', hasError);
   els.previewAlert.classList.remove('expanded');
   els.previewAlert.innerHTML = `
-    <button class="preview-alert-trigger" type="button" data-open-preview-alert aria-label="Open print checks"><span aria-hidden="true">!</span></button>
+    <button class="preview-alert-trigger" type="button" data-open-preview-alert aria-label="Open print checks">!</button>
     <button class="preview-alert-close" type="button" data-close-preview-alert aria-label="Close print checks">x</button>
     <div class="preview-alert-content">
       <strong>${hasError ? 'Needs attention' : 'Print checks'}</strong>
@@ -2897,14 +2981,6 @@ function renderProjectLog() {
     <article class="project-item" data-load-project="${escapeHtml(project.id)}">
       <button class="project-delete" type="button" data-delete-project="${escapeHtml(project.id)}" aria-label="Delete ${escapeHtml(project.name || 'saved design')}">x</button>
       <img class="project-thumb" src="${escapeHtml(project.preview?.screenshotDataUrl || project.source?.dataUrl || '')}" alt="" />
-      <div class="project-meta">
-        <strong>${escapeHtml(project.name || 'saved-design')}</strong>
-        <span>${escapeHtml(project.source?.fileName || 'Sign Studio project')} · ${formatProjectDate(project.savedAt)}</span>
-        <div class="project-item-actions">
-          <button class="project-mini" type="button" data-load-project="${escapeHtml(project.id)}">Open</button>
-          ${state.isAdmin ? `<button class="project-mini" type="button" data-download-project="${escapeHtml(project.id)}">Download</button>` : ''}
-        </div>
-      </div>
     </article>
   `).join('');
   els.projectList.querySelectorAll('article[data-load-project]').forEach((item) => {
@@ -2914,14 +2990,6 @@ function renderProjectLog() {
       await restoreSignGuyProject(project);
       els.projectNote.textContent = `${project.name}.SignGuy restored from recent saves.`;
       setStatus('Project open');
-    });
-  });
-  els.projectList.querySelectorAll('[data-download-project]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      if (!state.isAdmin) return;
-      const project = await getProjectRecord(button.dataset.downloadProject);
-      downloadProjectPayload(project);
-      els.projectNote.textContent = `${project.name}.SignGuy downloaded.`;
     });
   });
   els.projectList.querySelectorAll('[data-delete-project]').forEach((button) => {
@@ -3633,38 +3701,14 @@ function waitMs(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-function setLoadingProgress(value) {
-  if (!els.loadingProgressBar) return;
-  loadingProgress.target = Math.max(loadingProgress.target, clamp(Number(value) || 0, 0, 100));
-  if (!loadingProgress.raf) {
-    loadingProgress.raf = requestAnimationFrame(animateLoadingProgress);
-  }
-}
-
-function animateLoadingProgress() {
-  const distance = loadingProgress.target - loadingProgress.current;
-  loadingProgress.current += distance * 0.08;
-  if (loadingProgress.target >= 100 && loadingProgress.current > 99.3) {
-    loadingProgress.current = 100;
-  }
-  if (els.loadingProgressBar) {
-    els.loadingProgressBar.style.width = `${loadingProgress.current.toFixed(2)}%`;
-  }
-  if (Math.abs(loadingProgress.target - loadingProgress.current) > 0.15) {
-    loadingProgress.raf = requestAnimationFrame(animateLoadingProgress);
-    return;
-  }
-  loadingProgress.current = loadingProgress.target;
-  if (els.loadingProgressBar) {
-    els.loadingProgressBar.style.width = `${loadingProgress.current.toFixed(2)}%`;
-  }
-  loadingProgress.raf = null;
-}
-
 async function finishAppLoading() {
-  setLoadingProgress(100);
-  while (performance.now() - loadingProgress.startedAt < LOADING_MIN_VISIBLE_MS || loadingProgress.current < 99) {
-    await waitMs(50);
+  while (performance.now() - loadingStartedAt < LOADING_MIN_VISIBLE_MS) {
+    await waitMs(24);
+  }
+  state.loadingReady = true;
+  if (state.requiresEmailGate) {
+    showLoadingStart();
+    return;
   }
   hideAppLoading();
 }
@@ -3672,6 +3716,18 @@ async function finishAppLoading() {
 function hideAppLoading() {
   document.body.classList.remove('studio-loading');
   if (els.appLoading) els.appLoading.classList.add('hidden');
+}
+
+function showLoadingStart() {
+  if (!els.loadingStartButton) return;
+  els.appLoadingCard?.classList.add('ready-to-start');
+  els.loadingStartButton.disabled = false;
+  els.loadingStartButton.textContent = 'START';
+  if (isValidEmail(els.customerEmail?.value || '')) {
+    els.loadingStartButton.focus();
+    return;
+  }
+  els.customerEmail?.focus();
 }
 
 function setStatus(text) {
