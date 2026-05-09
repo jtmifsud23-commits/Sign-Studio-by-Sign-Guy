@@ -38,6 +38,8 @@ const EMAIL_STORAGE_KEY = 'signGuyCustomerEmail';
 const ADMIN_SESSION_KEY = 'signGuyAdminMode';
 const LOCAL_ADMIN_PASSWORD = '77\\r(~68dKTE';
 const LOADING_MIN_VISIBLE_MS = 900;
+const FLOATING_SUPPORT_CLUSTER_ORIGINAL = -7777;
+const DEFAULT_FLOATING_SUPPORT_COLOUR = '#fdfdfd';
 let projectDbPromise = null;
 const loadingStartedAt = performance.now();
 
@@ -66,6 +68,8 @@ const state = {
   usage: 'indoor',
   illuminated: true,
   removeBg: true,
+  fixFloatingRegions: false,
+  floatingSupportColour: DEFAULT_FLOATING_SUPPORT_COLOUR,
   tolerance: 64,
   targetColorCount: 8,
   colorOverrides: [],
@@ -365,6 +369,7 @@ function renderAdminMode() {
     els.adminLoginButton.textContent = state.isAdmin ? 'Admin: Logout' : 'Login';
     els.adminLoginButton.classList.toggle('active', state.isAdmin);
   }
+  renderDiagnostics();
   renderProjectLog();
 }
 
@@ -506,6 +511,8 @@ async function handleFiles(fileList) {
     state.artwork = isSvg ? await readSvgArtwork(file) : await readPngArtwork(file);
     state.removeBg = state.artwork.hasTransparency ? false : true;
     els.removeBg.checked = state.removeBg;
+    state.fixFloatingRegions = false;
+    state.floatingSupportColour = DEFAULT_FLOATING_SUPPORT_COLOUR;
     state.targetColorCount = 8;
     state.colorOverrides = [];
     state.frontColoursCustomized = false;
@@ -724,6 +731,8 @@ async function loadDefaultPreview() {
     state.artwork = artwork;
     state.removeBg = artwork.hasTransparency ? false : true;
     els.removeBg.checked = state.removeBg;
+    state.fixFloatingRegions = false;
+    state.floatingSupportColour = DEFAULT_FLOATING_SUPPORT_COLOUR;
     state.targetColorCount = 8;
     state.colorOverrides = [];
     state.frontColoursCustomized = false;
@@ -755,15 +764,17 @@ async function loadDefaultPreview() {
 
 function initEditState() {
   state.edit = {
-    crop: detectDefaultCrop(state.artwork),
+    crop: { x: 0, y: 0, w: 1, h: 1 },
     cropAspect: 'free',
     zoom: 1,
   };
 }
 
 function detectDefaultCrop(artwork) {
-  const width = Math.min(220, artwork.image.naturalWidth);
-  const height = Math.min(220, artwork.image.naturalHeight);
+  const maxScanSide = 760;
+  const scanScale = Math.min(maxScanSide / artwork.image.naturalWidth, maxScanSide / artwork.image.naturalHeight, 1);
+  const width = Math.max(12, Math.round(artwork.image.naturalWidth * scanScale));
+  const height = Math.max(12, Math.round(artwork.image.naturalHeight * scanScale));
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -772,7 +783,7 @@ function detectDefaultCrop(artwork) {
   ctx.drawImage(artwork.image, 0, 0, width, height);
   const data = ctx.getImageData(0, 0, width, height).data;
   if (artwork.hasTransparency) {
-    return cropFromBounds(getImageDataAlphaBounds(data, width, height, 4), width, height, 0.075);
+    return cropFromBounds(getImageDataAlphaBounds(data, width, height, 1), width, height, 0.08);
   }
   const bg = averageCornerColour(data, width, height);
   const backgroundMask = state.removeBg ? buildConnectedBackgroundMask(data, width, height, bg, state.tolerance) : null;
@@ -793,23 +804,40 @@ function detectDefaultCrop(artwork) {
     }
   }
   if (maxX < 0) return { x: 0, y: 0, w: 1, h: 1 };
-  return cropFromBounds({ x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 }, width, height, 0.075);
+  return cropFromBounds({ x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 }, width, height, 0.08);
 }
 
 function cropFromBounds(bounds, width, height, padRatio = 0.04) {
   if (!bounds) return { x: 0, y: 0, w: 1, h: 1 };
-  const padX = width * padRatio;
-  const padY = height * padRatio;
+  const pad = typeof padRatio === 'number'
+    ? { x: padRatio, top: padRatio, bottom: padRatio }
+    : {
+      x: Number(padRatio.x ?? padRatio.side ?? 0.04),
+      top: Number(padRatio.top ?? padRatio.y ?? 0.04),
+      bottom: Number(padRatio.bottom ?? padRatio.y ?? padRatio.top ?? 0.04),
+    };
+  const padX = width * pad.x;
+  const padTop = height * pad.top;
+  const padBottom = height * pad.bottom;
   const minX = clamp(bounds.x - padX, 0, width);
-  const minY = clamp(bounds.y - padY, 0, height);
+  const minY = clamp(bounds.y - padTop, 0, height);
   const maxX = clamp(bounds.x + bounds.w + padX, 0, width);
-  const maxY = clamp(bounds.y + bounds.h + padY, 0, height);
-  return {
+  const maxY = clamp(bounds.y + bounds.h + padBottom, 0, height);
+  const crop = {
     x: minX / width,
     y: minY / height,
     w: Math.max(0.08, (maxX - minX) / width),
     h: Math.max(0.08, (maxY - minY) / height),
   };
+  if (crop.x <= 0.035 && crop.x + crop.w >= 0.965) {
+    crop.x = 0;
+    crop.w = 1;
+  }
+  if (crop.y <= 0.035 && crop.y + crop.h >= 0.965) {
+    crop.y = 0;
+    crop.h = 1;
+  }
+  return crop;
 }
 
 function openWizard(step) {
@@ -860,6 +888,10 @@ function renderEditStep() {
       <span>Remove Background</span>
       <input id="wizardRemoveBg" type="checkbox" ${state.removeBg ? 'checked' : ''} />
     </label>
+    <label class="switch-row">
+      <span>Fix floating regions</span>
+      <input id="wizardFixFloatingRegions" type="checkbox" ${state.fixFloatingRegions ? 'checked' : ''} />
+    </label>
   `;
   els.wizardFooter.innerHTML = `
     <button class="secondary-button" type="button" data-wizard-action="cancel">Cancel</button>
@@ -871,12 +903,12 @@ function renderEditStep() {
 }
 
 function renderEditArtworkPreviewUrl(artwork) {
-  if (!artwork || !state.removeBg) return artwork?.dataUrl || '';
+  if (!artwork || (!state.removeBg && !state.fixFloatingRegions)) return artwork?.dataUrl || '';
   const crop = { x: 0, y: 0, w: 1, h: 1 };
-  return renderBackgroundRemovedCanvas(artwork, crop, 1200).toDataURL('image/png');
+  return renderEditedArtworkCanvas(artwork, crop, 1200).toDataURL('image/png');
 }
 
-function renderBackgroundRemovedCanvas(artwork, crop, maxSide) {
+function renderEditedArtworkCanvas(artwork, crop, maxSide) {
   const srcX = Math.round(artwork.image.naturalWidth * crop.x);
   const srcY = Math.round(artwork.image.naturalHeight * crop.y);
   const srcW = Math.max(1, Math.round(artwork.image.naturalWidth * crop.w));
@@ -890,9 +922,14 @@ function renderBackgroundRemovedCanvas(artwork, crop, maxSide) {
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   ctx.clearRect(0, 0, width, height);
   ctx.drawImage(artwork.image, srcX, srcY, srcW, srcH, 0, 0, width, height);
-  const img = ctx.getImageData(0, 0, width, height);
-  removeConnectedBackgroundFromImageData(img.data, width, height);
-  ctx.putImageData(img, 0, 0);
+  if (state.removeBg) {
+    const img = ctx.getImageData(0, 0, width, height);
+    removeConnectedBackgroundFromImageData(img.data, width, height);
+    ctx.putImageData(img, 0, 0);
+  }
+  if (state.fixFloatingRegions) {
+    connectFloatingRegionsOnCanvas(canvas, ctx, hexToRgb(state.floatingSupportColour || DEFAULT_FLOATING_SUPPORT_COLOUR));
+  }
   return canvas;
 }
 
@@ -942,11 +979,12 @@ function renderMappingControlsMarkup() {
     <div class="mapping-list">
       ${colours.map((region, idx) => {
         const hex = getDisplayColour(idx, region.hex);
+        const label = region.isFloatingSupport ? 'S' : `${idx + 1}`;
         return `
           <div class="mapping-row">
             <span class="map-dot" style="background:${region.hex}"></span>
             <span class="map-arrow">&rarr;</span>
-            <span class="map-number" style="${colourTokenStyle(region.hex)}">${idx + 1}</span>
+            <span class="map-number" style="${colourTokenStyle(region.hex)}">${label}</span>
             <span class="colour-dot" style="background:${hex}"></span>
           </div>
         `;
@@ -959,9 +997,12 @@ function bindMappingControls() {
   const colorCount = document.querySelector('#mapColorCount');
   if (!colorCount) return;
   const colorCountBadge = els.wizardSide.querySelector('.count-badge');
-  colorCount.addEventListener('input', async () => {
+  colorCount.addEventListener('input', () => {
     state.targetColorCount = Number(colorCount.value);
     if (colorCountBadge) colorCountBadge.textContent = String(state.targetColorCount);
+  });
+  colorCount.addEventListener('change', async () => {
+    state.targetColorCount = Number(colorCount.value);
     state.colorOverrides = [];
     state.frontColoursCustomized = true;
     await reprocess();
@@ -979,7 +1020,8 @@ function renderDetailsStep() {
     <div class="colour-chips">
       ${colours.map((region, idx) => {
         const hex = getDisplayColour(idx, region.hex);
-        return `<button class="colour-chip ${state.selectedColor === idx ? 'active' : ''}" type="button" data-select-colour="${idx}" style="${colourTokenStyle(hex)}">${idx + 1}</button>`;
+        const label = region.isFloatingSupport ? 'S' : `${idx + 1}`;
+        return `<button class="colour-chip ${state.selectedColor === idx ? 'active' : ''}" type="button" data-select-colour="${idx}" style="${colourTokenStyle(hex)}">${label}</button>`;
       }).join('')}
       <button class="colour-chip colour-add-chip" type="button" data-wizard-action="add-colour" aria-label="Add colour">+</button>
     </div>
@@ -990,9 +1032,10 @@ function renderDetailsStep() {
     <div class="detail-list colour-detail-list">
       ${colours.map((region, idx) => {
         const hex = getDisplayColour(idx, region.hex);
+        const label = region.isFloatingSupport ? 'Support' : `${idx + 1}`;
         return `
-          <button class="detail-row colour-detail-row" type="button" data-edit-colour="${idx}" style="${colourTokenStyle(hex)}" aria-label="Edit colour ${idx + 1}">
-            <span>${idx + 1}</span>
+          <button class="detail-row colour-detail-row" type="button" data-edit-colour="${idx}" style="${colourTokenStyle(hex)}" aria-label="Edit ${region.isFloatingSupport ? 'floating support colour' : `colour ${idx + 1}`}">
+            <span>${label}</span>
             <strong>${hex}</strong>
           </button>
         `;
@@ -1040,7 +1083,12 @@ function bindWizardButtons() {
   els.wizardSide.querySelector('#wizardRemoveBg')?.addEventListener('change', async (event) => {
     state.removeBg = event.target.checked;
     els.removeBg.checked = state.removeBg;
-    state.edit.crop = detectDefaultCrop(state.artwork);
+    state.edit.crop = { x: 0, y: 0, w: 1, h: 1 };
+    await reprocess();
+    renderEditStep();
+  });
+  els.wizardSide.querySelector('#wizardFixFloatingRegions')?.addEventListener('change', async (event) => {
+    state.fixFloatingRegions = event.target.checked;
     await reprocess();
     renderEditStep();
   });
@@ -1079,6 +1127,7 @@ async function handleWizardAction(action) {
   if (action === 'to-details') openWizard('details');
   if (action === 'reset-colours') {
     state.colorOverrides = [];
+    state.floatingSupportColour = DEFAULT_FLOATING_SUPPORT_COLOUR;
     state.frontColoursCustomized = false;
     renderPreview();
     renderShellColourControls();
@@ -1156,6 +1205,12 @@ function setupCropInteraction() {
   els.cropBox.addEventListener('pointerup', () => {
     drag = null;
   });
+  els.cropBox.addEventListener('pointercancel', () => {
+    drag = null;
+  });
+  els.cropBox.addEventListener('lostpointercapture', () => {
+    drag = null;
+  });
   window.addEventListener('resize', updateCropBox);
 }
 
@@ -1207,7 +1262,11 @@ function setWizardZoom(value) {
 
 function syncColorOverrides() {
   if (!state.processed) return;
-  state.colorOverrides = state.processed.colours.map((region, idx) => normalizeHex(state.colorOverrides[idx] || region.hex));
+  state.colorOverrides = state.processed.colours.map((region, idx) => (
+    region.isFloatingSupport
+      ? normalizeHex(state.colorOverrides[idx] || state.floatingSupportColour || region.hex)
+      : normalizeHex(state.colorOverrides[idx] || region.hex)
+  ));
   state.selectedColor = clamp(state.selectedColor, 0, Math.max(0, state.processed.colours.length - 1));
 }
 
@@ -1305,6 +1364,9 @@ function applySelectedColour(hex) {
     renderShellColourControls();
   } else {
     state.colorOverrides[state.selectedColor] = normalized;
+    if (state.processed?.colours[state.selectedColor]?.isFloatingSupport) {
+      state.floatingSupportColour = normalized;
+    }
     state.frontColoursCustomized = true;
   }
   updatePopoverInputs(normalized);
@@ -1326,6 +1388,8 @@ function initThreeStage() {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputEncoding = THREE.sRGBEncoding;
+  if (THREE.ACESFilmicToneMapping) renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
   renderer.domElement.className = 'three-canvas';
   els.stage.appendChild(renderer.domElement);
 
@@ -1334,29 +1398,33 @@ function initThreeStage() {
   camera.position.set(0, 10, 430);
   camera.lookAt(0, 0, 0);
 
-  const hemi = new THREE.HemisphereLight(0xdde6ef, 0x121312, 1.35);
+  const hemi = new THREE.HemisphereLight(0xe7edf0, 0x111312, 0.82);
   scene.add(hemi);
 
-  const key = new THREE.DirectionalLight(0xffffff, 1.45);
-  key.position.set(-180, 260, 310);
+  const key = new THREE.DirectionalLight(0xfff7e8, 0.78);
+  key.position.set(-190, 260, 330);
   key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024);
   scene.add(key);
 
-  const rim = new THREE.DirectionalLight(0x6f85a6, 0.75);
-  rim.position.set(220, 100, -240);
+  const rim = new THREE.DirectionalLight(0x92a2aa, 0.62);
+  rim.position.set(220, 110, -250);
   scene.add(rim);
 
+  const floorFill = new THREE.DirectionalLight(0xffecc4, 0.34);
+  floorFill.position.set(0, -140, 260);
+  scene.add(floorFill);
+
   const floor = new THREE.Mesh(
-    new THREE.PlaneBufferGeometry(720, 420),
-    new THREE.ShadowMaterial({ color: 0x000000, opacity: 0.34 }),
+    new THREE.PlaneBufferGeometry(760, 440),
+    new THREE.ShadowMaterial({ color: 0x000000, opacity: 0.24 }),
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(0, -105, -40);
   floor.receiveShadow = true;
   scene.add(floor);
 
-  state.three = { renderer, scene, camera, floor, group: null, resources: [], resizeObserver: null };
+  state.three = { renderer, scene, camera, floor, group: null, floorGroup: null, resources: [], resizeObserver: null };
   resizeThree();
   window.addEventListener('resize', resizeThree);
   if (window.ResizeObserver) {
@@ -1386,6 +1454,19 @@ function applyIllumination() {
   els.stage.classList.toggle('lights-on', state.illuminated);
   els.stage.classList.toggle('lights-off', !state.illuminated);
   if (els.lightToggleLabel) els.lightToggleLabel.textContent = state.illuminated ? 'lights on' : 'lights off';
+  const lighting = state.three?.group?.userData?.lighting;
+  if (lighting) {
+    lighting.illuminatedFaceMaterial.opacity = state.illuminated ? 0.058 : 0;
+    lighting.diffusionMaterial.opacity = state.illuminated ? 0.17 : 0.026;
+    lighting.glowMaterial.opacity = state.illuminated ? 0.06 : 0.004;
+    lighting.innerLight.intensity = state.illuminated ? 0.26 : 0.012;
+    lighting.groundGlowMaterial.opacity = state.illuminated ? 0.38 : 0.018;
+    lighting.groundHaloMaterial.opacity = state.illuminated ? 0.16 : 0;
+    lighting.keyholeInteriorMaterial.opacity = state.illuminated ? 0.86 : 0.28;
+    lighting.keyholeInteriorMaterial.color.copy(makeThreeColour(state.illuminated ? '#d0c4a4' : '#1d2020'));
+    updateFloorEffects();
+    renderThree();
+  }
 }
 
 function setPreviewZoom(value) {
@@ -1409,23 +1490,32 @@ function applyPreviewZoom() {
 }
 
 function clearThreeModel() {
-  if (!state.three?.group) return;
-  state.three.scene.remove(state.three.group);
+  if (!state.three?.group && !state.three?.floorGroup) return;
+  if (state.three.group) state.three.scene.remove(state.three.group);
+  if (state.three.floorGroup) state.three.scene.remove(state.three.floorGroup);
   state.three.resources.forEach((resource) => {
     if (resource?.dispose) resource.dispose();
   });
   state.three.group = null;
+  state.three.floorGroup = null;
   state.three.resources = [];
   renderThree();
 }
 
 function updateThreeModelPosition() {
   if (!state.three?.group) return;
-  state.three.group.position.y = getThreeModelYOffset();
+  const bounds = state.three.group.userData?.bounds;
+  state.three.group.position.y = getThreeModelYOffset(bounds);
+  if (state.three.floorGroup && bounds) {
+    state.three.floorGroup.userData.floorY = state.three.group.position.y + bounds.minY;
+    updateFloorEffects();
+  }
 }
 
-function getThreeModelYOffset() {
-  return isResponsiveViewport() ? -26 : 10;
+function getThreeModelYOffset(bounds = null) {
+  if (!bounds) return isResponsiveViewport() ? -26 : 10;
+  const floorY = isResponsiveViewport() ? -94 : -74;
+  return floorY - bounds.minY;
 }
 
 function isResponsiveViewport() {
@@ -1447,33 +1537,124 @@ function buildThreeModel() {
   const frontBackerShape = makeThreeShape(frontBackerPoints);
   const sideColour = normalizeHex(state.shellColours.side);
   const backColour = normalizeHex(state.shellColours.back);
+  const sideMaterialColour = liftDarkFrameColour(sideColour);
+  const backMaterialColour = liftDarkFrameColour(backColour);
   const resources = state.three.resources;
 
   const group = new THREE.Group();
-  group.position.y = getThreeModelYOffset();
+  group.position.y = getThreeModelYOffset(bounds);
+  group.userData.bounds = bounds;
 
   const sideMaterial = new THREE.MeshStandardMaterial({
-    color: makeThreeColour(sideColour),
-    roughness: 0.78,
-    metalness: 0.05,
+    color: makeThreeColour(sideMaterialColour),
+    roughness: 0.58,
+    metalness: 0.14,
+    emissive: makeThreeColour('#0b0e0e'),
+    emissiveIntensity: 0.12,
   });
   const backMaterial = new THREE.MeshStandardMaterial({
-    color: makeThreeColour(backColour),
-    roughness: 0.86,
-    metalness: 0.04,
+    color: makeThreeColour(backMaterialColour),
+    roughness: 0.62,
+    metalness: 0.12,
+    emissive: makeThreeColour('#080a0a'),
+    emissiveIntensity: 0.08,
   });
   const frontBackerMaterial = new THREE.MeshStandardMaterial({
-    color: makeThreeColour(sideColour),
-    roughness: 0.82,
-    metalness: 0.05,
+    color: makeThreeColour(sideMaterialColour),
+    roughness: 0.58,
+    metalness: 0.14,
+    emissive: makeThreeColour('#0b0e0e'),
+    emissiveIntensity: 0.11,
   });
-  const keyholeShadowMaterial = new THREE.MeshBasicMaterial({
-    color: makeThreeColour('#050505'),
+  const keyholeInteriorMaterial = new THREE.MeshBasicMaterial({
+    map: makeKeyholeInteriorTexture(),
+    color: makeThreeColour('#d0c4a4'),
     side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.9,
+    depthWrite: false,
   });
-  resources.push(sideMaterial, backMaterial, frontBackerMaterial, keyholeShadowMaterial);
+  resources.push(sideMaterial, backMaterial, frontBackerMaterial, keyholeInteriorMaterial, keyholeInteriorMaterial.map);
 
-  const shellGeometry = new THREE.ExtrudeBufferGeometry(makeThreeShape(shellOuterPoints), {
+  const shellBounds = getThreePointBounds(backPoints);
+  const keyholeAnchor = getBackPlateKeyholeAnchor(processed, bounds) || { x: shellBounds.centerX, y: shellBounds.centerY };
+  const keyholeBounds = {
+    ...bounds,
+    keyholeX: keyholeAnchor.x,
+    keyholeY: keyholeAnchor.y,
+  };
+
+  const floorGroup = new THREE.Group();
+  floorGroup.userData = {
+    bounds,
+    floorY: group.position.y + bounds.minY,
+  };
+
+  const groundGlowTexture = makeGroundGlowTexture();
+  const groundGlowMaterial = new THREE.MeshBasicMaterial({
+    map: groundGlowTexture,
+    transparent: true,
+    opacity: state.illuminated ? 0.44 : 0.02,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const groundGlowGeometry = new THREE.PlaneBufferGeometry(bounds.width * 1.42, Math.max(26, bounds.height * 0.28));
+  const groundGlow = new THREE.Mesh(groundGlowGeometry, groundGlowMaterial);
+  groundGlow.name = 'floorGlow';
+  groundGlow.renderOrder = 0;
+  floorGroup.add(groundGlow);
+  resources.push(groundGlowTexture, groundGlowMaterial, groundGlowGeometry);
+
+  const groundHaloTexture = makeGroundHaloTexture();
+  const groundHaloMaterial = new THREE.MeshBasicMaterial({
+    map: groundHaloTexture,
+    transparent: true,
+    opacity: state.illuminated ? 0.2 : 0,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const groundHaloGeometry = new THREE.PlaneBufferGeometry(bounds.width * 1.72, Math.max(34, bounds.height * 0.34));
+  const groundHalo = new THREE.Mesh(groundHaloGeometry, groundHaloMaterial);
+  groundHalo.name = 'floorHalo';
+  groundHalo.renderOrder = 0;
+  floorGroup.add(groundHalo);
+  resources.push(groundHaloTexture, groundHaloMaterial, groundHaloGeometry);
+
+  const contactShadowTexture = makeProjectedShadowTexture(processed, 0.22, 1.2);
+  const contactShadowMaterial = new THREE.MeshBasicMaterial({
+    map: contactShadowTexture,
+    transparent: true,
+    opacity: 0.48,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const contactShadowGeometry = new THREE.PlaneBufferGeometry(bounds.width * 1.08, Math.max(18, bounds.height * 0.16));
+  const contactShadow = new THREE.Mesh(contactShadowGeometry, contactShadowMaterial);
+  contactShadow.name = 'contactShadow';
+  contactShadow.renderOrder = 0;
+  floorGroup.add(contactShadow);
+  resources.push(contactShadowTexture, contactShadowMaterial, contactShadowGeometry);
+
+  const castShadowTexture = makeProjectedShadowTexture(processed, 0.28, 1.0);
+  const castShadowMaterial = new THREE.MeshBasicMaterial({
+    map: castShadowTexture,
+    transparent: true,
+    opacity: 0.34,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const castShadowGeometry = new THREE.PlaneBufferGeometry(bounds.width * 1.75, Math.max(26, bounds.height * 0.28));
+  const castShadow = new THREE.Mesh(castShadowGeometry, castShadowMaterial);
+  castShadow.name = 'castShadow';
+  castShadow.renderOrder = 0;
+  floorGroup.add(castShadow);
+  resources.push(castShadowTexture, castShadowMaterial, castShadowGeometry);
+
+  state.three.floorGroup = floorGroup;
+  state.three.scene.add(floorGroup);
+  updateFloorEffects();
+
+  const shellGeometry = new THREE.ExtrudeBufferGeometry(makeBackPlateShape(shellOuterPoints, keyholeBounds), {
     depth: shellDepth,
     bevelEnabled: true,
     bevelSize: 0.22,
@@ -1489,14 +1670,6 @@ function buildThreeModel() {
   group.add(shell);
   resources.push(shellGeometry);
 
-  const shellBounds = getThreePointBounds(backPoints);
-  const keyholeAnchor = getBackPlateKeyholeAnchor(processed, bounds) || { x: shellBounds.centerX, y: shellBounds.centerY };
-  const keyholeBounds = {
-    ...bounds,
-    keyholeX: keyholeAnchor.x,
-    keyholeY: keyholeAnchor.y,
-  };
-
   const backLipGeometry = new THREE.ExtrudeBufferGeometry(makeBackPlateShape(backPoints, keyholeBounds), {
     depth: 2.8,
     bevelEnabled: true,
@@ -1511,11 +1684,12 @@ function buildThreeModel() {
   group.add(backPlate);
   resources.push(backLipGeometry);
 
-  const keyholeShadowGeometry = new THREE.ShapeBufferGeometry(makeKeyholeCutoutShape(keyholeBounds, 1.18));
-  const keyholeShadow = new THREE.Mesh(keyholeShadowGeometry, keyholeShadowMaterial);
-  keyholeShadow.position.z = -shellDepth - 2.86;
-  group.add(keyholeShadow);
-  resources.push(keyholeShadowGeometry);
+  const keyholeInteriorGeometry = new THREE.ShapeBufferGeometry(makeKeyholeCutoutShape(keyholeBounds, 0.76));
+  const keyholeInterior = new THREE.Mesh(keyholeInteriorGeometry, keyholeInteriorMaterial);
+  keyholeInterior.position.z = -shellDepth - 2.92;
+  keyholeInterior.renderOrder = 1;
+  group.add(keyholeInterior);
+  resources.push(keyholeInteriorGeometry);
 
   const frontBackerGeometry = new THREE.ShapeBufferGeometry(frontBackerShape);
   const frontBacker = new THREE.Mesh(frontBackerGeometry, frontBackerMaterial);
@@ -1561,8 +1735,8 @@ function buildThreeModel() {
     color: 0xffffff,
     transparent: true,
     alphaTest: 0.03,
-    side: THREE.DoubleSide,
-    depthWrite: false,
+    side: THREE.FrontSide,
+    depthWrite: true,
     toneMapped: false,
   });
   const face = new THREE.Mesh(faceGeometry, faceMaterial);
@@ -1578,9 +1752,9 @@ function buildThreeModel() {
     map: texture,
     color: 0xfff0bf,
     transparent: true,
-    opacity: state.illuminated ? 0.08 : 0,
+    opacity: state.illuminated ? 0.058 : 0,
     alphaTest: 0.03,
-    side: THREE.DoubleSide,
+    side: THREE.FrontSide,
     depthWrite: false,
     toneMapped: false,
     blending: THREE.AdditiveBlending,
@@ -1597,8 +1771,8 @@ function buildThreeModel() {
   const diffusionMaterial = new THREE.MeshBasicMaterial({
     map: diffusionTexture,
     transparent: true,
-    opacity: state.illuminated ? 0.28 : 0.06,
-    side: THREE.DoubleSide,
+    opacity: state.illuminated ? 0.17 : 0.026,
+    side: THREE.FrontSide,
     depthWrite: false,
     toneMapped: false,
   });
@@ -1612,7 +1786,7 @@ function buildThreeModel() {
   const glowMaterial = new THREE.MeshBasicMaterial({
     color: 0xffe8b0,
     transparent: true,
-    opacity: state.illuminated ? 0.1 : 0.008,
+    opacity: state.illuminated ? 0.06 : 0.004,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   });
@@ -1623,9 +1797,22 @@ function buildThreeModel() {
   group.add(glow);
   resources.push(glowGeometry, glowMaterial);
 
-  const innerLight = new THREE.PointLight(0xffedbd, state.illuminated ? 0.38 : 0.025, 140);
+  const innerLight = new THREE.PointLight(0xffedbd, state.illuminated ? 0.26 : 0.012, 155);
   innerLight.position.set(0, 0, 6);
   group.add(innerLight);
+  group.userData.lighting = {
+    faceMaterial,
+    sideMaterial,
+    backMaterial,
+    frontBackerMaterial,
+    illuminatedFaceMaterial,
+    diffusionMaterial,
+    glowMaterial,
+    innerLight,
+    groundGlowMaterial,
+    groundHaloMaterial,
+    keyholeInteriorMaterial,
+  };
 
   state.three.group = group;
   state.three.scene.add(group);
@@ -1633,6 +1820,92 @@ function buildThreeModel() {
   applyRotation();
   renderThree();
   requestAnimationFrame(() => els.stage.classList.add('preview-ready'));
+}
+
+function updateFloorEffects() {
+  if (!state.three?.floorGroup || !window.THREE) return;
+  const floorGroup = state.three.floorGroup;
+  const bounds = floorGroup.userData?.bounds;
+  const floorY = floorGroup.userData?.floorY;
+  if (!bounds || typeof floorY !== 'number') return;
+
+  const shellDepth = SIZE_PRESETS[state.size].depth;
+  const yaw = THREE.Math.degToRad(state.rotation.y || 0);
+  const pitch = THREE.Math.degToRad(state.rotation.x || 0);
+  const yawSide = Math.sin(yaw);
+  const sideAmount = Math.abs(yawSide);
+  const topAmount = clamp(Math.abs(Math.sin(pitch)), 0, 1);
+  const depthZ = -shellDepth - 24;
+  const frontAmount = clamp((Math.cos(yaw) + 1) / 2, 0, 1);
+  const lit = state.illuminated ? 1 : 0;
+  const lighting = state.three.group?.userData?.lighting;
+
+  if (lighting) {
+    const diffuserStrength = lit ? 0.11 + frontAmount * 0.065 + sideAmount * 0.025 : 0.024;
+    const edgeGlowStrength = lit ? 0.038 + frontAmount * 0.022 + sideAmount * 0.018 : 0.004;
+    lighting.illuminatedFaceMaterial.opacity = lit ? 0.035 + frontAmount * 0.03 : 0;
+    lighting.diffusionMaterial.opacity = diffuserStrength;
+    lighting.glowMaterial.opacity = edgeGlowStrength;
+    lighting.innerLight.intensity = lit ? 0.18 + frontAmount * 0.09 + sideAmount * 0.035 : 0.012;
+    const faceBrightness = lit ? 1.03 + frontAmount * 0.025 : 0.74;
+    lighting.faceMaterial.color.setRGB(faceBrightness, faceBrightness, faceBrightness);
+    lighting.sideMaterial.emissiveIntensity = lit ? 0.08 + sideAmount * 0.035 : 0.018;
+    lighting.frontBackerMaterial.emissiveIntensity = lit ? 0.075 + sideAmount * 0.03 : 0.014;
+    lighting.backMaterial.emissiveIntensity = lit ? 0.04 : 0.008;
+  }
+
+  if (state.three.floor) {
+    state.three.floor.position.y = floorY - 1;
+    state.three.floor.position.z = depthZ - 10;
+  }
+
+  const floorGlow = floorGroup.getObjectByName('floorGlow');
+  if (floorGlow) {
+    floorGlow.position.set(
+      yawSide * bounds.width * 0.12,
+      floorY - bounds.height * (0.28 + topAmount * 0.04),
+      depthZ + 4,
+    );
+    floorGlow.rotation.z = yawSide * 0.06;
+    floorGlow.scale.set(0.95 + sideAmount * 0.32, 0.86 + topAmount * 0.12, 1);
+    floorGlow.material.opacity = lit ? 0.28 + frontAmount * 0.08 : 0.01;
+  }
+
+  const floorHalo = floorGroup.getObjectByName('floorHalo');
+  if (floorHalo) {
+    floorHalo.position.set(
+      yawSide * bounds.width * 0.06,
+      floorY - bounds.height * (0.2 + topAmount * 0.03),
+      depthZ + 3,
+    );
+    floorHalo.rotation.z = yawSide * 0.035;
+    floorHalo.scale.set(0.96 + sideAmount * 0.22, 0.72 + topAmount * 0.12, 1);
+    floorHalo.material.opacity = lit ? 0.1 + frontAmount * 0.04 : 0;
+  }
+
+  const contactShadow = floorGroup.getObjectByName('contactShadow');
+  if (contactShadow) {
+    contactShadow.position.set(
+      yawSide * bounds.width * 0.06,
+      floorY - bounds.height * 0.015,
+      depthZ + 2,
+    );
+    contactShadow.rotation.z = yawSide * 0.035;
+    contactShadow.scale.set(0.9 + sideAmount * 0.42, 0.54 + topAmount * 0.18, 1);
+    contactShadow.material.opacity = 0.36 + sideAmount * 0.1;
+  }
+
+  const castShadow = floorGroup.getObjectByName('castShadow');
+  if (castShadow) {
+    castShadow.position.set(
+      -yawSide * bounds.width * (0.42 + sideAmount * 0.58),
+      floorY - bounds.height * (0.055 + topAmount * 0.04),
+      depthZ + 1,
+    );
+    castShadow.rotation.z = -yawSide * 0.08;
+    castShadow.scale.set(0.9 + sideAmount * 0.78, 0.5 + topAmount * 0.32, 1);
+    castShadow.material.opacity = 0.14 + sideAmount * 0.2 + topAmount * 0.06;
+  }
 }
 
 function makeLedDiffusionTexture() {
@@ -1662,6 +1935,143 @@ function makeLedDiffusionTexture() {
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   });
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  return texture;
+}
+
+function makeGroundShadowTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 192;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const gradient = ctx.createRadialGradient(170, 88, 10, 220, 92, 250);
+  gradient.addColorStop(0, 'rgba(0,0,0,0.72)');
+  gradient.addColorStop(0.38, 'rgba(0,0,0,0.46)');
+  gradient.addColorStop(0.72, 'rgba(0,0,0,0.15)');
+  gradient.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  return texture;
+}
+
+function makeGroundGlowTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 192;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const gradient = ctx.createRadialGradient(270, 88, 0, 270, 92, 160);
+  gradient.addColorStop(0, 'rgba(255,238,188,0.48)');
+  gradient.addColorStop(0.34, 'rgba(255,225,144,0.22)');
+  gradient.addColorStop(0.72, 'rgba(255,221,126,0.045)');
+  gradient.addColorStop(1, 'rgba(255,221,126,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  return texture;
+}
+
+function makeGroundHaloTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 192;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const gradient = ctx.createRadialGradient(256, 100, 0, 256, 100, 170);
+  gradient.addColorStop(0, 'rgba(255,232,170,0.16)');
+  gradient.addColorStop(0.46, 'rgba(255,218,124,0.055)');
+  gradient.addColorStop(1, 'rgba(255,218,124,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  return texture;
+}
+
+function makeProjectedShadowTexture(processed, flatten = 0.26, opacity = 1) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 640;
+  canvas.height = 260;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const source = processed?.artworkCanvas;
+  if (!source) {
+    const fallback = ctx.createRadialGradient(320, 130, 0, 320, 130, 220);
+    fallback.addColorStop(0, `rgba(0,0,0,${0.5 * opacity})`);
+    fallback.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = fallback;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  } else {
+    const temp = document.createElement('canvas');
+    temp.width = 520;
+    temp.height = 520;
+    const tempCtx = temp.getContext('2d');
+    const scale = Math.min(temp.width / source.width, temp.height / source.height) * 0.9;
+    const w = source.width * scale;
+    const h = source.height * scale;
+    tempCtx.drawImage(source, (temp.width - w) / 2, (temp.height - h) / 2, w, h);
+    tempCtx.globalCompositeOperation = 'source-in';
+    tempCtx.fillStyle = `rgba(0,0,0,${opacity})`;
+    tempCtx.fillRect(0, 0, temp.width, temp.height);
+
+    ctx.save();
+    ctx.translate(canvas.width * 0.52, canvas.height * 0.52);
+    ctx.scale(1.05, flatten);
+    ctx.filter = 'blur(3px)';
+    ctx.drawImage(temp, -temp.width / 2, -temp.height / 2);
+    ctx.filter = 'none';
+    ctx.restore();
+  }
+
+  const fade = ctx.createLinearGradient(0, 0, canvas.width, 0);
+  fade.addColorStop(0, 'rgba(0,0,0,0)');
+  fade.addColorStop(0.16, 'rgba(0,0,0,1)');
+  fade.addColorStop(0.72, 'rgba(0,0,0,0.86)');
+  fade.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.fillStyle = fade;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.globalCompositeOperation = 'source-over';
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  return texture;
+}
+
+function makeKeyholeInteriorTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 96;
+  canvas.height = 144;
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+  gradient.addColorStop(0, 'rgba(232,214,165,0.78)');
+  gradient.addColorStop(0.45, 'rgba(86,86,78,0.58)');
+  gradient.addColorStop(1, 'rgba(12,13,13,0.96)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = 'rgba(255,235,174,0.36)';
+  ctx.fillRect(canvas.width * 0.52, 0, canvas.width * 0.18, canvas.height);
   const texture = new THREE.CanvasTexture(canvas);
   texture.needsUpdate = true;
   texture.minFilter = THREE.LinearFilter;
@@ -1898,7 +2308,7 @@ function processArtwork(artwork) {
   const srcY = Math.round(artwork.image.naturalHeight * crop.y);
   const srcW = Math.max(1, Math.round(artwork.image.naturalWidth * crop.w));
   const srcH = Math.max(1, Math.round(artwork.image.naturalHeight * crop.h));
-  const maxSide = artwork.type === 'svg' ? 1500 : 900;
+  const maxSide = artwork.type === 'svg' ? 1500 : 1200;
   const scale = artwork.type === 'svg'
     ? maxSide / Math.max(srcW, srcH)
     : Math.min(maxSide / srcW, maxSide / srcH, 1);
@@ -1917,6 +2327,14 @@ function processArtwork(artwork) {
     ctx.putImageData(img, 0, 0);
   }
   ({ canvas, ctx, img, data, width, height } = tightenProcessedCanvasToVisibleArtwork(canvas, ctx, img, width, height));
+  let floatingSupportMask = null;
+  let floatingSupportRgb = null;
+  if (state.fixFloatingRegions) {
+    floatingSupportRgb = hexToRgb(state.floatingSupportColour || DEFAULT_FLOATING_SUPPORT_COLOUR);
+    floatingSupportMask = connectFloatingRegionsOnCanvas(canvas, ctx, floatingSupportRgb);
+    img = ctx.getImageData(0, 0, width, height);
+    data = img.data;
+  }
   const paletteClusters = artwork.palette?.length
     ? artwork.palette.map((rgb, idx) => ({ original: idx, rgb: rgb.map(Number), count: 0 }))
     : null;
@@ -1935,8 +2353,20 @@ function processArtwork(artwork) {
         continue;
       }
       const rgb = [data[i], data[i + 1], data[i + 2]];
-      const idx = paletteClusters ? paletteClusters[nearestCluster(paletteClusters, rgb)].original : findOrCreateCluster(clusters, rgb, a, clusterTolerance);
-      if (paletteClusters) paletteClusters[idx].count += a / 255;
+      const isFloatingSupportPixel = Boolean(floatingSupportMask?.[y * width + x]);
+      let idx;
+      if (isFloatingSupportPixel) {
+        idx = FLOATING_SUPPORT_CLUSTER_ORIGINAL;
+        let supportCluster = clusters.find((cluster) => cluster.original === FLOATING_SUPPORT_CLUSTER_ORIGINAL);
+        if (!supportCluster) {
+          supportCluster = { original: FLOATING_SUPPORT_CLUSTER_ORIGINAL, rgb: floatingSupportRgb.map(Number), count: 0, isFloatingSupport: true };
+          clusters.push(supportCluster);
+        }
+        supportCluster.count += a / 255;
+      } else {
+        idx = paletteClusters ? paletteClusters[nearestCluster(paletteClusters, rgb)].original : findOrCreateCluster(clusters, rgb, a, clusterTolerance);
+        if (paletteClusters) paletteClusters[idx].count += a / 255;
+      }
       alphaMask[y * width + x] = 1;
       alphaValues[y * width + x] = a;
       regionIndex[y * width + x] = idx;
@@ -1944,16 +2374,27 @@ function processArtwork(artwork) {
   }
   ctx.putImageData(img, 0, 0);
 
+  let clusterMergeAliases = new Map();
   clusters = clusters.filter((cluster) => cluster.count > 1);
+  ({ clusters, aliases: clusterMergeAliases } = mergeSimilarColourClusters(clusters, Math.max(clusterTolerance, 58)));
+  for (let i = 0; i < regionIndex.length; i += 1) {
+    if (regionIndex[i] >= 0 && clusterMergeAliases.has(regionIndex[i])) {
+      regionIndex[i] = clusterMergeAliases.get(regionIndex[i]);
+    }
+  }
   clusters.sort((a, b) => b.count - a.count);
   const sourceClusters = clusters;
   const stableClusters = selectStableColourClusters(sourceClusters, regionIndex, alphaMask, alphaValues, width, height);
   const activeClusters = rankActiveColourClusters(sourceClusters, stableClusters);
+  const floatingSupportCluster = sourceClusters.find((cluster) => cluster.original === FLOATING_SUPPORT_CLUSTER_ORIGINAL);
   const sourceByOriginal = new Map(sourceClusters.map((cluster) => [cluster.original, cluster]));
   const naturalColourCount = Math.min(Math.max(stableClusters.length || sourceClusters.length, 1), 8);
   const requestedColourCount = clamp(Number(state.targetColorCount) || 8, 1, 8);
   const colourLimit = state.frontColoursCustomized ? requestedColourCount : naturalColourCount;
-  const main = activeClusters.slice(0, colourLimit);
+  const main = activeClusters
+    .filter((cluster) => cluster.original !== FLOATING_SUPPORT_CLUSTER_ORIGINAL)
+    .slice(0, Math.max(0, colourLimit - (floatingSupportCluster ? 1 : 0)));
+  if (floatingSupportCluster) main.push(floatingSupportCluster);
   const remap = new Map(main.map((cluster, idx) => [cluster.original, idx]));
   for (let i = 0; i < regionIndex.length; i += 1) {
     if (!alphaMask[i] || !main.length) continue;
@@ -1999,9 +2440,43 @@ function processArtwork(artwork) {
 
 function getColourClusterTolerance() {
   const requested = clamp(Number(state.targetColorCount) || 8, 1, 8);
-  if (requested >= 4) return Math.min(state.tolerance, 34);
-  if (requested === 3) return Math.min(state.tolerance, 46);
+  if (requested >= 4) return Math.min(state.tolerance, 52);
+  if (requested === 3) return Math.min(state.tolerance, 58);
   return state.tolerance;
+}
+
+function mergeSimilarColourClusters(clusters, tolerance) {
+  const support = clusters.find((cluster) => cluster.original === FLOATING_SUPPORT_CLUSTER_ORIGINAL);
+  const normal = clusters
+    .filter((cluster) => cluster.original !== FLOATING_SUPPORT_CLUSTER_ORIGINAL)
+    .sort((a, b) => b.count - a.count)
+    .map((cluster) => ({ ...cluster, rgb: [...cluster.rgb], mergedOriginals: [cluster.original] }));
+  const aliases = new Map();
+  const merged = [];
+
+  normal.forEach((cluster) => {
+    const target = merged.find((item) => colourDistance(item.rgb, cluster.rgb) <= tolerance);
+    if (!target) {
+      merged.push(cluster);
+      aliases.set(cluster.original, cluster.original);
+      return;
+    }
+    const total = target.count + cluster.count;
+    target.rgb = target.rgb.map((value, idx) => (value * target.count + cluster.rgb[idx] * cluster.count) / total);
+    target.count = total;
+    target.mergedOriginals.push(cluster.original);
+    aliases.set(cluster.original, target.original);
+  });
+
+  merged.forEach((cluster) => {
+    cluster.mergedOriginals.forEach((original) => aliases.set(original, cluster.original));
+    delete cluster.mergedOriginals;
+  });
+  if (support) {
+    merged.push(support);
+    aliases.set(support.original, support.original);
+  }
+  return { clusters: merged, aliases };
 }
 
 function selectStableColourClusters(clusters, regionIndex, alphaMask, alphaValues, width, height) {
@@ -2132,7 +2607,7 @@ function getImageDataAlphaBounds(data, width, height, alphaThreshold = 1) {
 }
 
 function buildConnectedBackgroundMask(data, width, height, bg, tolerance) {
-  const threshold = Math.max(42, tolerance * 1.28);
+  const threshold = Math.max(34, tolerance * 0.82);
   const mask = new Uint8Array(width * height);
   const queue = [];
   const enqueue = (x, y) => {
@@ -2142,7 +2617,9 @@ function buildConnectedBackgroundMask(data, width, height, bg, tolerance) {
     const o = index * 4;
     const alpha = data[o + 3];
     const rgb = [data[o], data[o + 1], data[o + 2]];
-    if (alpha < 28 || colourDistance(rgb, bg) <= threshold) {
+    const isTransparent = alpha < 28;
+    const isBackgroundLike = colourDistance(rgb, bg) <= threshold;
+    if (isTransparent || (isBackgroundLike && !hasNearbyArtworkDetail(data, width, height, x, y, bg, threshold))) {
       mask[index] = 1;
       queue.push(index);
     }
@@ -2167,6 +2644,24 @@ function buildConnectedBackgroundMask(data, width, height, bg, tolerance) {
     enqueue(x, y - 1);
   }
   return mask;
+}
+
+function hasNearbyArtworkDetail(data, width, height, x, y, bg, threshold) {
+  const radius = 3;
+  const detailThreshold = Math.max(48, threshold * 1.35);
+  for (let oy = -radius; oy <= radius; oy += 1) {
+    for (let ox = -radius; ox <= radius; ox += 1) {
+      if (!ox && !oy) continue;
+      const nx = x + ox;
+      const ny = y + oy;
+      if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+      const o = (ny * width + nx) * 4;
+      if (data[o + 3] < 40) continue;
+      const rgb = [data[o], data[o + 1], data[o + 2]];
+      if (colourDistance(rgb, bg) > detailThreshold) return true;
+    }
+  }
+  return false;
 }
 
 function findOrCreateCluster(clusters, rgb, alpha, tolerance) {
@@ -2368,6 +2863,350 @@ function keepPrintableMaskComponents(mask, width, height, minPixels) {
     }
   }
   return output.some((value) => value) ? output : mask;
+}
+
+function connectFloatingRegionsOnCanvas(canvas, ctx, supportRgb = hexToRgb(DEFAULT_FLOATING_SUPPORT_COLOUR)) {
+  if (!canvas || !ctx) return null;
+  return fillEnclosedTransparentRegions(ctx, { r: supportRgb[0], g: supportRgb[1], b: supportRgb[2], a: 255 });
+}
+
+function getFloatingSupportCluster(components, main, width, height) {
+  const floating = components.slice(1);
+  if (!floating.length) return [];
+  const nearest = floating
+    .slice()
+    .sort((a, b) => distanceBetweenBounds(a.bounds, main.bounds) - distanceBetweenBounds(b.bounds, main.bounds))[0];
+  const clusterBounds = {
+    minX: Math.min(nearest.bounds.minX, main.bounds.minX),
+    minY: Math.min(nearest.bounds.minY, main.bounds.minY),
+    maxX: Math.max(nearest.bounds.maxX, main.bounds.maxX),
+    maxY: Math.max(nearest.bounds.maxY, main.bounds.maxY),
+  };
+  const yBandPadding = Math.max(10, Math.round(height * 0.045));
+  const xBandPadding = Math.max(10, Math.round(width * 0.045));
+  return floating.filter((component) => (
+    component.bounds.maxY >= nearest.bounds.minY - yBandPadding
+    && component.bounds.minY <= main.bounds.maxY + yBandPadding
+    && component.bounds.maxX >= clusterBounds.minX - xBandPadding
+    && component.bounds.minX <= clusterBounds.maxX + xBandPadding
+  )).sort((a, b) => distanceBetweenBounds(a.bounds, main.bounds) - distanceBetweenBounds(b.bounds, main.bounds));
+}
+
+function mergeComponents(components) {
+  const merged = {
+    pixels: [],
+    boundary: [],
+    bounds: {
+      minX: Infinity,
+      minY: Infinity,
+      maxX: -Infinity,
+      maxY: -Infinity,
+    },
+  };
+  components.forEach((component) => {
+    merged.pixels.push(...component.pixels);
+    merged.boundary.push(...component.boundary);
+    merged.bounds.minX = Math.min(merged.bounds.minX, component.bounds.minX);
+    merged.bounds.minY = Math.min(merged.bounds.minY, component.bounds.minY);
+    merged.bounds.maxX = Math.max(merged.bounds.maxX, component.bounds.maxX);
+    merged.bounds.maxY = Math.max(merged.bounds.maxY, component.bounds.maxY);
+  });
+  return merged;
+}
+
+function getAlphaComponents(data, width, height, alphaThreshold = 28) {
+  const seen = new Uint8Array(width * height);
+  const components = [];
+  const stack = [];
+  const neighbours = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+    [1, 1],
+    [1, -1],
+    [-1, 1],
+    [-1, -1],
+  ];
+
+  for (let i = 0; i < seen.length; i += 1) {
+    if (seen[i] || data[i * 4 + 3] <= alphaThreshold) continue;
+    const pixels = [];
+    const boundary = [];
+    const bounds = { minX: width, minY: height, maxX: 0, maxY: 0 };
+    seen[i] = 1;
+    stack.push(i);
+    while (stack.length) {
+      const current = stack.pop();
+      const x = current % width;
+      const y = Math.floor(current / width);
+      pixels.push(current);
+      bounds.minX = Math.min(bounds.minX, x);
+      bounds.minY = Math.min(bounds.minY, y);
+      bounds.maxX = Math.max(bounds.maxX, x);
+      bounds.maxY = Math.max(bounds.maxY, y);
+      let isBoundary = false;
+
+      neighbours.forEach(([dx, dy]) => {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) {
+          isBoundary = true;
+          return;
+        }
+        const ni = ny * width + nx;
+        if (data[ni * 4 + 3] <= alphaThreshold) {
+          isBoundary = true;
+          return;
+        }
+        if (!seen[ni]) {
+          seen[ni] = 1;
+          stack.push(ni);
+        }
+      });
+
+      if (isBoundary) boundary.push({ x, y, index: current });
+    }
+    components.push({ pixels, boundary: thinBoundarySamples(boundary), bounds });
+  }
+  return components;
+}
+
+function thinBoundarySamples(boundary, maxSamples = 900) {
+  if (boundary.length <= maxSamples) return boundary;
+  const step = Math.ceil(boundary.length / maxSamples);
+  const samples = [];
+  for (let i = 0; i < boundary.length; i += step) samples.push(boundary[i]);
+  return samples;
+}
+
+function findNearestComponentBridge(fromComponent, toComponent) {
+  let best = null;
+  let bestDistance = Infinity;
+  fromComponent.boundary.forEach((from) => {
+    toComponent.boundary.forEach((to) => {
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const distance = dx * dx + dy * dy;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = { from, to };
+      }
+    });
+  });
+  return best;
+}
+
+function sampleComponentColour(data, pixels) {
+  const step = Math.max(1, Math.floor(pixels.length / 900));
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let weight = 0;
+  for (let i = 0; i < pixels.length; i += step) {
+    const offset = pixels[i] * 4;
+    const alpha = data[offset + 3] / 255;
+    if (alpha <= 0.1) continue;
+    r += data[offset] * alpha;
+    g += data[offset + 1] * alpha;
+    b += data[offset + 2] * alpha;
+    weight += alpha;
+  }
+  if (!weight) return { r: 0, g: 0, b: 0, a: 255 };
+  return {
+    r: Math.round(r / weight),
+    g: Math.round(g / weight),
+    b: Math.round(b / weight),
+    a: 255,
+  };
+}
+
+function outlineFloatingComponent(data, width, height, component, radius, colour) {
+  const originalAlpha = new Uint8Array(width * height);
+  for (let i = 0; i < originalAlpha.length; i += 1) originalAlpha[i] = data[i * 4 + 3] > 28 ? 1 : 0;
+  const radiusSq = radius * radius;
+  const targets = [];
+  component.boundary.forEach((point) => {
+    for (let dy = -radius; dy <= radius; dy += 1) {
+      const y = point.y + dy;
+      if (y < 0 || y >= height) continue;
+      for (let dx = -radius; dx <= radius; dx += 1) {
+        if (dx * dx + dy * dy > radiusSq) continue;
+        const x = point.x + dx;
+        if (x < 0 || x >= width) continue;
+        const index = y * width + x;
+        if (originalAlpha[index]) continue;
+        targets.push(index);
+      }
+    }
+  });
+
+  targets.forEach((index) => {
+    const offset = index * 4;
+    data[offset] = colour.r;
+    data[offset + 1] = colour.g;
+    data[offset + 2] = colour.b;
+    data[offset + 3] = colour.a;
+  });
+}
+
+function drawComponentOutlineStroke(ctx, img, component, radius, colour) {
+  const pad = radius + 3;
+  const minX = Math.max(0, component.bounds.minX - pad);
+  const minY = Math.max(0, component.bounds.minY - pad);
+  const maxX = Math.min(img.width - 1, component.bounds.maxX + pad);
+  const maxY = Math.min(img.height - 1, component.bounds.maxY + pad);
+  const width = maxX - minX + 1;
+  const height = maxY - minY + 1;
+  const maskCanvas = document.createElement('canvas');
+  const originalCanvas = document.createElement('canvas');
+  maskCanvas.width = width;
+  maskCanvas.height = height;
+  originalCanvas.width = width;
+  originalCanvas.height = height;
+  const maskCtx = maskCanvas.getContext('2d');
+  const originalCtx = originalCanvas.getContext('2d');
+  const mask = maskCtx.createImageData(width, height);
+  const original = originalCtx.createImageData(width, height);
+  component.pixels.forEach((index) => {
+    const source = index * 4;
+    const x = index % img.width;
+    const y = Math.floor(index / img.width);
+    const target = ((y - minY) * width + (x - minX)) * 4;
+    mask.data[target] = colour.r;
+    mask.data[target + 1] = colour.g;
+    mask.data[target + 2] = colour.b;
+    mask.data[target + 3] = 255;
+    original.data[target] = img.data[source];
+    original.data[target + 1] = img.data[source + 1];
+    original.data[target + 2] = img.data[source + 2];
+    original.data[target + 3] = img.data[source + 3];
+  });
+  maskCtx.putImageData(mask, 0, 0);
+  originalCtx.putImageData(original, 0, 0);
+
+  const strokeCanvas = document.createElement('canvas');
+  strokeCanvas.width = width;
+  strokeCanvas.height = height;
+  const strokeCtx = strokeCanvas.getContext('2d');
+  strokeCtx.imageSmoothingEnabled = false;
+  for (let dy = -radius; dy <= radius; dy += 1) {
+    for (let dx = -radius; dx <= radius; dx += 1) {
+      if (dx * dx + dy * dy > radius * radius) continue;
+      strokeCtx.drawImage(maskCanvas, dx, dy);
+    }
+  }
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-over';
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(strokeCanvas, minX, minY);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.drawImage(originalCanvas, minX, minY);
+  ctx.restore();
+}
+
+function fillEnclosedTransparentRegions(ctx, colour) {
+  const canvas = ctx.canvas;
+  const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = img.data;
+  const width = canvas.width;
+  const height = canvas.height;
+  const filledMask = new Uint8Array(width * height);
+  const outside = new Uint8Array(width * height);
+  const queue = [];
+  const enqueue = (x, y) => {
+    if (x < 0 || y < 0 || x >= width || y >= height) return;
+    const index = y * width + x;
+    if (outside[index] || data[index * 4 + 3] > 28) return;
+    outside[index] = 1;
+    queue.push(index);
+  };
+  for (let x = 0; x < width; x += 1) {
+    enqueue(x, 0);
+    enqueue(x, height - 1);
+  }
+  for (let y = 0; y < height; y += 1) {
+    enqueue(0, y);
+    enqueue(width - 1, y);
+  }
+  for (let head = 0; head < queue.length; head += 1) {
+    const current = queue[head];
+    const x = current % width;
+    const y = Math.floor(current / width);
+    enqueue(x + 1, y);
+    enqueue(x - 1, y);
+    enqueue(x, y + 1);
+    enqueue(x, y - 1);
+  }
+
+  const seen = new Uint8Array(width * height);
+  const stack = [];
+  const pixels = [];
+  for (let i = 0; i < width * height; i += 1) {
+    if (outside[i] || seen[i] || data[i * 4 + 3] > 245) continue;
+    seen[i] = 1;
+    stack.push(i);
+    pixels.length = 0;
+    while (stack.length) {
+      const current = stack.pop();
+      pixels.push(current);
+      const x = current % width;
+      const y = Math.floor(current / width);
+      [
+        [x + 1, y],
+        [x - 1, y],
+        [x, y + 1],
+        [x, y - 1],
+      ].forEach(([nx, ny]) => {
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) return;
+        const next = ny * width + nx;
+        if (outside[next] || seen[next] || data[next * 4 + 3] > 245) return;
+        seen[next] = 1;
+        stack.push(next);
+      });
+    }
+    pixels.forEach((index) => {
+      const offset = index * 4;
+      data[offset] = colour.r;
+      data[offset + 1] = colour.g;
+      data[offset + 2] = colour.b;
+      data[offset + 3] = colour.a;
+      filledMask[index] = 1;
+    });
+  }
+  ctx.putImageData(img, 0, 0);
+  return filledMask;
+}
+
+function drawFloatingRegionBridge(ctx, from, to, colour, width, height, floatingPixels) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const distance = Math.hypot(dx, dy);
+  const baseWidth = clamp(Math.round(Math.min(width, height) * 0.006), 3, 8);
+  const sizeWidth = clamp(Math.round(Math.sqrt(floatingPixels) / 22), 0, 4);
+  const lineWidth = clamp(baseWidth + sizeWidth, 3, 10);
+  const curve = distance > 24 ? 0.08 : 0;
+  const midX = (from.x + to.x) / 2 - dy * curve;
+  const midY = (from.y + to.y) / 2 + dx * curve;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-over';
+  ctx.strokeStyle = `rgba(${colour.r}, ${colour.g}, ${colour.b}, 1)`;
+  ctx.lineWidth = lineWidth;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(from.x + 0.5, from.y + 0.5);
+  ctx.quadraticCurveTo(midX + 0.5, midY + 0.5, to.x + 0.5, to.y + 0.5);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function distanceBetweenBounds(a, b) {
+  const dx = Math.max(0, Math.max(a.minX - b.maxX, b.minX - a.maxX));
+  const dy = Math.max(0, Math.max(a.minY - b.maxY, b.minY - a.maxY));
+  return dx * dx + dy * dy;
 }
 
 function defaultSilhouette() {
@@ -2596,6 +3435,13 @@ function setWarnings(warnings) {
 
 function renderPreviewAlert(warnings) {
   if (!els.previewAlert) return;
+  if (!state.isAdmin) {
+    els.previewAlert.hidden = true;
+    els.previewAlert.innerHTML = '';
+    els.previewAlert.dataset.signature = '';
+    els.previewAlert.classList.remove('expanded', 'error');
+    return;
+  }
   const visibleWarnings = warnings.filter((warning) => warning.level === 'warn' || warning.level === 'error');
   const signature = visibleWarnings.map((warning) => `${warning.level}:${warning.text}`).join('|');
   if (!visibleWarnings.length) {
@@ -2610,7 +3456,13 @@ function renderPreviewAlert(warnings) {
   els.previewAlert.classList.toggle('error', hasError);
   els.previewAlert.classList.remove('expanded');
   els.previewAlert.innerHTML = `
-    <button class="preview-alert-trigger" type="button" data-open-preview-alert aria-label="Open print checks">!</button>
+    <button class="preview-alert-trigger" type="button" data-open-preview-alert aria-label="Open print checks">
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <circle cx="16" cy="16" r="13.5"></circle>
+        <path d="M11.8 12.1a4.5 4.5 0 0 1 4.4-3.1c3 0 5 1.8 5 4.3 0 2.1-1.1 3.2-2.8 4.3-1.3.9-1.8 1.5-1.8 3.1"></path>
+        <path d="M16.5 25h.01"></path>
+      </svg>
+    </button>
     <button class="preview-alert-close" type="button" data-close-preview-alert aria-label="Close print checks">x</button>
     <div class="preview-alert-content">
       <strong>${hasError ? 'Needs attention' : 'Print checks'}</strong>
@@ -2631,6 +3483,7 @@ function applyRotation() {
     state.three.group.rotation.x = THREE.Math.degToRad(state.rotation.x);
     state.three.group.rotation.y = THREE.Math.degToRad(state.rotation.y);
     state.three.group.rotation.z = THREE.Math.degToRad(state.rotation.z);
+    updateFloorEffects();
     renderThree();
   }
 }
@@ -2851,6 +3704,8 @@ async function buildSignGuyProject() {
       designName: state.designName,
       illuminated: state.illuminated,
       removeBg: state.removeBg,
+      fixFloatingRegions: state.fixFloatingRegions,
+      floatingSupportColour: state.floatingSupportColour,
       tolerance: state.tolerance,
       targetColorCount: state.targetColorCount,
       colorOverrides: [...state.colorOverrides],
@@ -2905,6 +3760,8 @@ async function restoreSignGuyProject(project) {
   state.usage = USAGE_PRESETS[config.usage] ? config.usage : 'indoor';
   state.illuminated = Boolean(config.illuminated);
   state.removeBg = Boolean(config.removeBg);
+  state.fixFloatingRegions = Boolean(config.fixFloatingRegions);
+  state.floatingSupportColour = normalizeHex(config.floatingSupportColour || DEFAULT_FLOATING_SUPPORT_COLOUR);
   state.tolerance = clamp(Number(config.tolerance) || 64, 18, 90);
   state.targetColorCount = clamp(Number(config.targetColorCount) || 8, 1, 8);
   state.colorOverrides = Array.isArray(config.colorOverrides) ? [...config.colorOverrides] : [];
@@ -3687,6 +4544,17 @@ function makeThreeColour(hex) {
   const colour = new THREE.Color(normalizeHex(hex));
   if (colour.convertSRGBToLinear) colour.convertSRGBToLinear();
   return colour;
+}
+
+function liftDarkFrameColour(hex) {
+  const [r, g, b] = hexToRgb(normalizeHex(hex));
+  const floor = 22;
+  const mix = 0.18;
+  return rgbToHex([
+    Math.max(floor, r + (255 - r) * mix),
+    Math.max(floor, g + (255 - g) * mix),
+    Math.max(floor, b + (255 - b) * mix),
+  ]);
 }
 
 function clamp(value, min, max) {
