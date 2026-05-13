@@ -21,22 +21,48 @@
 
   const getUsedColours = () => {
     const colours = [];
-    document.querySelectorAll('#frontPlateColours [data-front-colour]').forEach((button) => {
+    const isHype = document.querySelector('[data-product-type="hype"]')?.classList.contains('active');
+    const selector = isHype ? '[data-hype-colour] i' : '#frontPlateColours [data-front-colour]';
+    document.querySelectorAll(selector).forEach((button) => {
       const hex = toHex(button.style.background || getComputedStyle(button).backgroundColor);
       if (hex && !colours.includes(hex)) colours.push(hex);
     });
     return colours;
   };
 
+  const getHypePendantColours = () => {
+    const colours = [];
+    document.querySelectorAll('#hypePendantColourRow [data-pendant-casing-colour], #hypePendantColourRow [data-pendant-colour]').forEach((swatch) => {
+      const hex = toHex(
+        swatch.dataset.pendantCasingColour || swatch.dataset.pendantColour || swatch.getAttribute('style') || swatch.style.background || getComputedStyle(swatch).backgroundColor,
+      );
+      if (hex && !colours.includes(hex)) colours.push(hex);
+    });
+    return colours;
+  };
+
+  const renderButtons = (colours) => colours
+    .map((hex) => `<button type="button" data-used-colour="${hex}" style="background:${hex}" aria-label="${hex}"></button>`)
+    .join('');
+
   const renderUsedColours = () => {
+    const isHype = document.querySelector('[data-product-type="hype"]')?.classList.contains('active');
+    if (isHype && typeof window.SignGuyRenderUsedColourGrid === 'function') {
+      window.SignGuyRenderUsedColourGrid();
+      return;
+    }
     const colours = getUsedColours();
-    if (!colours.length) {
+    const pendantColours = isHype ? getHypePendantColours() : [];
+    if (!colours.length && !pendantColours.length) {
       usedGrid.innerHTML = '<span class="used-empty">Upload artwork</span>';
       return;
     }
-    usedGrid.innerHTML = colours
-      .map((hex) => `<button type="button" data-used-colour="${hex}" style="background:${hex}" aria-label="${hex}"></button>`)
-      .join('');
+    usedGrid.innerHTML = isHype
+      ? [
+        colours.length ? `<span class="used-group-label">Hype Chain</span>${renderButtons(colours)}` : '',
+        pendantColours.length ? `<span class="used-group-label">Pendant</span>${renderButtons(pendantColours)}` : '',
+      ].join('')
+      : renderButtons(colours);
   };
 
   const setTab = (tab) => {
@@ -64,7 +90,7 @@
   });
 
   document.addEventListener('click', (event) => {
-    if (!event.target.closest('[data-front-colour], #sideColourButton, #backColourButton')) return;
+    if (!event.target.closest('[data-front-colour], [data-hype-colour], [data-hype-pendant-casing], [data-hype-pendant-colour], #sideColourButton, #backColourButton')) return;
     window.setTimeout(renderUsedColours, 0);
   }, true);
 
@@ -75,6 +101,16 @@
       childList: true,
       subtree: true,
       attributeFilter: ['style'],
+    });
+  }
+
+  const pendantColours = document.querySelector('#hypePendantColourRow');
+  if (pendantColours) {
+    new MutationObserver(renderUsedColours).observe(pendantColours, {
+      attributes: true,
+      childList: true,
+      subtree: true,
+      attributeFilter: ['style', 'aria-label'],
     });
   }
 

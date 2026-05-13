@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MySignGuy.ca Sign Studio</title>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
-    <link rel="stylesheet" href="./styles.css?v=20260504-06" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23151515'/%3E%3Cpath d='M7 21.5h18v3H7zM9.5 7.5h13v11h-13z' fill='%23ffc529'/%3E%3Cpath d='M12 10h8v6h-8z' fill='%23151515'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="./styles.css?v=20260513-09" />
   </head>
   <body class="studio-loading">
     <main class="app-shell">
@@ -17,7 +18,17 @@
           <span class="status-pill" id="statusPill">Ready</span>
         </div>
 
-        <section class="panel-section upload-zone" id="dropZone">
+        <nav class="product-switcher" aria-label="Product type">
+          <button class="product-tab active" type="button" data-product-type="led" aria-pressed="true">LED Lightbox</button>
+          <button class="product-tab" type="button" data-product-type="hype" aria-disabled="false">Hype Chain</button>
+          <button class="product-tab product-tab-locked" type="button" data-product-type="plaque" aria-disabled="true" aria-describedby="productLockTooltip">
+            <span class="product-lock" aria-hidden="true">🔒</span>
+            <span>3D Wall Plaque</span>
+          </button>
+          <span class="product-tooltip" id="productLockTooltip" role="tooltip">Coming soon</span>
+        </nav>
+
+        <section class="panel-section upload-zone led-studio-section" id="dropZone">
           <input id="fileInput" type="file" accept="image/png,image/svg+xml,.png,.svg" />
           <label class="primary-button upload-button" id="chooseFile" for="fileInput" role="button" tabindex="0">
             <span class="upload-mark" aria-hidden="true">+</span>
@@ -25,7 +36,7 @@
           </label>
         </section>
 
-        <section class="panel-section lightbox-settings">
+        <section class="panel-section lightbox-settings led-studio-section">
           <div class="section-heading">
             <h2>LED Sign size</h2>
           </div>
@@ -46,7 +57,7 @@
           <input id="removeBg" type="checkbox" checked hidden />
         </section>
 
-        <section class="panel-section plate-colours">
+        <section class="panel-section plate-colours led-studio-section">
           <div class="section-heading">
             <h2>Sign colours</h2>
           </div>
@@ -68,7 +79,7 @@
           </div>
         </section>
 
-        <section class="panel-section diagnostics">
+        <section class="panel-section diagnostics led-studio-section">
           <div class="section-heading">
             <h2>Print checks</h2>
             <output id="complexityScore">Waiting</output>
@@ -76,6 +87,71 @@
           <ul id="warnings">
             <li>Upload artwork to run geometry checks.</li>
           </ul>
+        </section>
+
+        <section class="panel-section hype-chain-studio hidden" id="hypeChainControls" aria-label="Hype Chain configurator">
+          <div class="section-heading">
+            <h2>Hype Chain</h2>
+            <output class="setting-pill" id="hypeVariantOutput">Classic</output>
+          </div>
+          <div class="hype-upload-style-row">
+            <div class="upload-zone hype-upload-zone" id="hypeDropZone">
+              <input id="hypeLogoInput" type="file" accept="image/png,image/svg+xml,.png,.svg" />
+              <label class="primary-button upload-button hype-upload-button" id="hypeChooseFile" for="hypeLogoInput" role="button" tabindex="0">
+                <span class="upload-mark" aria-hidden="true">+</span>
+                <span id="hypeChooseFileText">Upload logo</span>
+              </label>
+            </div>
+            <div class="hype-style-panel">
+              <div class="section-heading">
+                <h2>Hype Chain style</h2>
+              </div>
+              <div class="segmented hype-variant-tabs" role="radiogroup" aria-label="Hype Chain style">
+                <button class="seg active" type="button" data-hype-variant="classic">Classic</button>
+                <button class="seg" type="button" data-hype-variant="spinner">
+                  <span class="spinner-lock" aria-hidden="true">🔒</span>
+                  <span>Spinner</span>
+                </button>
+                <span class="spinner-tooltip" id="spinnerLockTooltip" role="tooltip">Coming Soon</span>
+              </div>
+            </div>
+          </div>
+          <label class="hype-text-field hype-pendant-text-field hidden">Pendant text <input id="hypePendantText" type="text" maxlength="18" value="MVP" /></label>
+          <div class="hype-colour-layout">
+            <div class="hype-colour-selector hype-chain-colour-selector">
+              <div class="section-heading">
+                <h2>Chain link Colors</h2>
+              </div>
+              <div class="hype-colour-row">
+                <button class="hype-colour-chip" type="button" data-hype-colour="primary"><i></i></button>
+                <button class="hype-colour-chip" type="button" data-hype-colour="secondary"><i></i></button>
+                <button class="hype-colour-chip" type="button" data-hype-colour="tertiary"><i></i></button>
+              </div>
+            </div>
+            <div class="hype-colour-selector hype-pendant-colour-selector hidden" id="hypePendantColourSection">
+              <div class="section-heading">
+                <h2>Pendant</h2>
+              </div>
+              <div class="hype-colour-row hype-pendant-colour-row" id="hypePendantColourRow"></div>
+            </div>
+          </div>
+          <div class="hype-size-quantity">
+            <div class="section-heading">
+              <h2>Chain Size & Quantity</h2>
+            </div>
+          </div>
+          <div class="hype-control-grid">
+            <label class="hype-field">Pattern Length <select id="hypePatternLength"><option value="1">1 Link (Solid Colour)</option><option value="2" selected>2 Links Alternating</option><option value="3">3 Links Alternating</option></select></label>
+            <label class="hype-field">Chain length <select id="hypeChainLength"><option>Youth</option><option selected>Adult</option></select></label>
+            <label class="hype-field">Quantity <input id="hypeQuantity" type="number" min="1" max="99" value="1" /></label>
+          </div>
+        </section>
+
+        <section class="panel-section plaque-studio hidden" id="plaqueStudio">
+          <div class="section-heading">
+            <h2>3D Wall Plaque</h2>
+          </div>
+          <p class="product-placeholder">Admin preview space reserved for the 3D Wall Plaque configurator.</p>
         </section>
 
         <section class="panel-section submit-section">
@@ -164,11 +240,40 @@
               <div class="glow model-layer"></div>
             </div>
           </div>
+          <div class="hype-preview hidden" id="hypePreview" aria-label="Hype Chain preview">
+            <div class="hype-preview-loading" id="hypePreviewLoading">Preparing Hype Chain preview</div>
+            <div class="hype-chain-render" id="hypeChainRender">
+              <div class="hype-chain-oval" id="hypeChainOval"></div>
+              <div class="hype-connector" id="hypeConnectorPreview"><span></span></div>
+              <div class="hype-pendant" id="hypePendantPreview">
+                <img id="hypeLogoPreview" alt="" hidden />
+                <span id="hypePendantTextPreview">MVP</span>
+              </div>
+              <div class="hype-preview-shadow"></div>
+            </div>
+          </div>
           <p class="stage-note" id="submitNote"></p>
         </div>
 
       </section>
     </main>
+          <p class="build-version">Beta · Build 2026.05.13.49</p>
+
+    <div class="admin-gate hidden" id="adminGate" role="dialog" aria-modal="true" aria-labelledby="adminGateTitle">
+      <form class="admin-gate-card" id="adminGateForm" novalidate>
+        <p class="eyebrow">Admin mode</p>
+        <h2 id="adminGateTitle">Admin login</h2>
+        <label class="email-gate-field">
+          <span>Password</span>
+          <input id="adminPassword" type="password" name="adminPassword" autocomplete="current-password" required />
+        </label>
+        <p class="email-gate-error" id="adminGateError" role="alert"></p>
+        <div class="admin-gate-actions">
+          <button class="secondary-button" id="adminCancel" type="button">Cancel</button>
+          <button class="primary-button" type="submit">Login</button>
+        </div>
+      </form>
+    </div>
 
     <div class="admin-gate hidden" id="adminGate" role="dialog" aria-modal="true" aria-labelledby="adminGateTitle">
       <form class="admin-gate-card" id="adminGateForm" novalidate>
@@ -257,6 +362,7 @@
             <span>Email address</span>
             <input id="customerEmail" type="email" name="customerEmail" autocomplete="email" inputmode="email" placeholder="you@example.com" required />
           </label>
+          <p class="email-consent-copy">By entering your email, you agree to receive marketing emails from Sign Guy. You can unsubscribe anytime.</p>
           <p class="email-gate-error" id="emailGateError" role="alert"></p>
           <button class="primary-button loading-start-button" id="loadingStartButton" type="submit" disabled>Loading...</button>
         </form>
@@ -264,8 +370,9 @@
     </div>
 
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script defer src="./app.js?v=20260504-06"></script>
-    <script defer src="./submit-fix.js?v=20260504-06"></script>
-    <script defer src="./used-colours.js?v=20260504-05"></script>
+    <script defer src="./assets/hype-chain/default-hype-chain-project.js?v=20260513-01"></script>
+    <script defer src="./app.js?v=20260513-15"></script>
+    <script defer src="./submit-fix.js?v=20260510-22"></script>
+    <script defer src="./used-colours.js?v=20260513-09"></script>
   </body>
 </html>
