@@ -1746,6 +1746,27 @@ body.product-plaque .visualizer-zoom-controls {
   display: none;
 }
 
+.stage-note.checkout-fallback-note {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
+  z-index: 2147483647;
+  max-width: none;
+  border-color: rgba(255, 197, 41, 0.42);
+  border-radius: 12px;
+  padding: 13px 14px;
+  background: rgba(18, 20, 20, 0.94);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.34);
+  color: #fff;
+  font-size: 14px;
+}
+
+.stage-note.checkout-fallback-note a {
+  color: #ffc529;
+  font-weight: 900;
+}
+
 .preview-alert {
   position: absolute;
   left: 18px;

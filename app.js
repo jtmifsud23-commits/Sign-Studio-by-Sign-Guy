@@ -6693,6 +6693,7 @@ async function placeOrderRequest() {
   }
   if (!state.processed || !state.uploadedFile) return;
   setStatus('Preparing order');
+  els.submitNote.classList.remove('checkout-fallback-note');
   if (els.submitDesign) els.submitDesign.disabled = true;
   els.placeOrder.disabled = true;
   els.saveProject.disabled = true;
@@ -6738,6 +6739,7 @@ async function placeHypeChainOrder() {
     return;
   }
   setStatus('Preparing order');
+  els.submitNote.classList.remove('checkout-fallback-note');
   els.placeOrder.disabled = true;
   try {
     queueEmailMarketingSubscription(state.customerEmail);
@@ -7260,7 +7262,7 @@ function isEmbeddedInFrame() {
 
 function navigateToCheckoutUrl(url) {
   if (isEmbeddedInFrame()) {
-    window.parent?.postMessage?.({ type: 'SIGN_STUDIO_CHECKOUT', url }, '*');
+    postCheckoutMessage(url);
     window.setTimeout(() => showCheckoutFallback(url), 1200);
     return;
   }
@@ -7278,8 +7280,29 @@ function navigateToCheckoutUrl(url) {
   }
 }
 
+function postCheckoutMessage(url) {
+  const payload = { type: 'SIGN_STUDIO_CHECKOUT', url };
+  const legacyPayload = { signStudioCheckoutUrl: url };
+  let attempts = 0;
+  const send = () => {
+    attempts += 1;
+    [window.parent, window.top].forEach((target) => {
+      if (!target || target === window.self) return;
+      try {
+        target.postMessage(payload, '*');
+        target.postMessage(legacyPayload, '*');
+      } catch (error) {
+        console.warn('Could not post checkout redirect message to iframe host.', error);
+      }
+    });
+    if (attempts < 10) window.setTimeout(send, 180);
+  };
+  send();
+}
+
 function showCheckoutFallback(url) {
   if (!els.submitNote || window.location.href.startsWith(url)) return;
+  els.submitNote.classList.add('checkout-fallback-note');
   els.submitNote.innerHTML = `Cart should open automatically. <a href="${escapeHtml(url)}" target="_blank" rel="noopener">Open your Shopify cart</a>.`;
 }
 
