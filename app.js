@@ -6709,6 +6709,7 @@ async function placeOrderRequest() {
         sendOrderEmail: true,
         subject: ORDER_SUBMISSION_SUBJECT,
         message: makeEmailBody('Shopify checkout order started'),
+        messageHtml: makeEmailHtml('Shopify checkout order started'),
       });
     if (localOrder) downloadProjectPayload(project);
     try {
@@ -6750,6 +6751,7 @@ async function placeHypeChainOrder() {
         sendOrderEmail: true,
         subject: HYPE_CHAIN_ORDER_SUBJECT,
         message: makeHypeEmailBody('Shopify checkout order started'),
+        messageHtml: makeHypeEmailHtml('Shopify checkout order started'),
       });
     if (localOrder) downloadProjectPayload(project);
     try {
@@ -7166,6 +7168,9 @@ async function uploadProjectFolder(project, options = {}) {
     form.append('sendOrderEmail', 'true');
     form.append('subject', options.subject || ORDER_SUBMISSION_SUBJECT);
     form.append('message', options.message || makeEmailBody('Shopify checkout order started'));
+    if (options.messageHtml) form.append('messageHtml', options.messageHtml);
+    const logoPreview = await makeEmailLogoPreviewFile(project);
+    if (logoPreview) form.append('logoPreview', logoPreview, logoPreview.name);
   }
   form.append('projectFile', new Blob([JSON.stringify(project, null, 2)], { type: 'application/x-signguy+json' }), projectName);
   form.append('logo', logoFile, logoFile.name || project.source.fileName || 'uploaded-logo');
@@ -7215,7 +7220,7 @@ function redirectToShopifyCheckout(project, uploadResult = {}) {
   const params = new URLSearchParams();
   params.set('id', variantId);
   params.set('quantity', String(quantity));
-  params.set('return_to', '/checkout');
+  params.set('return_to', '/cart');
   if (state.customerEmail) params.set('checkout[email]', state.customerEmail);
   setShopifyOrderField(params, 'Customer email', state.customerEmail || '');
   setShopifyOrderField(params, 'Design name', project.name || getDesignName());
@@ -7254,8 +7259,11 @@ function isEmbeddedInFrame() {
 }
 
 function navigateToCheckoutUrl(url) {
-  window.parent?.postMessage?.({ type: 'SIGN_STUDIO_CHECKOUT', url }, '*');
-  window.setTimeout(() => showCheckoutFallback(url), 1200);
+  if (isEmbeddedInFrame()) {
+    window.parent?.postMessage?.({ type: 'SIGN_STUDIO_CHECKOUT', url }, '*');
+    window.setTimeout(() => showCheckoutFallback(url), 1200);
+    return;
+  }
   try {
     if (window.top && window.top !== window.self) {
       window.top.location.href = url;
@@ -7272,7 +7280,7 @@ function navigateToCheckoutUrl(url) {
 
 function showCheckoutFallback(url) {
   if (!els.submitNote || window.location.href.startsWith(url)) return;
-  els.submitNote.innerHTML = `Checkout should open automatically. <a href="${escapeHtml(url)}" target="_top" rel="noopener">Continue to checkout</a>.`;
+  els.submitNote.innerHTML = `Cart should open automatically. <a href="${escapeHtml(url)}" target="_blank" rel="noopener">Open your Shopify cart</a>.`;
 }
 
 function getShopifyVariantId() {
@@ -7510,6 +7518,30 @@ async function captureOrderScreenshots(captureScreenshots, productLabel) {
   } catch (error) {
     console.warn(`${productLabel} order screenshots could not be captured. Continuing to checkout.`, error);
     return [];
+  }
+}
+
+async function makeEmailLogoPreviewFile(project) {
+  try {
+    const image = await loadImage(project.source?.dataUrl || '');
+    const maxWidth = 720;
+    const maxHeight = 520;
+    const scale = Math.min(1, maxWidth / image.width, maxHeight / image.height);
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(image.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(image, 0, 0, width, height);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) return null;
+    return new File([blob], `${projectFileBaseName(project)}-logo-preview.png`, { type: 'image/png' });
+  } catch (error) {
+    console.warn('Could not create logo preview for order email.', error);
+    return null;
   }
 }
 
@@ -7768,6 +7800,42 @@ function makeEmailBody(context = 'Design submission') {
   ].join('\n');
 }
 
+function makeEmailHtml(context = 'Design submission') {
+  const preset = SIZE_PRESETS[state.size];
+  const usage = USAGE_PRESETS[state.usage] || USAGE_PRESETS.indoor;
+  const frontColours = (state.processed?.colours || []).map((region, index) => ({
+    label: `Front colour ${index + 1}`,
+    hex: getDisplayColour(index, region.hex),
+  }));
+  return makeOrderEmailHtml({
+    title: 'Custom lightbox request',
+    context,
+    logoTitle: 'Uploaded logo',
+    details: [
+      ['Customer email', state.customerEmail || 'Not provided'],
+      ['Sign name', getDesignName()],
+      ['Uploaded file', state.fileName || 'logo file'],
+      ['Size', preset.label],
+      ['Usage', usage.label],
+      ['Depth', `${preset.depth} mm`],
+      ['Preview lighting', state.illuminated ? 'Illuminated' : 'Not illuminated'],
+    ],
+    colourSections: [
+      {
+        title: 'Front colours',
+        colours: frontColours,
+      },
+      {
+        title: 'Body colours',
+        colours: [
+          { label: 'Side colour', hex: state.shellColours.side },
+          { label: 'Back colour', hex: state.shellColours.back },
+        ],
+      },
+    ],
+  });
+}
+
 function makeHypeEmailBody(context = 'Design submission') {
   const hype = state.hype;
   return [
@@ -7788,6 +7856,104 @@ function makeHypeEmailBody(context = 'Design submission') {
     `Quantity requested: ${hype.quantity || 1}`,
     `Render screenshots: current Hype Chain view and angled view`,
   ].join('\n');
+}
+
+function makeHypeEmailHtml(context = 'Design submission') {
+  const hype = state.hype;
+  const patternLength = getHypePatternLength(hype.patternLength);
+  const chainColours = [
+    { label: 'Primary chain colour', hex: hype.primary },
+    ...(patternLength >= 2 ? [{ label: 'Secondary chain colour', hex: hype.secondary }] : []),
+    ...(patternLength >= 3 ? [{ label: 'Tertiary chain colour', hex: hype.tertiary }] : []),
+  ];
+  const pendantColours = getHypePendantColours().map((hex, index) => ({
+    label: `Pendant colour ${getHypePendantColourLabel(index)}`,
+    hex,
+  }));
+  return makeOrderEmailHtml({
+    title: 'Hype Chain request',
+    context,
+    logoTitle: 'Uploaded Hype Chain logo',
+    details: [
+      ['Customer email', state.customerEmail || 'Not provided'],
+      ['Style', hype.variant === 'spinner' ? 'Spinner' : 'Classic'],
+      ['Uploaded file', hype.logoFileName || 'No logo uploaded'],
+      ['Pattern length', `${patternLength} link${patternLength === 1 ? '' : 's'}`],
+      ['Pendant text', hype.text || 'None'],
+      ['Chain length', hype.chainLength],
+      ['Quantity requested', String(hype.quantity || 1)],
+    ],
+    colourSections: [
+      {
+        title: 'Chain colours',
+        colours: [
+          ...chainColours,
+          { label: 'Connector and attachment colour', hex: hype.primary },
+        ],
+      },
+      {
+        title: 'Pendant colours',
+        colours: [
+          { label: 'Backing, sides, and hook colour', hex: getHypePendantBodyColour() },
+          ...pendantColours,
+        ],
+      },
+    ],
+  });
+}
+
+function makeOrderEmailHtml({ title, context, logoTitle, details, colourSections }) {
+  const rows = details.map(([label, value]) => `
+    <tr>
+      <th style="text-align:left;padding:8px 12px;border-bottom:1px solid #ece6d8;color:#5f5a50;font-size:13px;">${escapeHtml(label)}</th>
+      <td style="padding:8px 12px;border-bottom:1px solid #ece6d8;font-size:14px;">${escapeHtml(value)}</td>
+    </tr>
+  `).join('');
+  const sections = colourSections.map((section) => makeEmailColourSectionHtml(section.title, section.colours)).join('');
+  return `
+    <div style="margin:0;padding:24px;background:#f7f3e8;color:#171717;font-family:Arial,Helvetica,sans-serif;">
+      <div style="max-width:720px;margin:0 auto;background:#fffdf8;border:1px solid #ded6c6;border-radius:14px;overflow:hidden;">
+        <div style="padding:22px 24px;background:#ffc529;">
+          <h1 style="margin:0;font-size:24px;line-height:1.15;color:#171717;">${escapeHtml(title)}</h1>
+          <p style="margin:8px 0 0;font-size:14px;color:#413816;">${escapeHtml(context)}</p>
+        </div>
+        <div style="padding:22px 24px;">
+          <h2 style="margin:0 0 12px;font-size:16px;">${escapeHtml(logoTitle)}</h2>
+          <div style="display:inline-block;padding:14px;background:#f2eee4;border:1px solid #ded6c6;border-radius:12px;">
+            <img src="cid:uploaded-logo" alt="${escapeHtml(logoTitle)}" style="display:block;max-width:360px;max-height:260px;width:auto;height:auto;" />
+          </div>
+          <h2 style="margin:24px 0 10px;font-size:16px;">Order details</h2>
+          <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;border:1px solid #ece6d8;border-radius:10px;overflow:hidden;">
+            ${rows}
+          </table>
+          ${sections}
+          <p style="margin:22px 0 0;color:#69645b;font-size:13px;">Attached files include the .SignGuy project file, uploaded logo, and any captured preview screenshots.</p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function makeEmailColourSectionHtml(title, colours) {
+  const uniqueColours = (colours || [])
+    .filter((item) => item && item.hex)
+    .map((item) => ({ label: item.label, hex: normalizeHex(item.hex) }));
+  if (!uniqueColours.length) return '';
+  const rows = uniqueColours.map((item) => `
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #ece6d8;">
+        <span style="display:inline-block;width:24px;height:24px;border-radius:999px;border:1px solid #b9b2a4;background:${escapeHtml(item.hex)};vertical-align:middle;margin-right:10px;"></span>
+        <span style="vertical-align:middle;">${escapeHtml(item.label)}</span>
+      </td>
+      <td style="padding:8px 12px;border-bottom:1px solid #ece6d8;font-family:Consolas,Menlo,monospace;font-size:14px;text-transform:uppercase;">${escapeHtml(item.hex)}</td>
+    </tr>
+  `).join('');
+  return `
+    <h2 style="margin:24px 0 10px;font-size:16px;">${escapeHtml(title)}</h2>
+    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;border:1px solid #ece6d8;border-radius:10px;overflow:hidden;">
+      ${rows}
+    </table>
+  `;
 }
 
 function makeHypePlaceholderLogoDataUrl() {

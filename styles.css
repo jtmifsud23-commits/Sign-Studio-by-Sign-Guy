@@ -3774,8 +3774,11 @@ button.detail-row {
   .project-section-heading {
     position: relative;
     cursor: pointer;
-    padding-right: 32px;
+    min-height: 42px;
+    margin: -4px -4px 0;
+    padding: 8px 38px 8px 4px;
     user-select: none;
+    border-radius: 8px;
   }
 
   .project-section-heading h2 {
@@ -3802,6 +3805,7 @@ button.detail-row {
     border-radius: 999px;
     background: #fffdf8;
     transform: translateY(-50%);
+    pointer-events: none;
   }
 
   .project-accordion-arrow::before {
