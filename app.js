@@ -6701,7 +6701,7 @@ async function placeOrderRequest() {
     const project = await buildSignGuyProject();
     state.projectId = project.id;
     const localOrder = isLocalTesting();
-    const screenshots = await captureSubmissionScreenshots();
+    const screenshots = await captureOrderScreenshots(captureSubmissionScreenshots, 'LED Lightbox');
     const uploadResult = localOrder
       ? { ok: true, localTesting: true, emailSent: false }
       : await uploadProjectFolder(project, {
@@ -6742,7 +6742,7 @@ async function placeHypeChainOrder() {
     queueEmailMarketingSubscription(state.customerEmail);
     const project = await buildHypeChainProject();
     const localOrder = isLocalTesting();
-    const screenshots = await captureHypeSubmissionScreenshots();
+    const screenshots = await captureOrderScreenshots(captureHypeSubmissionScreenshots, 'Hype Chain');
     const uploadResult = localOrder
       ? { ok: true, localTesting: true, emailSent: false }
       : await uploadProjectFolder(project, {
@@ -7209,28 +7209,40 @@ function redirectToShopifyCheckout(project, uploadResult = {}) {
   const variantId = getShopifyVariantId();
   if (!variantId) throw new Error('No matching Shopify variant was found.');
   const projectName = `${projectFileBaseName(project)}.SignGuy`;
+  const quantity = project.type === 'SignGuy.HypeChainStudio'
+    ? clamp(Number(state.hype.quantity) || 1, 1, 99)
+    : 1;
   const params = new URLSearchParams();
+  params.set('id', variantId);
+  params.set('quantity', String(quantity));
+  params.set('return_to', '/checkout');
   if (state.customerEmail) params.set('checkout[email]', state.customerEmail);
-  params.set('attributes[Customer email]', state.customerEmail || '');
-  params.set('attributes[Design name]', project.name || getDesignName());
+  setShopifyOrderField(params, 'Customer email', state.customerEmail || '');
+  setShopifyOrderField(params, 'Design name', project.name || getDesignName());
   if (project.type === 'SignGuy.HypeChainStudio') {
-    params.set('attributes[Product]', 'Hype Chain');
-    params.set('attributes[Style]', state.hype.variant === 'spinner' ? 'Spinner' : 'Classic');
-    params.set('attributes[Pattern length]', `${getHypePatternLength()} link${getHypePatternLength() === 1 ? '' : 's'}`);
-    params.set('attributes[Primary chain colour]', normalizeHex(state.hype.primary));
-    if (getHypePatternLength() >= 2) params.set('attributes[Secondary chain colour]', normalizeHex(state.hype.secondary));
-    if (getHypePatternLength() >= 3) params.set('attributes[Tertiary chain colour]', normalizeHex(state.hype.tertiary));
-    params.set('attributes[Connector and attachment colour]', normalizeHex(state.hype.primary));
-    params.set('attributes[Pendant backing sides and hook colour]', getHypePendantBodyColour());
-    params.set('attributes[Pendant text]', state.hype.text || '');
-    params.set('attributes[Chain length]', state.hype.chainLength);
-    params.set('attributes[Quantity requested]', String(state.hype.quantity || 1));
+    setShopifyOrderField(params, 'Product', 'Hype Chain');
+    setShopifyOrderField(params, 'Style', state.hype.variant === 'spinner' ? 'Spinner' : 'Classic');
+    setShopifyOrderField(params, 'Pattern length', `${getHypePatternLength()} link${getHypePatternLength() === 1 ? '' : 's'}`);
+    setShopifyOrderField(params, 'Primary chain colour', normalizeHex(state.hype.primary));
+    if (getHypePatternLength() >= 2) setShopifyOrderField(params, 'Secondary chain colour', normalizeHex(state.hype.secondary));
+    if (getHypePatternLength() >= 3) setShopifyOrderField(params, 'Tertiary chain colour', normalizeHex(state.hype.tertiary));
+    setShopifyOrderField(params, 'Connector and attachment colour', normalizeHex(state.hype.primary));
+    setShopifyOrderField(params, 'Pendant backing sides and hook colour', getHypePendantBodyColour());
+    setShopifyOrderField(params, 'Pendant text', state.hype.text || '');
+    setShopifyOrderField(params, 'Chain length', state.hype.chainLength);
   } else {
-    params.set('attributes[Studio size]', SIZE_PRESETS[state.size].label);
-    params.set('attributes[Usage]', USAGE_PRESETS[state.usage]?.label || USAGE_PRESETS.indoor.label);
+    setShopifyOrderField(params, 'Product', 'LED Sign');
+    setShopifyOrderField(params, 'Studio size', SIZE_PRESETS[state.size].label);
+    setShopifyOrderField(params, 'Usage', USAGE_PRESETS[state.usage]?.label || USAGE_PRESETS.indoor.label);
   }
-  params.set('attributes[SignGuy file]', projectName);
-  navigateToCheckoutUrl(`${SHOPIFY_CHECKOUT_BASE_URL}/${variantId}:1?${params.toString()}`);
+  setShopifyOrderField(params, 'SignGuy file', projectName);
+  navigateToCheckoutUrl(`${SHOPIFY_CHECKOUT_BASE_URL}/add?${params.toString()}`);
+}
+
+function setShopifyOrderField(params, label, value) {
+  const safeValue = value == null ? '' : String(value);
+  params.set(`properties[${label}]`, safeValue);
+  params.set(`attributes[${label}]`, safeValue);
 }
 
 function isEmbeddedInFrame() {
@@ -7292,7 +7304,9 @@ function describeOrderError(error) {
     }
     return 'Could not match this size and usage to a checkout product variant.';
   }
-  return 'Could not prepare this order. Try again after the preview finishes loading.';
+  return error?.message
+    ? `Could not prepare this order: ${error.message}`
+    : 'Could not prepare this order. Try again after the preview finishes loading.';
 }
 
 function projectFileBaseName(project) {
@@ -7488,6 +7502,15 @@ async function captureSubmissionScreenshots() {
     ...shot,
     file: new File([shot.blob], shot.fileName, { type: 'image/png' }),
   }));
+}
+
+async function captureOrderScreenshots(captureScreenshots, productLabel) {
+  try {
+    return await captureScreenshots();
+  } catch (error) {
+    console.warn(`${productLabel} order screenshots could not be captured. Continuing to checkout.`, error);
+    return [];
+  }
 }
 
 async function submitDesignToEndpoint({ endpoint, subject, body, screenshots }) {
