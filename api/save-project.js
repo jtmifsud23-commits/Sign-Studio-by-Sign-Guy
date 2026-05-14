@@ -36,7 +36,7 @@ export default async function handler(req, res) {
 
   try {
     const { fields, files } = await parseMultipart(req);
-    const customerEmail = getField(fields.customerEmail);
+    const customerEmail = getEmailField(fields.customerEmail);
     if (!isValidEmail(customerEmail)) {
       res.status(400).json({ error: 'A valid customerEmail is required.' });
       return;
@@ -48,7 +48,7 @@ export default async function handler(req, res) {
     await fs.mkdir(customerDir, { recursive: true });
     const savedFiles = await saveFiles(customerDir, files);
     let emailSent = false;
-    if (getField(fields.sendOrderEmail) === 'true') {
+    if (getFieldText(fields.sendOrderEmail).toLowerCase() === 'true') {
       await sendOrderEmail(fields, files);
       emailSent = true;
     }
@@ -66,6 +66,8 @@ export default async function handler(req, res) {
 }
 
 async function sendOrderEmail(fields, files) {
+  const text = getFieldText(fields.message);
+  const html = getFieldText(fields.messageHtml) || makeFallbackHtml(text);
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT || 587),
@@ -78,15 +80,17 @@ async function sendOrderEmail(fields, files) {
   await transporter.sendMail({
     from: process.env.FROM_EMAIL || TO_EMAIL,
     to: TO_EMAIL,
-    subject: getField(fields.subject) || ORDER_SUBJECT,
-    text: getField(fields.message),
+    subject: getFieldText(fields.subject) || ORDER_SUBJECT,
+    text,
+    html,
     attachments: await collectAttachments(files),
   });
 }
 
 async function collectAttachments(files) {
-  const uploadFields = ['projectFile', 'logo', 'renderScreenshot1', 'renderScreenshot2'];
+  const uploadFields = ['projectFile', 'logoPreview', 'logo', 'renderScreenshot1', 'renderScreenshot2'];
   const attachments = [];
+  const hasLogoPreview = Boolean(Array.isArray(files.logoPreview) ? files.logoPreview[0] : files.logoPreview);
   for (const field of uploadFields) {
     const file = Array.isArray(files[field]) ? files[field][0] : files[field];
     if (!file) continue;
@@ -94,6 +98,7 @@ async function collectAttachments(files) {
       filename: file.originalFilename || `${field}.png`,
       content: await fs.readFile(file.filepath),
       contentType: file.mimetype || undefined,
+      cid: field === 'logoPreview' || (!hasLogoPreview && field === 'logo') ? 'uploaded-logo' : undefined,
     });
   }
   return attachments;
@@ -110,7 +115,7 @@ function parseMultipart(req) {
 }
 
 async function saveFiles(customerDir, files) {
-  const fields = ['projectFile', 'logo', 'renderScreenshot1', 'renderScreenshot2'];
+  const fields = ['projectFile', 'logoPreview', 'logo', 'renderScreenshot1', 'renderScreenshot2'];
   const saved = [];
   for (const field of fields) {
     const file = Array.isArray(files[field]) ? files[field][0] : files[field];
@@ -122,8 +127,21 @@ async function saveFiles(customerDir, files) {
   return saved;
 }
 
-function getField(value) {
-  return String(Array.isArray(value) ? value[0] : value || '').trim().toLowerCase();
+function getFieldText(value) {
+  return String(Array.isArray(value) ? value[0] : value || '').trim();
+}
+
+function getEmailField(value) {
+  return getFieldText(value).toLowerCase();
+}
+
+function makeFallbackHtml(text) {
+  const safeText = escapeHtml(text || 'Sign Guy order submitted.');
+  return `<div style="font-family:Arial,Helvetica,sans-serif;white-space:pre-line;color:#171717;">${safeText}</div>`;
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[<>&"]/g, (char) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[char]);
 }
 
 function isValidEmail(email) {
