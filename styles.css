@@ -1393,11 +1393,13 @@ output,
   --hype-accent: #ffc529;
   --hype-pendant: #202326;
   --hype-border: #ffc529;
+  --preview-pan-x: 0px;
+  --preview-pan-y: 0px;
   position: relative;
   width: min(72vw, 760px);
   aspect-ratio: 1.18;
   transform-style: preserve-3d;
-  transform: rotateX(var(--hype-tilt-x, 0deg)) rotateY(var(--hype-tilt-y, 0deg)) scale(var(--hype-zoom, 1));
+  transform: translate3d(var(--preview-pan-x), var(--preview-pan-y), 0) rotateX(var(--hype-tilt-x, 0deg)) rotateY(var(--hype-tilt-y, 0deg)) scale(var(--hype-zoom, 1));
   transition: transform 220ms cubic-bezier(.2, .8, .2, 1);
 }
 
@@ -3697,5 +3699,48 @@ button.detail-row {
   #sessionEmailStat,
   #dimensionStat {
     display: none !important;
+  }
+
+  .preview-panel,
+  .stage {
+    min-height: clamp(430px, 64svh, 560px);
+  }
+
+  .preview-toolbar {
+    gap: 4px;
+  }
+
+  .stage-ribbon {
+    min-height: 62px;
+    padding: 8px 12px;
+  }
+
+  .mobile-studio-title {
+    margin: 0;
+    font-size: clamp(16px, 4.5vw, 20px);
+    line-height: 1.05;
+  }
+
+  .preview-title-row {
+    gap: 6px;
+  }
+
+  .preview-title-row h2 {
+    margin: 0;
+    font-size: 16px;
+    line-height: 1.1;
+  }
+
+  .title-edit-button {
+    width: 28px;
+    height: 28px;
+  }
+
+  .visualizer-zoom-controls {
+    grid-template-columns: 34px 92px 34px;
+  }
+
+  #previewZoomReset {
+    font-size: 12px !important;
   }
 }

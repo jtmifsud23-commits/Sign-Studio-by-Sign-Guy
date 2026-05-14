@@ -57,6 +57,10 @@ const EMAIL_MARKETING_SOURCE = 'Sign Studio';
 const ADMIN_SESSION_KEY = 'signGuyAdminMode';
 const LOCAL_ADMIN_PASSWORD = '77\\r(~68dKTE';
 const LOADING_MIN_VISIBLE_MS = 900;
+const MOBILE_PREVIEW_ZOOM_MIN = 0.75;
+const MOBILE_PREVIEW_ZOOM_MAX = 2.5;
+const DESKTOP_PREVIEW_ZOOM_MIN = 0.55;
+const DESKTOP_PREVIEW_ZOOM_MAX = 2.4;
 const HYPE_CAMERA_DISTANCE = 1120;
 const HYPE_CAMERA_TARGET_Y = -18;
 const HYPE_CAMERA_VIEW_OFFSET_Y = 52;
@@ -132,6 +136,8 @@ const state = {
   processingDirty: false,
   rotation: { x: 0, y: 0, z: 0 },
   previewZoom: 1,
+  previewPan: { x: 0, y: 0 },
+  previewTouchGestureActive: false,
   dismissedPreviewAlert: '',
   loadingReady: false,
   requiresEmailGate: false,
@@ -173,6 +179,9 @@ const state = {
 };
 
 const els = {
+  appShell: document.querySelector('.app-shell'),
+  controlPanel: document.querySelector('.control-panel'),
+  previewPanel: document.querySelector('.preview-panel'),
   productTabs: [...document.querySelectorAll('[data-product-type]')],
   ledStudioSections: [...document.querySelectorAll('.led-studio-section')],
   hypeChainControls: document.querySelector('#hypeChainControls'),
@@ -371,7 +380,7 @@ async function initializeStudioAppOnce() {
   els.zoomIn.addEventListener('click', () => setWizardZoom(state.edit.zoom + 0.1));
   els.previewZoomOut.addEventListener('click', () => setPreviewZoom(state.previewZoom - 0.15));
   els.previewZoomIn.addEventListener('click', () => setPreviewZoom(state.previewZoom + 0.15));
-  els.previewZoomReset.addEventListener('click', () => setPreviewZoom(1));
+  els.previewZoomReset.addEventListener('click', resetPreviewView);
   els.stage.addEventListener('wheel', (event) => {
     event.preventDefault();
     setPreviewZoom(state.previewZoom + (event.deltaY < 0 ? 0.12 : -0.12));
@@ -394,6 +403,7 @@ async function initializeStudioAppOnce() {
   buildPresetGrid();
   setupDropZone();
   setupDragRotation();
+  setupPreviewTouchGestures();
   setupCropInteraction();
   initThreeStage();
   updateStats();
@@ -719,6 +729,9 @@ function renderHypeChain() {
   els.hypeChainRender.style.setProperty('--hype-border', normalizeHex(hype.border));
   updateHypeCssRotation();
   els.hypeChainRender.style.setProperty('--hype-zoom', state.productType === 'hype' ? state.previewZoom.toFixed(3) : '1');
+  const previewPan = getPreviewPan();
+  els.hypeChainRender.style.setProperty('--preview-pan-x', `${previewPan.x.toFixed(1)}px`);
+  els.hypeChainRender.style.setProperty('--preview-pan-y', `${previewPan.y.toFixed(1)}px`);
   renderHypeLinks();
   buildHypeThreeModel();
   els.hypePendantPreview.style.borderWidth = hype.logoDataUrl ? '0px' : '10px';
@@ -846,12 +859,16 @@ function applyHypeGroupRotation() {
   group.rotation.y = THREE.Math.degToRad(state.hype.rotation.y);
   const focusLocal = state.hypeThree.focusLocal;
   if (!focusLocal) {
-    group.position.set(0, 0, 0);
+    const pan = getPreviewPan();
+    group.position.set(pan.x * 0.42, -pan.y * 0.42, 0);
     group.updateMatrixWorld(true);
     return;
   }
   const rotatedFocus = focusLocal.clone().applyEuler(group.rotation);
   group.position.copy(focusLocal).sub(rotatedFocus);
+  const pan = getPreviewPan();
+  group.position.x += pan.x * 0.42;
+  group.position.y -= pan.y * 0.42;
   group.updateMatrixWorld(true);
 }
 
@@ -859,7 +876,8 @@ function frameHypeCamera(options = {}) {
   if (!state.hypeThree?.camera || !window.THREE) return;
   const camera = state.hypeThree.camera;
   const target = state.hypeThree.focusTarget || new THREE.Vector3(0, HYPE_CAMERA_TARGET_Y, 0);
-  const zoom = clamp(Number(state.previewZoom) || 1, 0.55, 2.4);
+  const limits = getPreviewZoomLimits();
+  const zoom = clamp(Number(state.previewZoom) || 1, limits.min, limits.max);
   const distance = HYPE_CAMERA_DISTANCE / zoom;
   const viewTarget = new THREE.Vector3(target.x, target.y + HYPE_CAMERA_VIEW_OFFSET_Y, target.z);
   const nextPosition = new THREE.Vector3(viewTarget.x, viewTarget.y + 36, viewTarget.z + distance);
@@ -2025,6 +2043,7 @@ function setupHypeDrag() {
   };
   els.hypePreview.addEventListener('pointerdown', (event) => {
     if (state.productType !== 'hype') return;
+    if (state.previewTouchGestureActive || (event.pointerType === 'touch' && event.isPrimary === false)) return;
     if (event.pointerType === 'mouse' && Number.isFinite(event.button) && event.button > 0) return;
     event.preventDefault();
     event.stopPropagation();
@@ -2039,6 +2058,10 @@ function setupHypeDrag() {
   });
   const move = (event) => {
     if (!dragging) return;
+    if (state.previewTouchGestureActive) {
+      stop();
+      return;
+    }
     if (activePointerId !== null && event.pointerId !== undefined && event.pointerId !== activePointerId) return;
     if (event.pointerType === 'mouse' && event.buttons && !(event.buttons & 1)) {
       stop();
@@ -2177,6 +2200,7 @@ function setupDragRotation() {
   let dragging = false;
   let start = null;
   els.stage.addEventListener('pointerdown', (event) => {
+    if (state.previewTouchGestureActive || (event.pointerType === 'touch' && event.isPrimary === false)) return;
     if (event.target.closest('.hype-preview')) return;
     if (event.target.closest('button, label, input, .preview-alert')) return;
     event.preventDefault();
@@ -2186,6 +2210,10 @@ function setupDragRotation() {
   });
   els.stage.addEventListener('pointermove', (event) => {
     if (!dragging) return;
+    if (state.previewTouchGestureActive) {
+      dragging = false;
+      return;
+    }
     event.preventDefault();
     state.rotation.x = clamp(start.rx - (event.clientY - start.y) * 0.24, -58, 58);
     state.rotation.y = start.ry + (event.clientX - start.x) * 0.42;
@@ -2197,6 +2225,56 @@ function setupDragRotation() {
   els.stage.addEventListener('pointerup', stopDrag);
   els.stage.addEventListener('pointercancel', stopDrag);
   els.stage.addEventListener('lostpointercapture', stopDrag);
+}
+
+function setupPreviewTouchGestures() {
+  if (!els.stage) return;
+  let gesture = null;
+  const getTouches = (event) => [...event.touches].slice(0, 2);
+  const getDistance = ([first, second]) => Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
+  const getMidpoint = ([first, second]) => ({
+    x: (first.clientX + second.clientX) / 2,
+    y: (first.clientY + second.clientY) / 2,
+  });
+  const startGesture = (event) => {
+    if (event.touches.length < 2 || event.target.closest('button, label, input, select, textarea, .preview-alert')) return;
+    const touches = getTouches(event);
+    const midpoint = getMidpoint(touches);
+    gesture = {
+      distance: Math.max(1, getDistance(touches)),
+      midpoint,
+      zoom: state.previewZoom,
+      pan: { ...getPreviewPan() },
+    };
+    state.previewTouchGestureActive = true;
+    event.preventDefault();
+  };
+  els.stage.addEventListener('touchstart', startGesture, { passive: false });
+  els.stage.addEventListener('touchmove', (event) => {
+    if (!gesture || event.touches.length < 2) return;
+    const touches = getTouches(event);
+    const midpoint = getMidpoint(touches);
+    const distance = Math.max(1, getDistance(touches));
+    const nextZoom = gesture.zoom * (distance / gesture.distance);
+    const nextPan = {
+      x: gesture.pan.x + midpoint.x - gesture.midpoint.x,
+      y: gesture.pan.y + midpoint.y - gesture.midpoint.y,
+    };
+    event.preventDefault();
+    setPreviewZoom(nextZoom, { render: false });
+    setPreviewPan(nextPan.x, nextPan.y, { render: true });
+  }, { passive: false });
+  const stopGesture = () => {
+    if (!gesture && !state.previewTouchGestureActive) return;
+    gesture = null;
+    window.setTimeout(() => {
+      state.previewTouchGestureActive = false;
+    }, 60);
+  };
+  els.stage.addEventListener('touchend', (event) => {
+    if (event.touches.length < 2) stopGesture();
+  });
+  els.stage.addEventListener('touchcancel', stopGesture);
 }
 
 async function handleFiles(fileList, options = {}) {
@@ -2234,6 +2312,7 @@ async function handleFiles(fileList, options = {}) {
     state.selectedColor = 0;
     state.selectedColourTarget = { type: 'front', index: 0 };
     state.previewZoom = 1;
+    state.previewPan = { x: 0, y: 0 };
     state.dismissedPreviewAlert = '';
     resetRotation();
     initEditState(state.artwork);
@@ -2271,6 +2350,7 @@ function captureLedUploadState() {
       zoom: state.edit.zoom,
     },
     previewZoom: state.previewZoom,
+    previewPan: { ...getPreviewPan() },
     dismissedPreviewAlert: state.dismissedPreviewAlert,
     rotation: { ...state.rotation },
   };
@@ -2302,6 +2382,7 @@ function restoreLedUploadState() {
       zoom: snapshot.edit.zoom,
     },
     previewZoom: snapshot.previewZoom,
+    previewPan: { ...(snapshot.previewPan || { x: 0, y: 0 }) },
     dismissedPreviewAlert: snapshot.dismissedPreviewAlert,
     rotation: { ...snapshot.rotation },
   });
@@ -2535,6 +2616,7 @@ async function loadDefaultPreview() {
     state.selectedColor = 0;
     state.selectedColourTarget = { type: 'front', index: 0 };
     state.previewZoom = 1;
+    state.previewPan = { x: 0, y: 0 };
     state.dismissedPreviewAlert = '';
     resetRotation();
     state.rotation = { x: 0, y: -18, z: 0 };
@@ -3742,21 +3824,31 @@ function applyIllumination() {
   }
 }
 
-function setPreviewZoom(value) {
-  state.previewZoom = clamp(Number(value) || 1, 0.55, 2.4);
+function getPreviewZoomLimits() {
+  return isMobilePreviewViewport()
+    ? { min: MOBILE_PREVIEW_ZOOM_MIN, max: MOBILE_PREVIEW_ZOOM_MAX }
+    : { min: DESKTOP_PREVIEW_ZOOM_MIN, max: DESKTOP_PREVIEW_ZOOM_MAX };
+}
+
+function setPreviewZoom(value, options = {}) {
+  const limits = getPreviewZoomLimits();
+  state.previewZoom = clamp(Number(value) || 1, limits.min, limits.max);
+  state.previewPan = clampPreviewPan(state.previewPan);
   applyPreviewZoom();
-  if (state.productType === 'hype') renderHypeThree();
-  else renderThree();
+  if (options.render === false) return;
+  renderActivePreviewFrame();
 }
 
 function applyPreviewZoom() {
-  const zoom = clamp(Number(state.previewZoom) || 1, 0.55, 2.4);
+  const limits = getPreviewZoomLimits();
+  const zoom = clamp(Number(state.previewZoom) || 1, limits.min, limits.max);
   state.previewZoom = zoom;
-  if (els.previewZoomReset) els.previewZoomReset.textContent = `${Math.round(zoom * 100)}%`;
+  if (els.previewZoomReset) els.previewZoomReset.textContent = isMobilePreviewViewport() ? 'Reset View' : `${Math.round(zoom * 100)}%`;
   if (state.three?.camera) {
     state.three.camera.position.z = 430 / zoom;
     state.three.camera.lookAt(0, 0, 0);
     state.three.camera.updateProjectionMatrix();
+    updateThreeModelPosition();
   }
   if (state.hypeThree?.camera) {
     state.hypeThree.camera.near = HYPE_CAMERA_NEAR;
@@ -3769,7 +3861,59 @@ function applyPreviewZoom() {
   }
   if (els.hypeChainRender) {
     els.hypeChainRender.style.setProperty('--hype-zoom', zoom.toFixed(3));
+    els.hypeChainRender.style.setProperty('--preview-pan-x', `${getPreviewPan().x.toFixed(1)}px`);
+    els.hypeChainRender.style.setProperty('--preview-pan-y', `${getPreviewPan().y.toFixed(1)}px`);
   }
+}
+
+function getPreviewPan() {
+  return {
+    x: Number(state.previewPan?.x) || 0,
+    y: Number(state.previewPan?.y) || 0,
+  };
+}
+
+function clampPreviewPan(pan = {}) {
+  const rect = els.stage?.getBoundingClientRect?.();
+  const zoom = Number(state.previewZoom) || 1;
+  const maxX = Math.max(48, (rect?.width || 360) * 0.38 * zoom);
+  const maxY = Math.max(48, (rect?.height || 360) * 0.34 * zoom);
+  return {
+    x: clamp(Number(pan.x) || 0, -maxX, maxX),
+    y: clamp(Number(pan.y) || 0, -maxY, maxY),
+  };
+}
+
+function setPreviewPan(x, y, options = {}) {
+  state.previewPan = clampPreviewPan({ x, y });
+  applyPreviewPan();
+  if (options.render === false) return;
+  renderActivePreviewFrame();
+}
+
+function applyPreviewPan() {
+  state.previewPan = clampPreviewPan(state.previewPan);
+  applyRotation();
+  if (state.three?.group) updateThreeModelPosition();
+  if (state.hypeThree?.group) applyHypeGroupRotation();
+  if (els.hypeChainRender) {
+    const pan = getPreviewPan();
+    els.hypeChainRender.style.setProperty('--preview-pan-x', `${pan.x.toFixed(1)}px`);
+    els.hypeChainRender.style.setProperty('--preview-pan-y', `${pan.y.toFixed(1)}px`);
+  }
+}
+
+function resetPreviewView() {
+  state.previewZoom = 1;
+  state.previewPan = { x: 0, y: 0 };
+  applyPreviewZoom();
+  applyPreviewPan();
+  renderActivePreviewFrame();
+}
+
+function renderActivePreviewFrame() {
+  if (state.productType === 'hype') renderHypeThree();
+  else renderThree();
 }
 
 function clearThreeModel() {
@@ -3788,7 +3932,9 @@ function clearThreeModel() {
 function updateThreeModelPosition() {
   if (!state.three?.group) return;
   const bounds = state.three.group.userData?.bounds;
-  state.three.group.position.y = getThreeModelYOffset(bounds);
+  const pan = getPreviewPan();
+  state.three.group.position.x = pan.x * 0.36;
+  state.three.group.position.y = getThreeModelYOffset(bounds) - pan.y * 0.36;
   if (state.three.floorGroup && bounds) {
     state.three.floorGroup.userData.floorY = state.three.group.position.y + bounds.minY;
     updateFloorEffects();
@@ -3803,6 +3949,10 @@ function getThreeModelYOffset(bounds = null) {
 
 function isResponsiveViewport() {
   return window.matchMedia('(max-width: 880px)').matches;
+}
+
+function isMobilePreviewViewport() {
+  return window.matchMedia('(max-width: 768px)').matches;
 }
 
 function buildThreeModel() {
@@ -6333,11 +6483,13 @@ function scalePoints(points, scale, width = 1000, height = 1000) {
 }
 
 function applyRotation() {
-  els.modelStack.style.transform = `rotateX(${state.rotation.x}deg) rotateY(${state.rotation.y}deg) rotateZ(${state.rotation.z}deg)`;
+  const pan = getPreviewPan();
+  els.modelStack.style.transform = `translate3d(${pan.x.toFixed(1)}px, ${pan.y.toFixed(1)}px, 0) rotateX(${state.rotation.x}deg) rotateY(${state.rotation.y}deg) rotateZ(${state.rotation.z}deg)`;
   if (state.three?.group && window.THREE) {
     state.three.group.rotation.x = THREE.Math.degToRad(state.rotation.x);
     state.three.group.rotation.y = THREE.Math.degToRad(state.rotation.y);
     state.three.group.rotation.z = THREE.Math.degToRad(state.rotation.z);
+    updateThreeModelPosition();
     updateFloorEffects();
     renderThree();
   }
@@ -6662,6 +6814,7 @@ async function buildSignGuyProject() {
       },
       rotation: { ...state.rotation },
       previewZoom: state.previewZoom,
+      previewPan: { ...getPreviewPan() },
     },
     preview: {
       screenshotDataUrl,
@@ -6818,7 +6971,9 @@ async function restoreSignGuyProject(project) {
     y: Number(config.rotation?.y) || 0,
     z: Number(config.rotation?.z) || 0,
   };
-  state.previewZoom = clamp(Number(config.previewZoom) || 1, 0.55, 2.4);
+  const previewZoomLimits = getPreviewZoomLimits();
+  state.previewZoom = clamp(Number(config.previewZoom) || 1, previewZoomLimits.min, previewZoomLimits.max);
+  state.previewPan = clampPreviewPan(config.previewPan || { x: 0, y: 0 });
   applyStateToControls();
   closeWizard();
   await reprocess({ preserveTargetColorCount: true });
@@ -6910,6 +7065,7 @@ function applyStateToControls() {
   });
   applyIllumination();
   applyPreviewZoom();
+  applyPreviewPan();
   updateStats();
   renderShellColourControls();
   updateProjectControls();
@@ -7911,6 +8067,7 @@ async function finishAppLoading() {
 function hideAppLoading() {
   document.body.classList.remove('studio-loading');
   if (els.appLoading) els.appLoading.classList.add('hidden');
+  resetMobileViewportAfterGate();
 }
 
 function showLoadingStart() {
@@ -7928,6 +8085,29 @@ function focusEmailGateInput() {
     els.customerEmail.focus({ preventScroll: true });
     els.customerEmail.select();
   }, 0);
+}
+
+function resetMobileViewportAfterGate() {
+  if (!window.matchMedia('(max-width: 768px)').matches) return;
+  const activeElement = document.activeElement;
+  if (activeElement && typeof activeElement.blur === 'function') activeElement.blur();
+  resetPreviewView();
+  [document.documentElement, document.body, els.appShell, els.controlPanel, els.previewPanel, els.stage].forEach((element) => {
+    if (!element) return;
+    element.scrollTop = 0;
+    element.scrollLeft = 0;
+    element.style.removeProperty('zoom');
+    element.style.removeProperty('transform');
+    element.style.removeProperty('translate');
+    element.style.removeProperty('scale');
+  });
+  const resetScroll = () => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    els.previewPanel?.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'auto' });
+  };
+  resetScroll();
+  requestAnimationFrame(resetScroll);
+  window.setTimeout(resetScroll, 120);
 }
 
 function setStatus(text) {
