@@ -6708,7 +6708,7 @@ async function placeOrderRequest() {
       : await uploadProjectFolder(project, {
         screenshots,
         sendOrderEmail: true,
-        subject: ORDER_SUBMISSION_SUBJECT,
+        subject: makeOrderEmailSubject('LED Sign'),
         message: makeEmailBody('Shopify checkout order started'),
         messageHtml: makeEmailHtml('Shopify checkout order started'),
       });
@@ -6751,7 +6751,7 @@ async function placeHypeChainOrder() {
       : await uploadProjectFolder(project, {
         screenshots,
         sendOrderEmail: true,
-        subject: HYPE_CHAIN_ORDER_SUBJECT,
+        subject: makeOrderEmailSubject('Hype Chain'),
         message: makeHypeEmailBody('Shopify checkout order started'),
         messageHtml: makeHypeEmailHtml('Shopify checkout order started'),
       });
@@ -7812,6 +7812,11 @@ function makeEmailBody(context = 'Design submission') {
     'Detected front colours:',
     colours || 'None detected',
   ].join('\n');
+}
+
+function makeOrderEmailSubject(productLabel) {
+  const email = normalizeEmail(state.customerEmail) || 'A customer';
+  return `${email} placed a ${productLabel} order`;
 }
 
 function makeEmailHtml(context = 'Design submission') {
