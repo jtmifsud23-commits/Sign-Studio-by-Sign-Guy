@@ -258,9 +258,12 @@ const els = {
   hypeChainLength: document.querySelector('#hypeChainLength'),
   hypeQuantity: document.querySelector('#hypeQuantity'),
   projectFileInput: document.querySelector('#projectFileInput'),
+  projectSection: document.querySelector('#projectSection'),
+  projectSectionHeading: document.querySelector('#projectSectionHeading'),
   saveProject: document.querySelector('#saveProject'),
   openProject: document.querySelector('#openProject'),
   projectCount: document.querySelector('#projectCount'),
+  projectHeadingCount: document.querySelector('#projectHeadingCount'),
   projectList: document.querySelector('#projectList'),
   projectNote: document.querySelector('#projectNote'),
   wizard: document.querySelector('#wizard'),
@@ -404,6 +407,7 @@ async function initializeStudioAppOnce() {
   setupDropZone();
   setupDragRotation();
   setupPreviewTouchGestures();
+  setupProjectAccordion();
   setupCropInteraction();
   initThreeStage();
   updateStats();
@@ -2275,6 +2279,21 @@ function setupPreviewTouchGestures() {
     if (event.touches.length < 2) stopGesture();
   });
   els.stage.addEventListener('touchcancel', stopGesture);
+}
+
+function setupProjectAccordion() {
+  if (!els.projectSection || !els.projectSectionHeading) return;
+  const toggle = () => {
+    const expanded = els.projectSection.classList.toggle('mobile-expanded');
+    els.projectSection.classList.toggle('mobile-collapsed', !expanded);
+    els.projectSectionHeading.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  };
+  els.projectSectionHeading.addEventListener('click', toggle);
+  els.projectSectionHeading.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    toggle();
+  });
 }
 
 async function handleFiles(fileList, options = {}) {
@@ -7094,7 +7113,9 @@ async function refreshProjectLog() {
 
 function renderProjectLog() {
   const projects = state.savedProjects || [];
-  els.projectCount.textContent = String(projects.length);
+  const countText = String(projects.length);
+  els.projectCount.textContent = countText;
+  if (els.projectHeadingCount) els.projectHeadingCount.textContent = `(${countText})`;
   if (!projects.length) {
     els.projectList.innerHTML = '';
     els.projectNote.textContent = '';
