@@ -6692,7 +6692,6 @@ async function placeOrderRequest() {
     return;
   }
   if (!state.processed || !state.uploadedFile) return;
-  const checkoutWindow = beginCheckoutHandoff();
   setStatus('Preparing order');
   if (els.submitDesign) els.submitDesign.disabled = true;
   els.placeOrder.disabled = true;
@@ -6722,9 +6721,8 @@ async function placeOrderRequest() {
       ? `${project.name}.SignGuy downloaded for local checkout testing. Email is only sent from the deployed site.`
       : `${project.name} saved. Redirecting to checkout.`;
     setStatus('Checkout');
-    redirectToShopifyCheckout(project, uploadResult, checkoutWindow);
+    redirectToShopifyCheckout(project, uploadResult);
   } catch (error) {
-    closeCheckoutHandoff(checkoutWindow);
     console.error(error);
     els.submitNote.textContent = describeOrderError(error);
     setStatus('Order failed');
@@ -6738,7 +6736,6 @@ async function placeHypeChainOrder() {
     updateProjectControls();
     return;
   }
-  const checkoutWindow = beginCheckoutHandoff();
   setStatus('Preparing order');
   els.placeOrder.disabled = true;
   try {
@@ -6765,9 +6762,8 @@ async function placeHypeChainOrder() {
       ? `${project.name}.SignGuy downloaded for local Hype Chain checkout testing. Email is only sent from the deployed site.`
       : `${project.name} saved. Redirecting to checkout.`;
     setStatus('Checkout');
-    redirectToShopifyCheckout(project, uploadResult, checkoutWindow);
+    redirectToShopifyCheckout(project, uploadResult);
   } catch (error) {
-    closeCheckoutHandoff(checkoutWindow);
     console.error(error);
     els.submitNote.textContent = describeOrderError(error);
     setStatus('Order failed');
@@ -7209,7 +7205,7 @@ function isLocalTesting() {
   return protocol === 'file:' || hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
 }
 
-function redirectToShopifyCheckout(project, uploadResult = {}, checkoutWindow = null) {
+function redirectToShopifyCheckout(project, uploadResult = {}) {
   const variantId = getShopifyVariantId();
   if (!variantId) throw new Error('No matching Shopify variant was found.');
   const projectName = `${projectFileBaseName(project)}.SignGuy`;
@@ -7234,30 +7230,7 @@ function redirectToShopifyCheckout(project, uploadResult = {}, checkoutWindow = 
     params.set('attributes[Usage]', USAGE_PRESETS[state.usage]?.label || USAGE_PRESETS.indoor.label);
   }
   params.set('attributes[SignGuy file]', projectName);
-  navigateToCheckoutUrl(`${SHOPIFY_CHECKOUT_BASE_URL}/${variantId}:1?${params.toString()}`, checkoutWindow);
-}
-
-function beginCheckoutHandoff() {
-  if (!isEmbeddedInFrame()) return null;
-  try {
-    const checkoutWindow = window.open('', '_blank');
-    if (checkoutWindow?.document) {
-      checkoutWindow.document.write('<!doctype html><title>Preparing checkout</title><body style="font-family:system-ui,sans-serif;padding:24px">Preparing your Sign Guy checkout...</body>');
-      checkoutWindow.document.close();
-    }
-    return checkoutWindow;
-  } catch (error) {
-    console.warn('Could not open checkout handoff window.', error);
-    return null;
-  }
-}
-
-function closeCheckoutHandoff(checkoutWindow) {
-  try {
-    if (checkoutWindow && !checkoutWindow.closed) checkoutWindow.close();
-  } catch {
-    // Ignore popup cleanup failures.
-  }
+  navigateToCheckoutUrl(`${SHOPIFY_CHECKOUT_BASE_URL}/${variantId}:1?${params.toString()}`);
 }
 
 function isEmbeddedInFrame() {
@@ -7268,16 +7241,9 @@ function isEmbeddedInFrame() {
   }
 }
 
-function navigateToCheckoutUrl(url, checkoutWindow = null) {
+function navigateToCheckoutUrl(url) {
   window.parent?.postMessage?.({ type: 'SIGN_STUDIO_CHECKOUT', url }, '*');
-  try {
-    if (checkoutWindow && !checkoutWindow.closed) {
-      checkoutWindow.location.href = url;
-      return;
-    }
-  } catch (error) {
-    console.warn('Checkout handoff window navigation failed.', error);
-  }
+  window.setTimeout(() => showCheckoutFallback(url), 1200);
   try {
     if (window.top && window.top !== window.self) {
       window.top.location.href = url;
@@ -7288,8 +7254,13 @@ function navigateToCheckoutUrl(url, checkoutWindow = null) {
   }
   const opened = window.open(url, '_top');
   if (!opened) {
-    window.location.href = url;
+    window.location.assign(url);
   }
+}
+
+function showCheckoutFallback(url) {
+  if (!els.submitNote || window.location.href.startsWith(url)) return;
+  els.submitNote.innerHTML = `Checkout should open automatically. <a href="${escapeHtml(url)}" target="_top" rel="noopener">Continue to checkout</a>.`;
 }
 
 function getShopifyVariantId() {
