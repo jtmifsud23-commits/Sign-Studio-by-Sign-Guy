@@ -3684,3 +3684,18 @@ button.detail-row {
     min-height: 38px;
   }
 }
+
+@media (max-width: 768px) {
+  input,
+  textarea,
+  select,
+  button {
+    font-size: 16px !important;
+  }
+
+  .preview-stats,
+  #sessionEmailStat,
+  #dimensionStat {
+    display: none !important;
+  }
+}
