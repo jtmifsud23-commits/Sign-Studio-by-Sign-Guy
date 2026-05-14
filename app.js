@@ -7216,12 +7216,9 @@ function redirectToShopifyCheckout(project, uploadResult = {}) {
   const variantId = getShopifyVariantId();
   if (!variantId) throw new Error('No matching Shopify variant was found.');
   const projectName = `${projectFileBaseName(project)}.SignGuy`;
-  const quantity = project.type === 'SignGuy.HypeChainStudio'
-    ? clamp(Number(state.hype.quantity) || 1, 1, 99)
-    : 1;
   const params = new URLSearchParams();
   params.set('id', variantId);
-  params.set('quantity', String(quantity));
+  params.set('quantity', '1');
   params.set('return_to', '/cart');
   if (state.customerEmail) params.set('checkout[email]', state.customerEmail);
   setShopifyOrderField(params, 'Customer email', state.customerEmail || '');
@@ -7283,21 +7280,15 @@ function navigateToCheckoutUrl(url) {
 function postCheckoutMessage(url) {
   const payload = { type: 'SIGN_STUDIO_CHECKOUT', url };
   const legacyPayload = { signStudioCheckoutUrl: url };
-  let attempts = 0;
-  const send = () => {
-    attempts += 1;
-    [window.parent, window.top].forEach((target) => {
-      if (!target || target === window.self) return;
-      try {
-        target.postMessage(payload, '*');
-        target.postMessage(legacyPayload, '*');
-      } catch (error) {
-        console.warn('Could not post checkout redirect message to iframe host.', error);
-      }
-    });
-    if (attempts < 10) window.setTimeout(send, 180);
-  };
-  send();
+  [window.parent, window.top].forEach((target) => {
+    if (!target || target === window.self) return;
+    try {
+      target.postMessage(payload, '*');
+      target.postMessage(legacyPayload, '*');
+    } catch (error) {
+      console.warn('Could not post checkout redirect message to iframe host.', error);
+    }
+  });
 }
 
 function showCheckoutFallback(url) {
