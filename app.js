@@ -6542,13 +6542,14 @@ function renderShellColourControls() {
 
 function updateProjectControls() {
   if (!els.saveProject) return;
+  const hasOrderableHypeLogo = Boolean(state.hype.logoDataUrl && !state.hype.isExampleProject);
   const disabled = state.productType === 'hype'
     ? false
     : !state.processed || !state.artwork;
   els.saveProject.disabled = disabled;
   if (els.placeOrder) {
     els.placeOrder.disabled = state.productType === 'hype'
-      ? false
+      ? !hasOrderableHypeLogo
       : disabled || !state.uploadedFile;
   }
 }
@@ -6712,6 +6713,10 @@ async function placeOrderRequest() {
 
 async function placeHypeChainOrder() {
   if (!state.isAdmin) return;
+  if (!state.hype.logoDataUrl || state.hype.isExampleProject) {
+    updateProjectControls();
+    return;
+  }
   setStatus('Preparing order');
   els.placeOrder.disabled = true;
   try {

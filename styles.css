@@ -3137,6 +3137,10 @@ button.detail-row {
     grid-template-columns: 1fr;
   }
 
+  .hype-chain-studio > .section-heading {
+    display: none;
+  }
+
   .hype-control-grid {
     grid-template-columns: minmax(0, 1.22fr) minmax(0, 1fr) minmax(72px, 0.7fr);
     gap: 6px;
@@ -3171,8 +3175,23 @@ button.detail-row {
     min-height: 50px;
   }
 
+  .hype-upload-zone {
+    margin-top: 0;
+    padding: 10px;
+    border-color: #e9dfcb;
+    border-width: 1px;
+    border-style: dashed;
+    border-radius: 10px;
+  }
+
   .hype-upload-button {
-    min-height: 128px;
+    min-height: 78px;
+    padding: 12px 16px;
+    border-radius: 7px;
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 12px;
+    justify-items: start;
+    text-align: center;
   }
 
   .stage-note {
