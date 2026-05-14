@@ -1,6 +1,7 @@
 const DEFAULT_SOURCE = 'Sign Studio';
 const SIGN_STUDIO_TAGS = ['Sign Studio', 'Hype Chain Visualizer', 'mysignguy.ca'];
-const SHOPIFY_API_VERSION = process.env.SHOPIFY_ADMIN_API_VERSION || '2025-10';
+const SHOPIFY_API_VERSION = process.env.SHOPIFY_ADMIN_API_VERSION || '2026-04';
+let cachedClientCredentialsToken = null;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -16,13 +17,13 @@ export default async function handler(req, res) {
   }
 
   const shopDomain = normalizeShopDomain(process.env.SHOPIFY_STORE_DOMAIN);
-  const adminToken = process.env.SHOPIFY_ADMIN_API_TOKEN;
-  if (!shopDomain || !adminToken) {
+  if (!shopDomain) {
     res.status(500).json({ error: 'Shopify subscription credentials are not configured.' });
     return;
   }
 
   try {
+    const adminToken = await getShopifyAdminToken(shopDomain);
     const existingCustomer = await findCustomerByEmail(shopDomain, adminToken, email);
     const customer = existingCustomer
       ? await updateExistingCustomer(shopDomain, adminToken, existingCustomer, email)
@@ -38,6 +39,36 @@ export default async function handler(req, res) {
     console.error(error);
     res.status(500).json({ error: 'Could not subscribe this email in Shopify.' });
   }
+}
+
+async function getShopifyAdminToken(shopDomain) {
+  if (process.env.SHOPIFY_ADMIN_API_TOKEN) return process.env.SHOPIFY_ADMIN_API_TOKEN;
+  if (cachedClientCredentialsToken && cachedClientCredentialsToken.expiresAt > Date.now() + 60000) {
+    return cachedClientCredentialsToken.token;
+  }
+  const clientId = process.env.SHOPIFY_CLIENT_ID;
+  const clientSecret = process.env.SHOPIFY_CLIENT_SECRET;
+  if (!shopDomain || !clientId || !clientSecret) {
+    throw new Error('Shopify subscription credentials are not configured.');
+  }
+  const response = await fetch(`https://${shopDomain}/admin/oauth/access_token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      grant_type: 'client_credentials',
+      client_id: clientId,
+      client_secret: clientSecret,
+    }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.access_token) {
+    throw new Error(`Could not exchange Shopify client credentials: ${payload.error_description || payload.error || response.statusText}`);
+  }
+  cachedClientCredentialsToken = {
+    token: payload.access_token,
+    expiresAt: Date.now() + (Number(payload.expires_in) || 3600) * 1000,
+  };
+  return cachedClientCredentialsToken.token;
 }
 
 async function findCustomerByEmail(shopDomain, adminToken, email) {
