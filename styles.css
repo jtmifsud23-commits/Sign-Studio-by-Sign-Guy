@@ -3895,4 +3895,30 @@ button.detail-row {
   .hype-pendant-colour-selector {
     min-width: 0;
   }
+
+  .crop-settings-title,
+  .crop-presets,
+  .vector-summary-list {
+    display: none !important;
+  }
+
+  .wizard-side {
+    padding: 10px 12px;
+  }
+
+  .switch-row {
+    margin-top: 12px;
+  }
+
+  .wizard-helper-text {
+    margin-top: 5px;
+  }
+
+  .mapping-controls-title {
+    margin-top: 10px !important;
+  }
+
+  .colour-count-row {
+    margin: 10px 0 12px;
+  }
 }

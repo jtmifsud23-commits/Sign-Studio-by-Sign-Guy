@@ -2839,6 +2839,7 @@ function renderWizardStep() {
 
 function renderEditStep() {
   els.wizardTitle.textContent = 'Edit Your Image';
+  if (isMobilePreviewViewport()) state.edit.cropAspect = 'free';
   els.wizardImage.onload = () => updateCropBox();
   els.wizardImage.src = renderEditArtworkPreviewUrl(state.artwork);
   els.wizardImage.style.setProperty('--wizard-zoom', state.edit.zoom);
@@ -2846,7 +2847,7 @@ function renderEditStep() {
   els.cropBox.classList.toggle('circle', state.edit.cropAspect === 'circle');
   els.previewTools.classList.remove('hidden');
   els.wizardSide.innerHTML = `
-    <h3>Crop</h3>
+    <h3 class="crop-settings-title">Crop</h3>
     <div class="crop-presets">
       ${CROP_PRESETS.map((preset) => `
         <button class="crop-preset ${state.edit.cropAspect === preset.id ? 'active' : ''}" type="button" data-crop-preset="${preset.id}">
@@ -2937,7 +2938,7 @@ function renderVectorStep() {
   els.wizardSide.innerHTML = `
     <h3>Vectorized result</h3>
     <p>The artwork has been flattened into printable colour regions and a custom outer silhouette. If this does not look right, try again or go back to crop/background cleanup.</p>
-    <div class="detail-list">
+    <div class="detail-list vector-summary-list">
       <div class="detail-row"><span class="map-number">${state.processed?.colours.length || 0}</span><span>detected colours</span><strong>max 8</strong></div>
       <div class="detail-row"><span class="map-number">${state.tolerance}</span><span>merge tolerance</span><strong>auto</strong></div>
     </div>
