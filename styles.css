@@ -585,6 +585,13 @@ output,
 
 #chooseFileText {
   min-width: 0;
+  font-size: 16px;
+  line-height: 1.12;
+}
+
+#hypeChooseFileText {
+  min-width: 0;
+  font-size: 16px;
   line-height: 1.12;
 }
 
