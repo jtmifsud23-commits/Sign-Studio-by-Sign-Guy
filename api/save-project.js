@@ -36,7 +36,7 @@ export default async function handler(req, res) {
 
   try {
     const { fields, files } = await parseMultipart(req);
-    const customerEmail = getEmailField(fields.customerEmail);
+    const customerEmail = getField(fields.customerEmail);
     if (!isValidEmail(customerEmail)) {
       res.status(400).json({ error: 'A valid customerEmail is required.' });
       return;
@@ -48,7 +48,7 @@ export default async function handler(req, res) {
     await fs.mkdir(customerDir, { recursive: true });
     const savedFiles = await saveFiles(customerDir, files);
     let emailSent = false;
-    if (getFieldText(fields.sendOrderEmail).toLowerCase() === 'true') {
+    if (getField(fields.sendOrderEmail) === 'true') {
       await sendOrderEmail(fields, files);
       emailSent = true;
     }
@@ -91,9 +91,11 @@ async function collectAttachments(files) {
   const uploadFields = ['projectFile', 'logoPreview', 'logo', 'renderScreenshot1', 'renderScreenshot2'];
   const attachments = [];
   const hasLogoPreview = Boolean(Array.isArray(files.logoPreview) ? files.logoPreview[0] : files.logoPreview);
+
   for (const field of uploadFields) {
     const file = Array.isArray(files[field]) ? files[field][0] : files[field];
     if (!file) continue;
+
     attachments.push({
       filename: file.originalFilename || `${field}.png`,
       content: await fs.readFile(file.filepath),
@@ -101,7 +103,13 @@ async function collectAttachments(files) {
       cid: field === 'logoPreview' || (!hasLogoPreview && field === 'logo') ? 'uploaded-logo' : undefined,
     });
   }
+
   return attachments;
+}
+
+function makeFallbackHtml(text) {
+  const body = escapeHtml(text || 'Order details are attached.');
+  return `<pre style="font-family:Arial,Helvetica,sans-serif;white-space:pre-wrap;line-height:1.45;">${body}</pre>`;
 }
 
 function parseMultipart(req) {
@@ -117,9 +125,11 @@ function parseMultipart(req) {
 async function saveFiles(customerDir, files) {
   const fields = ['projectFile', 'logoPreview', 'logo', 'renderScreenshot1', 'renderScreenshot2'];
   const saved = [];
+
   for (const field of fields) {
     const file = Array.isArray(files[field]) ? files[field][0] : files[field];
     if (!file) continue;
+
     const filename = safeFileName(file.originalFilename || `${field}.png`);
     await fs.copyFile(file.filepath, path.join(customerDir, filename));
     saved.push(filename);
@@ -127,17 +137,12 @@ async function saveFiles(customerDir, files) {
   return saved;
 }
 
+function getField(value) {
+  return String(Array.isArray(value) ? value[0] : value || '').trim().toLowerCase();
+}
+
 function getFieldText(value) {
   return String(Array.isArray(value) ? value[0] : value || '').trim();
-}
-
-function getEmailField(value) {
-  return getFieldText(value).toLowerCase();
-}
-
-function makeFallbackHtml(text) {
-  const safeText = escapeHtml(text || 'Sign Guy order submitted.');
-  return `<div style="font-family:Arial,Helvetica,sans-serif;white-space:pre-line;color:#171717;">${safeText}</div>`;
 }
 
 function escapeHtml(value) {
