@@ -3972,7 +3972,7 @@ function isResponsiveViewport() {
 }
 
 function isMobilePreviewViewport() {
-  return window.matchMedia('(max-width: 768px)').matches;
+  return window.matchMedia('(max-width: 768px), (max-width: 900px) and (max-height: 560px), (pointer: coarse)').matches;
 }
 
 function buildThreeModel() {
