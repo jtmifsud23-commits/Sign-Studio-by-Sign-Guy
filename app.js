@@ -7830,11 +7830,29 @@ async function makeEmailLogoPreviewFile(project) {
       ? 'hype-chain-logo-preview.png'
       : 'led-sign-logo-preview.png';
 
-    return dataUrlToFile(dataUrl, fileName);
+    const previewDataUrl = await makeRasterLogoPreviewDataUrl(dataUrl);
+    return dataUrlToFile(previewDataUrl, fileName);
   } catch (error) {
     console.warn('Could not create email logo preview.', error);
     return null;
   }
+}
+
+async function makeRasterLogoPreviewDataUrl(dataUrl) {
+  const image = await loadImage(dataUrl);
+  const sourceWidth = image.naturalWidth || image.width || 1;
+  const sourceHeight = image.naturalHeight || image.height || 1;
+  const maxSide = 720;
+  const scale = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight));
+  const width = Math.max(1, Math.round(sourceWidth * scale));
+  const height = Math.max(1, Math.round(sourceHeight * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, width, height);
+  ctx.drawImage(image, 0, 0, width, height);
+  return canvas.toDataURL('image/png');
 }
 
 function redirectToShopifyCheckout(project, uploadResult = {}) {
