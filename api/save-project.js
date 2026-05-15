@@ -101,6 +101,7 @@ async function collectAttachments(files) {
       content: await fs.readFile(file.filepath),
       contentType: file.mimetype || undefined,
       cid: field === 'logoPreview' || (!hasLogoPreview && field === 'logo') ? 'uploaded-logo' : undefined,
+      contentDisposition: field === 'logoPreview' || (!hasLogoPreview && field === 'logo') ? 'inline' : undefined,
     });
   }
 
