@@ -6,11 +6,19 @@
     <title>MySignGuy.ca Sign Studio</title>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23151515'/%3E%3Cpath d='M7 21.5h18v3H7zM9.5 7.5h13v11h-13z' fill='%23ffc529'/%3E%3Cpath d='M12 10h8v6h-8z' fill='%23151515'/%3E%3C/svg%3E" />
-    <link rel="stylesheet" href="./styles.css?v=20260515-01" />
+    <link rel="stylesheet" href="./styles.css?v=20260514-07" />
   </head>
   <body class="studio-loading">
     <main class="app-shell">
-      <aside class="control-panel" aria-label="Sign Studio controls">
+      <aside class="control-panel" id="mobileControlSheet" aria-label="Sign Studio controls">
+        <div class="mobile-sheet-header">
+          <div>
+            <p class="eyebrow">Customize</p>
+            <h2>Build your design</h2>
+          </div>
+          <button class="mobile-sheet-close" id="mobileSheetClose" type="button" aria-label="Close controls">x</button>
+        </div>
+
         <div class="brand-row">
           <div>
             <h1>MySignGuy.ca Sign Studio</h1>
@@ -19,6 +27,10 @@
         </div>
 
         <nav class="product-switcher" aria-label="Product type">
+          <div class="mobile-control-section-heading">
+            <h3>Product</h3>
+            <p>Choose what you want to customize.</p>
+          </div>
           <button class="product-tab active" type="button" data-product-type="led" aria-pressed="true">LED Sign</button>
           <button class="product-tab" type="button" data-product-type="hype" aria-disabled="false">Hype Chain</button>
           <button class="product-tab product-tab-locked" type="button" data-product-type="plaque" aria-disabled="true" aria-describedby="productLockTooltip">
@@ -29,14 +41,23 @@
         </nav>
 
         <section class="panel-section upload-zone led-studio-section" id="dropZone">
+          <div class="mobile-control-section-heading">
+            <h3>Upload / Artwork</h3>
+            <p>Add your logo, then crop and clean it up for the preview.</p>
+          </div>
           <input id="fileInput" type="file" accept="image/png,image/svg+xml,.png,.svg" />
           <label class="primary-button upload-button" id="chooseFile" for="fileInput" role="button" tabindex="0">
             <span class="upload-mark" aria-hidden="true">+</span>
             <span id="chooseFileText">Upload logo</span>
           </label>
+          <p class="upload-helper-text">Best results: Use a clear PNG with a transparent background when possible.</p>
         </section>
 
         <section class="panel-section lightbox-settings led-studio-section">
+          <div class="mobile-control-section-heading">
+            <h3>Size / Options</h3>
+            <p>Set the LED Sign size and where it will be used.</p>
+          </div>
           <div class="section-heading">
             <h2>LED Sign size</h2>
           </div>
@@ -58,20 +79,24 @@
         </section>
 
         <section class="panel-section plate-colours led-studio-section">
+          <div class="mobile-control-section-heading">
+            <h3>Colours</h3>
+            <p>Match the front, side, and back colours to your brand.</p>
+          </div>
           <div class="section-heading">
             <h2>Sign colours</h2>
           </div>
-          <div class="plate-card">
+          <div class="plate-card plate-card-front">
             <p>Front</p>
             <div id="frontPlateColours" class="plate-colour-row"></div>
           </div>
-          <div class="plate-card">
+          <div class="plate-card plate-card-side">
             <p>Side</p>
             <button class="shell-colour" id="sideColourButton" type="button">
               <span>Side colour</span><i></i><strong id="sideColourHex">#000000</strong>
             </button>
           </div>
-          <div class="plate-card">
+          <div class="plate-card plate-card-back">
             <p>Back</p>
             <button class="shell-colour" id="backColourButton" type="button">
               <span>Back colour</span><i></i><strong id="backColourHex">#000000</strong>
@@ -79,17 +104,26 @@
           </div>
         </section>
 
-        <section class="panel-section diagnostics led-studio-section">
-          <div class="section-heading">
-            <h2>Print checks</h2>
+        <section class="panel-section diagnostics led-studio-section mobile-advanced-section mobile-collapsed" id="mobileAdvancedSection" hidden aria-hidden="true">
+          <div class="section-heading mobile-accordion-heading" id="mobileAdvancedHeading" role="button" tabindex="0" aria-expanded="false" aria-controls="mobileAdvancedContent">
+            <div>
+              <h2>Advanced</h2>
+              <p class="mobile-helper-text">Print checks and technical artwork feedback.</p>
+            </div>
             <output id="complexityScore">Waiting</output>
           </div>
-          <ul id="warnings">
-            <li>Upload artwork to run geometry checks.</li>
-          </ul>
+          <div id="mobileAdvancedContent">
+            <ul id="warnings">
+              <li>Upload artwork to run geometry checks.</li>
+            </ul>
+          </div>
         </section>
 
         <section class="panel-section hype-chain-studio hidden" id="hypeChainControls" aria-label="Hype Chain configurator">
+          <div class="mobile-control-section-heading">
+            <h3>Upload / Artwork</h3>
+            <p>Add the logo for the pendant preview.</p>
+          </div>
           <div class="section-heading">
             <h2>Hype Chain</h2>
             <output class="setting-pill" id="hypeVariantOutput">Classic</output>
@@ -101,6 +135,7 @@
                 <span class="upload-mark" aria-hidden="true">+</span>
                 <span id="hypeChooseFileText">Upload logo</span>
               </label>
+              <p class="upload-helper-text">Best results: Use a clear PNG with a transparent background when possible.</p>
             </div>
             <div class="hype-style-panel">
               <div class="section-heading">
@@ -115,6 +150,10 @@
                 <span class="spinner-tooltip" id="spinnerLockTooltip" role="tooltip">Coming Soon</span>
               </div>
             </div>
+          </div>
+          <div class="mobile-control-section-heading mobile-hype-colour-heading">
+            <h3>Colours</h3>
+            <p>Pick chain link and pendant colours.</p>
           </div>
           <label class="hype-text-field hype-pendant-text-field hidden">Pendant text <input id="hypePendantText" type="text" maxlength="18" value="MVP" /></label>
           <div class="hype-colour-layout">
@@ -134,6 +173,10 @@
               </div>
               <div class="hype-colour-row hype-pendant-colour-row" id="hypePendantColourRow"></div>
             </div>
+          </div>
+          <div class="mobile-control-section-heading mobile-hype-options-heading">
+            <h3>Size / Options</h3>
+            <p>Set chain length, pattern, and quantity.</p>
           </div>
           <div class="hype-size-quantity">
             <div class="section-heading">
@@ -161,7 +204,10 @@
         <section class="panel-section project-section mobile-collapsed" id="projectSection">
           <input id="projectFileInput" type="file" accept=".SignGuy,.signguy,application/json" />
           <div class="section-heading project-section-heading" id="projectSectionHeading" role="button" tabindex="0" aria-expanded="false" aria-controls="projectActions projectList projectNote">
-            <h2>Saved designs <span class="mobile-project-count-label" id="projectHeadingCount">(0)</span></h2>
+            <div>
+              <h2>Saved Designs <span class="mobile-project-count-label" id="projectHeadingCount">(0)</span></h2>
+              <p class="mobile-helper-text">Open recent work or import a .SignGuy file.</p>
+            </div>
             <output class="setting-pill project-count-pill" id="projectCount">0</output>
             <span class="project-accordion-arrow" aria-hidden="true"></span>
           </div>
@@ -183,6 +229,8 @@
           <div class="project-list" id="projectList"></div>
           <p id="projectNote"></p>
         </section>
+        <button class="secondary-button back-to-visualizer-button" id="backToVisualizer" type="button">Back to Visualizer</button>
+        <p class="menu-build-version">Build 2.005</p>
       </aside>
 
       <section class="preview-panel" aria-label="3D lightbox preview">
@@ -191,7 +239,7 @@
             <div>
               <h1 class="mobile-studio-title">MySignGuy.ca Sign Studio</h1>
               <div class="preview-title-row" id="previewTitleRow">
-                <h2 id="previewTitle">Example lightbox preview</h2>
+                <h2 id="previewTitle">Example LED Sign preview</h2>
                 <input class="preview-title-input" id="designName" type="text" placeholder="My Custom LED Sign" autocomplete="off" aria-label="Sign name" hidden />
                 <button class="title-edit-button" id="editDesignName" type="button" aria-label="Edit sign name">
                   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -200,11 +248,25 @@
                   </svg>
                 </button>
               </div>
+              <nav class="visualizer-product-switcher" aria-label="Visualizer product type">
+                <button class="product-tab visualizer-product-tab active" type="button" data-product-type="led" aria-pressed="true">LED Sign</button>
+                <button class="product-tab visualizer-product-tab" type="button" data-product-type="hype" aria-disabled="false">Hype Chain</button>
+                <button class="product-tab visualizer-product-tab product-tab-locked" type="button" data-product-type="plaque" aria-disabled="true" aria-describedby="productLockTooltip">
+                  <span class="product-lock" aria-hidden="true">🔒</span>
+                  <span>3D Plaque</span>
+                </button>
+              </nav>
             </div>
             <div class="preview-stats">
               <span id="sessionEmailStat">No email</span>
               <span id="dimensionStat">Large 13&quot; - Indoor</span>
+              <button class="tips-button" id="showTipsButton" type="button">Show tips</button>
               <button class="admin-login-button" id="adminLoginButton" type="button">Login</button>
+            </div>
+            <div class="preview-mode-controls" role="group" aria-label="Preview view mode">
+              <button class="preview-mode-button active" type="button" data-preview-mode="night" aria-pressed="true" aria-label="Night View"></button>
+              <button class="preview-mode-button" type="button" data-preview-mode="day" aria-pressed="false" aria-label="Day View"></button>
+              <button class="preview-mode-button" type="button" data-preview-mode="wall" aria-pressed="false" aria-label="Light" hidden></button>
             </div>
           </div>
           <div class="preview-alert" id="previewAlert" hidden></div>
@@ -224,6 +286,7 @@
             <button class="zoom-button" id="previewZoomReset" type="button" aria-label="Reset zoom">100%</button>
             <button class="zoom-button" id="previewZoomIn" type="button" aria-label="Zoom in">+</button>
           </div>
+          <p class="preview-gesture-hint" id="previewGestureHint">Drag to rotate &bull; Pinch to zoom</p>
           <div class="scene" id="scene">
             <div class="model-stack" id="modelStack">
               <div class="shadow"></div>
@@ -237,7 +300,7 @@
               <div class="side-wall model-layer offset-6"></div>
               <div class="side-wall model-layer offset-7"></div>
               <div class="side-wall model-layer offset-8"></div>
-              <svg id="frontSvg" class="front-face model-layer" viewBox="-500 -500 1000 1000" role="img" aria-label="Processed lightbox front"></svg>
+              <svg id="frontSvg" class="front-face model-layer" viewBox="-500 -500 1000 1000" role="img" aria-label="Processed LED Sign front"></svg>
               <div class="glow model-layer"></div>
             </div>
           </div>
@@ -258,24 +321,59 @@
 
       </section>
     </main>
-          <p class="build-version">Beta · Build 2026.05.15.01</p>
-
-    <div class="admin-gate hidden" id="adminGate" role="dialog" aria-modal="true" aria-labelledby="adminGateTitle">
-      <form class="admin-gate-card" id="adminGateForm" novalidate>
-        <p class="eyebrow">Admin mode</p>
-        <h2 id="adminGateTitle">Admin login</h2>
-        <label class="email-gate-field">
-          <span>Password</span>
-          <input id="adminPassword" type="password" name="adminPassword" autocomplete="current-password" required />
-        </label>
-        <p class="email-gate-error" id="adminGateError" role="alert"></p>
-        <div class="admin-gate-actions">
-          <button class="secondary-button" id="adminCancel" type="button">Cancel</button>
-          <button class="primary-button" type="submit">Login</button>
+    <div class="mobile-sheet-backdrop" id="mobileSheetBackdrop" hidden></div>
+    <div class="onboarding-overlay hidden" id="onboardingOverlay" aria-hidden="true">
+      <section class="onboarding-card" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle">
+        <p class="eyebrow">Quick start</p>
+        <h2 id="onboardingTitle">Create your custom piece</h2>
+        <ol class="onboarding-steps">
+          <li>
+            <span>1</span>
+            <div>
+              <strong>Upload your logo</strong>
+              <p>Start with a clear PNG or SVG.</p>
+            </div>
+          </li>
+          <li>
+            <span>2</span>
+            <div>
+              <strong>Customize your product</strong>
+              <p>Pick the style, size, and colours.</p>
+            </div>
+          </li>
+          <li>
+            <span>3</span>
+            <div>
+              <strong>Preview, save, or order</strong>
+              <p>Check the preview, then save or place your order.</p>
+            </div>
+          </li>
+        </ol>
+        <div class="onboarding-actions">
+          <button class="primary-button" id="onboardingDone" type="button">Got it</button>
         </div>
-      </form>
+      </section>
     </div>
-
+    <nav class="mobile-command-bar" id="mobileCommandBar" aria-label="Mobile Sign Studio actions">
+      <div class="mobile-command-summary" aria-live="polite">
+        <span id="mobileProductSummary">LED Sign</span>
+        <strong id="mobileSelectionSummary">Large 13&quot; - Indoor</strong>
+        <small id="mobileCheckoutReason" hidden>Upload a logo first</small>
+      </div>
+      <p class="mobile-command-confidence">
+        <span>Every design is reviewed before production.</span>
+        <span>You&rsquo;ll get a proof before we make it.</span>
+      </p>
+      <button class="mobile-command-primary" id="mobilePlaceOrder" type="button" disabled>Place Order</button>
+      <button class="mobile-command-button mobile-command-icon-button" id="mobileSaveProject" type="button" disabled aria-label="Save design">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 3h12l2 2v16H5z"></path>
+          <path d="M8 3v6h8V3"></path>
+          <path d="M8 17h8"></path>
+        </svg>
+      </button>
+      <button class="mobile-command-button" id="mobileCustomize" type="button" aria-controls="mobileControlSheet" aria-expanded="false">Customize</button>
+    </nav>
     <div class="admin-gate hidden" id="adminGate" role="dialog" aria-modal="true" aria-labelledby="adminGateTitle">
       <form class="admin-gate-card" id="adminGateForm" novalidate>
         <p class="eyebrow">Admin mode</p>
@@ -371,7 +469,7 @@
 
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script defer src="./assets/hype-chain/default-hype-chain-project.js?v=20260513-01"></script>
-    <script defer src="./app.js?v=20260514-14"></script>
+    <script defer src="./app.js?v=20260514-05"></script>
     <script defer src="./submit-fix.js?v=20260510-22"></script>
     <script defer src="./used-colours.js?v=20260513-09"></script>
   </body>

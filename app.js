@@ -54,11 +54,13 @@ const PROJECT_LOG_LIMIT = 12;
 const EMAIL_STORAGE_KEY = 'signGuyCustomerEmail';
 const EMAIL_MARKETING_SESSION_KEY = 'signGuyEmailMarketingSubscribers';
 const EMAIL_MARKETING_SOURCE = 'Sign Studio';
+const ONBOARDING_STORAGE_KEY = 'signGuyOnboardingDismissed';
 const ADMIN_SESSION_KEY = 'signGuyAdminMode';
 const LOCAL_ADMIN_PASSWORD = '77\\r(~68dKTE';
 const LOADING_MIN_VISIBLE_MS = 900;
 const MOBILE_PREVIEW_ZOOM_MIN = 0.75;
 const MOBILE_PREVIEW_ZOOM_MAX = 2.5;
+const MOBILE_SHEET_SWIPE_THRESHOLD = 44;
 const DESKTOP_PREVIEW_ZOOM_MIN = 0.55;
 const DESKTOP_PREVIEW_ZOOM_MAX = 2.4;
 const HYPE_CAMERA_DISTANCE = 1120;
@@ -101,6 +103,7 @@ const state = {
   customerEmail: '',
   isAdmin: false,
   productType: 'led',
+  previewMode: 'night',
   isDefaultPreview: false,
   size: 'large',
   usage: 'indoor',
@@ -138,11 +141,14 @@ const state = {
   previewZoom: 1,
   previewPan: { x: 0, y: 0 },
   previewTouchGestureActive: false,
+  viewportUpdateFrame: null,
   dismissedPreviewAlert: '',
   loadingReady: false,
   requiresEmailGate: false,
   studioInitialized: false,
   studioInitializing: null,
+  onboardingDismissedFallback: false,
+  onboardingPending: false,
   previewRenderTimer: null,
   hype: {
     initialized: false,
@@ -182,6 +188,22 @@ const els = {
   appShell: document.querySelector('.app-shell'),
   controlPanel: document.querySelector('.control-panel'),
   previewPanel: document.querySelector('.preview-panel'),
+  mobileCommandBar: document.querySelector('#mobileCommandBar'),
+  mobileControlSheet: document.querySelector('#mobileControlSheet'),
+  mobileSheetBackdrop: document.querySelector('#mobileSheetBackdrop'),
+  mobileSheetClose: document.querySelector('#mobileSheetClose'),
+  mobilePlaceOrder: document.querySelector('#mobilePlaceOrder'),
+  mobileSaveProject: document.querySelector('#mobileSaveProject'),
+  mobileCustomize: document.querySelector('#mobileCustomize'),
+  backToVisualizer: document.querySelector('#backToVisualizer'),
+  mobileProductSummary: document.querySelector('#mobileProductSummary'),
+  mobileSelectionSummary: document.querySelector('#mobileSelectionSummary'),
+  mobileCheckoutReason: document.querySelector('#mobileCheckoutReason'),
+  mobileAdvancedSection: document.querySelector('#mobileAdvancedSection'),
+  mobileAdvancedHeading: document.querySelector('#mobileAdvancedHeading'),
+  showTipsButton: document.querySelector('#showTipsButton'),
+  onboardingOverlay: document.querySelector('#onboardingOverlay'),
+  onboardingDone: document.querySelector('#onboardingDone'),
   productTabs: [...document.querySelectorAll('[data-product-type]')],
   ledStudioSections: [...document.querySelectorAll('.led-studio-section')],
   hypeChainControls: document.querySelector('#hypeChainControls'),
@@ -212,6 +234,7 @@ const els = {
   modelStack: document.querySelector('#modelStack'),
   stage: document.querySelector('#stage'),
   previewTitle: document.querySelector('#previewTitle'),
+  previewModeButtons: [...document.querySelectorAll('[data-preview-mode]')],
   editDesignName: document.querySelector('#editDesignName'),
   sessionEmailStat: document.querySelector('#sessionEmailStat'),
   dimensionStat: document.querySelector('#dimensionStat'),
@@ -323,7 +346,10 @@ async function initializeStudioApp() {
 
 async function initializeStudioAppOnce() {
   setupAdminMode();
+  setupMobileControlSheet();
+  setupOnboarding();
   setupProductSwitcher();
+  setupPreviewModeControls();
   setupHypeChainControls();
   els.chooseFile.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -384,6 +410,7 @@ async function initializeStudioAppOnce() {
   els.previewZoomOut.addEventListener('click', () => setPreviewZoom(state.previewZoom - 0.15));
   els.previewZoomIn.addEventListener('click', () => setPreviewZoom(state.previewZoom + 0.15));
   els.previewZoomReset.addEventListener('click', resetPreviewView);
+  els.backToVisualizer?.addEventListener('click', closeMobileControlSheet);
   els.stage.addEventListener('wheel', (event) => {
     event.preventDefault();
     setPreviewZoom(state.previewZoom + (event.deltaY < 0 ? 0.12 : -0.12));
@@ -408,6 +435,7 @@ async function initializeStudioAppOnce() {
   setupDragRotation();
   setupPreviewTouchGestures();
   setupProjectAccordion();
+  setupMobileAdvancedAccordion();
   setupCropInteraction();
   initThreeStage();
   updateStats();
@@ -527,6 +555,7 @@ function writeEmailMarketingSessionSet() {
 function renderSessionEmail() {
   if (!els.sessionEmailStat) return;
   els.sessionEmailStat.textContent = state.customerEmail || 'No email';
+  syncMobileCommandBar();
 }
 
 function setupAdminMode() {
@@ -552,9 +581,17 @@ function setupAdminMode() {
 
 function setupViewportUnits() {
   updateViewportUnits();
-  window.addEventListener('resize', updateViewportUnits);
-  window.visualViewport?.addEventListener('resize', updateViewportUnits);
-  window.visualViewport?.addEventListener('scroll', updateViewportUnits);
+  window.addEventListener('resize', scheduleViewportUnitsUpdate);
+  window.visualViewport?.addEventListener('resize', scheduleViewportUnitsUpdate);
+  window.visualViewport?.addEventListener('scroll', scheduleViewportUnitsUpdate);
+}
+
+function scheduleViewportUnitsUpdate() {
+  if (state.viewportUpdateFrame) return;
+  state.viewportUpdateFrame = window.requestAnimationFrame(() => {
+    state.viewportUpdateFrame = null;
+    updateViewportUnits();
+  });
 }
 
 function updateViewportUnits() {
@@ -607,7 +644,7 @@ function renderProductAccess() {
   if (!canAccessProduct(state.productType)) selectProductType('led');
 }
 
-function selectProductType(productType) {
+function selectProductType(productType, options = {}) {
   const next = canAccessProduct(productType) ? productType : 'led';
   state.productType = next;
   document.body.classList.toggle('product-led', next === 'led');
@@ -623,6 +660,11 @@ function selectProductType(productType) {
   els.plaqueStudio?.classList.toggle('hidden', next !== 'plaque');
   els.hypePreview?.classList.toggle('hidden', next !== 'hype');
   if (next === 'hype') {
+    renderPreviewTitle();
+    updateProductCta();
+    applyPreviewMode();
+    updateStats();
+    updateProjectControls();
     initializeHypeChainPreview();
     if (!state.hype.logoDataUrl && !state.hypeDefaultProjectLoading) {
       loadDefaultHypeChainProject();
@@ -635,14 +677,422 @@ function selectProductType(productType) {
     els.previewTitle.textContent = '3D Wall Plaque';
   }
   updateProductCta();
+  applyPreviewMode();
   updateStats();
   updateProjectControls();
   refreshProjectLog();
 }
 
+function setupPreviewModeControls() {
+  if (!els.stage || !els.previewModeButtons.length) return;
+  els.previewModeButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const mode = button.dataset.previewMode;
+      if (!['day', 'night', 'wall'].includes(mode)) return;
+      state.previewMode = mode;
+      applyPreviewMode();
+    });
+  });
+  applyPreviewMode();
+}
+
+function hasUploadedArtwork() {
+  const hasLedArtwork = Boolean(!state.isDefaultPreview && (state.uploadedFile || state.processed));
+  const hasHypeArtwork = Boolean(state.hype.logoDataUrl && !state.hype.isExampleProject);
+  return hasLedArtwork || hasHypeArtwork;
+}
+
+function setLedSize(size) {
+  if (!SIZE_PRESETS[size]) return;
+  state.size = size;
+  document.querySelectorAll('[data-size]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.size === size);
+  });
+}
+
+function setLedUsage(usage) {
+  if (!USAGE_PRESETS[usage]) return;
+  state.usage = usage;
+  document.querySelectorAll('[data-usage]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.usage === usage);
+  });
+}
+
+function applyPreviewMode() {
+  if (!els.stage) return;
+  let mode = ['day', 'night', 'wall'].includes(state.previewMode) ? state.previewMode : 'night';
+  if (state.productType === 'led' && mode === 'wall') mode = 'night';
+  if (state.productType === 'hype' && mode === 'day') mode = 'night';
+  state.previewMode = mode;
+  els.stage.classList.remove('preview-mode-day', 'preview-mode-night', 'preview-mode-wall');
+  els.stage.classList.add(`preview-mode-${mode}`);
+  els.previewModeButtons?.forEach((button) => {
+    const hidden = (state.productType === 'led' && button.dataset.previewMode === 'wall')
+      || (state.productType === 'hype' && button.dataset.previewMode === 'day');
+    button.hidden = hidden;
+    const active = button.dataset.previewMode === mode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    if (state.productType === 'hype') {
+      if (button.dataset.previewMode === 'night') {
+        button.innerHTML = getPreviewModeIcon('night');
+        button.setAttribute('aria-label', 'Dark');
+      }
+      if (button.dataset.previewMode === 'wall') {
+        button.innerHTML = getPreviewModeIcon('day');
+        button.setAttribute('aria-label', 'Light');
+      }
+    } else {
+      if (button.dataset.previewMode === 'night') {
+        button.innerHTML = getPreviewModeIcon('night');
+        button.setAttribute('aria-label', 'Night View');
+      }
+      if (button.dataset.previewMode === 'day') {
+        button.innerHTML = getPreviewModeIcon('day');
+        button.setAttribute('aria-label', 'Day View');
+      }
+    }
+  });
+  applyPreviewEnvironment();
+}
+
+function getPreviewModeIcon(type) {
+  if (type === 'day') {
+    return `
+      <svg class="preview-mode-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="4"></circle>
+        <path d="M12 2v2"></path>
+        <path d="M12 20v2"></path>
+        <path d="m4.93 4.93 1.41 1.41"></path>
+        <path d="m17.66 17.66 1.41 1.41"></path>
+        <path d="M2 12h2"></path>
+        <path d="M20 12h2"></path>
+        <path d="m6.34 17.66-1.41 1.41"></path>
+        <path d="m19.07 4.93-1.41 1.41"></path>
+      </svg>`;
+  }
+  return `
+    <svg class="preview-mode-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M21 14.6A8.6 8.6 0 0 1 9.4 3 7.7 7.7 0 1 0 21 14.6Z"></path>
+    </svg>`;
+}
+
+function getPreviewEnvironmentSettings() {
+  const mode = ['day', 'night', 'wall'].includes(state.previewMode) ? state.previewMode : 'night';
+  if (state.productType === 'hype') {
+    const hypeSettings = {
+      day: { exposure: 1.08, cameraScale: 1.02, hemi: 1.08, key: 0.92, rim: 0.32, floor: 0.22 },
+      night: { exposure: 0.98, cameraScale: 1, hemi: 0.54, key: 1.04, rim: 0.78, floor: 0.16 },
+      wall: { exposure: 1.06, cameraScale: 0.97, hemi: 0.86, key: 0.9, rim: 0.64, floor: 0.18 },
+    };
+    return hypeSettings[mode] || hypeSettings.night;
+  }
+  const ledSettings = {
+    day: { exposure: 1.08, cameraScale: 1.02, hemi: 1.08, key: 0.88, rim: 0.42, floor: 0.24, glow: 0.52, wallHalo: 0.42, contact: 0.82, cast: 0.58, wall: 0.72 },
+    night: { exposure: 1.04, cameraScale: 1, hemi: 0.68, key: 0.72, rim: 0.82, floor: 0.18, glow: 1.38, wallHalo: 1.52, contact: 1, cast: 1.08, wall: 1 },
+    wall: { exposure: 1.02, cameraScale: 1.12, hemi: 0.9, key: 0.76, rim: 0.46, floor: 0.12, glow: 0.96, wallHalo: 2.12, contact: 0.44, cast: 0.28, wall: 1.68 },
+  };
+  return ledSettings[mode] || ledSettings.night;
+}
+
+function applyPreviewEnvironment() {
+  const settings = getPreviewEnvironmentSettings();
+  if (state.three?.renderer) {
+    state.three.renderer.toneMappingExposure = settings.exposure || 1.04;
+    const lights = state.three.environmentLights;
+    if (lights) {
+      lights.hemi.intensity = settings.hemi;
+      lights.key.intensity = settings.key;
+      lights.rim.intensity = settings.rim;
+      lights.floorFill.intensity = settings.floor;
+    }
+    applyPreviewZoom({ render: false });
+    updateFloorEffects();
+    renderThree();
+  }
+  if (state.hypeThree?.renderer) {
+    state.hypeThree.renderer.toneMappingExposure = settings.exposure || 1.02;
+    const lights = state.hypeThree.environmentLights;
+    if (lights) {
+      lights.hemi.intensity = settings.hemi;
+      lights.key.intensity = settings.key;
+      lights.rim.intensity = settings.rim;
+    }
+    frameHypeCamera({ smooth: true });
+    renderHypeThree();
+  }
+}
+
 function updateProductCta() {
   if (!els.placeOrder) return;
   els.placeOrder.textContent = state.productType === 'hype' ? 'Place Order' : 'Place Order';
+  syncMobileCommandBar();
+}
+
+function setupMobileControlSheet() {
+  if (!els.mobileControlSheet || !els.mobileCustomize) return;
+  updateMobileControlAccessibility();
+  els.mobileCustomize.addEventListener('click', () => openMobileControlSheet());
+  els.mobileSheetClose?.addEventListener('click', () => closeMobileControlSheet());
+  els.mobileSheetBackdrop?.addEventListener('click', () => closeMobileControlSheet());
+  els.mobilePlaceOrder?.addEventListener('click', () => {
+    if (!els.placeOrder?.disabled) els.placeOrder.click();
+  });
+  els.mobileSaveProject?.addEventListener('click', () => {
+    if (!els.saveProject?.disabled) els.saveProject.click();
+  });
+  setupMobileControlSheetSwipeGestures();
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && document.body.classList.contains('mobile-controls-open')) {
+      closeMobileControlSheet();
+    }
+  });
+  [els.placeOrder, els.saveProject].forEach((button) => {
+    if (!button) return;
+    const observer = new MutationObserver(syncMobileCommandBar);
+    observer.observe(button, { attributes: true, attributeFilter: ['disabled'], childList: true, subtree: true });
+  });
+  window.addEventListener('resize', updateMobileControlAccessibility);
+  syncMobileCommandBar();
+}
+
+function setupMobileControlSheetSwipeGestures() {
+  const sheetHeader = els.mobileControlSheet?.querySelector('.mobile-sheet-header');
+
+  attachMobileVerticalSwipe(els.mobileCommandBar, {
+    direction: 'up',
+    onSwipe: () => openMobileControlSheet(),
+  });
+
+  attachMobileVerticalSwipe(sheetHeader, {
+    direction: 'down',
+    onSwipe: () => closeMobileControlSheet(),
+  });
+}
+
+function attachMobileVerticalSwipe(element, options = {}) {
+  if (!element) return;
+  let gesture = null;
+  let suppressClick = false;
+
+  element.addEventListener('pointerdown', (event) => {
+    if (!isMobileControlLayout() || (event.pointerType && event.pointerType !== 'touch')) return;
+    gesture = {
+      id: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      active: false,
+    };
+    try {
+      element.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture can fail if the touch sequence is interrupted.
+    }
+  });
+
+  element.addEventListener('pointermove', (event) => {
+    if (!gesture || event.pointerId !== gesture.id) return;
+    const dx = event.clientX - gesture.startX;
+    const dy = event.clientY - gesture.startY;
+    if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx) * 1.25) {
+      gesture.active = true;
+      event.preventDefault();
+    }
+  });
+
+  const finish = (event) => {
+    if (!gesture || event.pointerId !== gesture.id) return;
+    const dx = event.clientX - gesture.startX;
+    const dy = event.clientY - gesture.startY;
+    const isVertical = Math.abs(dy) > Math.abs(dx) * 1.25;
+    const swipedUp = options.direction === 'up' && dy <= -MOBILE_SHEET_SWIPE_THRESHOLD;
+    const swipedDown = options.direction === 'down' && dy >= MOBILE_SHEET_SWIPE_THRESHOLD;
+    if (gesture.active && isVertical && (swipedUp || swipedDown)) {
+      suppressClick = true;
+      options.onSwipe?.();
+      window.setTimeout(() => {
+        suppressClick = false;
+      }, 250);
+    }
+    gesture = null;
+  };
+
+  element.addEventListener('pointerup', finish);
+  element.addEventListener('pointercancel', () => {
+    gesture = null;
+  });
+  element.addEventListener('lostpointercapture', () => {
+    gesture = null;
+  });
+  element.addEventListener('click', (event) => {
+    if (!suppressClick) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
+}
+
+function isMobileControlLayout() {
+  return window.matchMedia?.('(max-width: 880px)').matches;
+}
+
+function updateMobileControlAccessibility() {
+  if (!els.mobileControlSheet) return;
+  if (!isMobileControlLayout()) {
+    document.body.classList.remove('mobile-controls-open');
+    els.mobileControlSheet.removeAttribute('aria-hidden');
+    els.mobileControlSheet.inert = false;
+    if (els.mobileSheetBackdrop) els.mobileSheetBackdrop.hidden = true;
+    els.mobileCustomize?.setAttribute('aria-expanded', 'false');
+    return;
+  }
+  const open = document.body.classList.contains('mobile-controls-open');
+  els.mobileControlSheet.setAttribute('aria-hidden', open ? 'false' : 'true');
+  els.mobileControlSheet.inert = !open;
+}
+
+function openMobileControlSheet(options = {}) {
+  closeOnboarding();
+  document.body.classList.add('mobile-controls-open');
+  els.mobileControlSheet?.setAttribute('aria-hidden', 'false');
+  if (els.mobileControlSheet) els.mobileControlSheet.inert = false;
+  els.mobileCustomize?.setAttribute('aria-expanded', 'true');
+  if (els.mobileSheetBackdrop) els.mobileSheetBackdrop.hidden = false;
+  if (options.focusProjectSection) {
+    setProjectSectionExpanded(true);
+    window.setTimeout(() => {
+      els.projectSection?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }, 120);
+  }
+}
+
+function closeMobileControlSheet() {
+  document.body.classList.remove('mobile-controls-open');
+  if (isMobileControlLayout()) {
+    els.mobileControlSheet?.setAttribute('aria-hidden', 'true');
+    if (els.mobileControlSheet) els.mobileControlSheet.inert = true;
+  } else {
+    els.mobileControlSheet?.removeAttribute('aria-hidden');
+    if (els.mobileControlSheet) els.mobileControlSheet.inert = false;
+  }
+  els.mobileCustomize?.setAttribute('aria-expanded', 'false');
+  if (els.mobileSheetBackdrop) els.mobileSheetBackdrop.hidden = true;
+}
+
+function setProjectSectionExpanded(expanded) {
+  if (!els.projectSection || !els.projectSectionHeading) return;
+  els.projectSection.classList.toggle('mobile-expanded', expanded);
+  els.projectSection.classList.toggle('mobile-collapsed', !expanded);
+  els.projectSectionHeading.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+}
+
+function setMobileAdvancedExpanded(expanded) {
+  if (!els.mobileAdvancedSection || !els.mobileAdvancedHeading) return;
+  els.mobileAdvancedSection.classList.toggle('mobile-expanded', expanded);
+  els.mobileAdvancedSection.classList.toggle('mobile-collapsed', !expanded);
+  els.mobileAdvancedHeading.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+}
+
+function syncMobileCommandBar() {
+  if (els.mobilePlaceOrder && els.placeOrder) {
+    els.mobilePlaceOrder.disabled = els.placeOrder.disabled;
+    els.mobilePlaceOrder.textContent = 'Place Order';
+  }
+  if (els.mobileSaveProject && els.saveProject) {
+    els.mobileSaveProject.disabled = els.saveProject.disabled;
+  }
+  if (els.mobileProductSummary) {
+    els.mobileProductSummary.textContent = state.productType === 'hype' ? 'Hype Chain' : 'LED Sign';
+  }
+  if (els.mobileSelectionSummary) {
+    els.mobileSelectionSummary.textContent = getMobileCheckoutSelectionLabel();
+  }
+  if (els.mobileCheckoutReason && els.placeOrder) {
+    const reason = els.placeOrder.disabled ? getMobilePlaceOrderDisabledReason() : '';
+    els.mobileCheckoutReason.textContent = reason;
+    els.mobileCheckoutReason.hidden = !reason;
+  }
+}
+
+function getMobileCheckoutSelectionLabel() {
+  if (state.productType === 'hype') {
+    return 'Custom pendant chain';
+  }
+  const preset = SIZE_PRESETS[state.size] || SIZE_PRESETS.large;
+  const usage = USAGE_PRESETS[state.usage] || USAGE_PRESETS.indoor;
+  return `${preset.label} - ${usage.label}`;
+}
+
+function getMobilePlaceOrderDisabledReason() {
+  if (state.productType === 'hype') {
+    if (!state.hype.logoDataUrl || state.hype.isExampleProject) return 'Upload a logo first';
+  } else if (!state.uploadedFile || !state.artwork || !state.processed) {
+    return 'Upload a logo first';
+  }
+  if (!state.customerEmail) return 'Enter your email first';
+  return 'Finish required options';
+}
+
+function setupOnboarding() {
+  if (!els.onboardingOverlay) return;
+  els.showTipsButton?.addEventListener('click', () => openOnboarding({ manual: true }));
+  els.onboardingDone?.addEventListener('click', dismissOnboarding);
+  els.onboardingOverlay.addEventListener('click', (event) => {
+    if (event.target === els.onboardingOverlay) dismissOnboarding();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !els.onboardingOverlay.classList.contains('hidden')) {
+      dismissOnboarding();
+    }
+  });
+  window.setTimeout(() => {
+    if (!hasDismissedOnboarding()) openOnboarding({ deferIfBlocked: true });
+  }, 500);
+}
+
+function hasDismissedOnboarding() {
+  try {
+    return localStorage.getItem(ONBOARDING_STORAGE_KEY) === 'true';
+  } catch {
+    return state.onboardingDismissedFallback;
+  }
+}
+
+function openOnboarding(options = {}) {
+  if (!els.onboardingOverlay) return;
+  if (!options.manual && isOnboardingBlocked()) {
+    if (options.deferIfBlocked) state.onboardingPending = true;
+    return;
+  }
+  state.onboardingPending = false;
+  closeMobileControlSheet();
+  els.onboardingOverlay.classList.remove('hidden');
+  els.onboardingOverlay.setAttribute('aria-hidden', 'false');
+  window.setTimeout(() => els.onboardingDone?.focus(), 0);
+}
+
+function isOnboardingBlocked() {
+  return document.body.classList.contains('wizard-open') || !els.adminGate?.classList.contains('hidden');
+}
+
+function maybeOpenPendingOnboarding() {
+  if (!state.onboardingPending || hasDismissedOnboarding() || isOnboardingBlocked()) return;
+  openOnboarding();
+}
+
+function closeOnboarding() {
+  els.onboardingOverlay?.classList.add('hidden');
+  els.onboardingOverlay?.setAttribute('aria-hidden', 'true');
+}
+
+function dismissOnboarding() {
+  try {
+    localStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
+  } catch {
+    // Local storage can be unavailable in some private or embedded contexts.
+  }
+  state.onboardingDismissedFallback = true;
+  state.onboardingPending = false;
+  closeOnboarding();
 }
 
 function setupHypeChainControls() {
@@ -700,7 +1150,11 @@ function setupHypeChainControls() {
 function initializeHypeChainPreview() {
   if (state.hype.initialized) return;
   state.hype.initialized = true;
-  initHypeThreeStage();
+  try {
+    initHypeThreeStage();
+  } catch (error) {
+    console.warn('Could not initialize Hype Chain WebGL preview; using CSS fallback.', error);
+  }
   els.hypePreview?.classList.add('loading');
   window.setTimeout(() => {
     els.hypePreview?.classList.remove('loading');
@@ -801,6 +1255,7 @@ function initHypeThreeStage() {
     renderer,
     scene,
     camera,
+    environmentLights: { hemi, key, rim },
     group: null,
     pendantGroup: null,
     focusLocal: null,
@@ -808,23 +1263,41 @@ function initHypeThreeStage() {
     cameraTween: null,
     resources: [],
     resizeObserver: null,
+    resizeFrame: null,
+    resizeWidth: 0,
+    resizeHeight: 0,
     stlGeometries: null,
     stlLoadPromise: null,
   };
+  applyPreviewEnvironment();
   els.hypePreview.classList.add('hype-three-active');
   resizeHypeThree();
   if (window.ResizeObserver) {
-    state.hypeThree.resizeObserver = new ResizeObserver(() => resizeHypeThree());
+    state.hypeThree.resizeObserver = new ResizeObserver(() => scheduleHypeThreeResize());
     state.hypeThree.resizeObserver.observe(els.hypePreview);
   }
-  window.addEventListener('resize', resizeHypeThree);
+  window.addEventListener('resize', scheduleHypeThreeResize);
+}
+
+function scheduleHypeThreeResize() {
+  if (!state.hypeThree || state.hypeThree.resizeFrame) return;
+  state.hypeThree.resizeFrame = window.requestAnimationFrame(() => {
+    if (!state.hypeThree) return;
+    state.hypeThree.resizeFrame = null;
+    resizeHypeThree();
+  });
 }
 
 function resizeHypeThree() {
   if (!state.hypeThree || !els.hypePreview) return;
   const rect = els.hypePreview.getBoundingClientRect();
-  state.hypeThree.renderer.setSize(Math.max(1, rect.width), Math.max(1, rect.height), false);
-  state.hypeThree.camera.aspect = Math.max(1, rect.width) / Math.max(1, rect.height);
+  const width = Math.max(1, Math.round(rect.width));
+  const height = Math.max(1, Math.round(rect.height));
+  if (state.hypeThree.resizeWidth === width && state.hypeThree.resizeHeight === height) return;
+  state.hypeThree.resizeWidth = width;
+  state.hypeThree.resizeHeight = height;
+  state.hypeThree.renderer.setSize(width, height, false);
+  state.hypeThree.camera.aspect = width / height;
   state.hypeThree.camera.near = HYPE_CAMERA_NEAR;
   state.hypeThree.camera.far = HYPE_CAMERA_FAR;
   frameHypeCamera();
@@ -882,7 +1355,7 @@ function frameHypeCamera(options = {}) {
   const target = state.hypeThree.focusTarget || new THREE.Vector3(0, HYPE_CAMERA_TARGET_Y, 0);
   const limits = getPreviewZoomLimits();
   const zoom = clamp(Number(state.previewZoom) || 1, limits.min, limits.max);
-  const distance = HYPE_CAMERA_DISTANCE / zoom;
+  const distance = (HYPE_CAMERA_DISTANCE * (getPreviewEnvironmentSettings().cameraScale || 1)) / zoom;
   const viewTarget = new THREE.Vector3(target.x, target.y + HYPE_CAMERA_VIEW_OFFSET_Y, target.z);
   const nextPosition = new THREE.Vector3(viewTarget.x, viewTarget.y + 36, viewTarget.z + distance);
   if (!options.smooth || typeof window.requestAnimationFrame !== 'function') {
@@ -2058,7 +2531,11 @@ function setupHypeDrag() {
     velocityX = 0;
     velocityY = 0;
     els.hypeChainRender.classList.add('dragging');
-    els.hypePreview.setPointerCapture(event.pointerId);
+    try {
+      els.hypePreview.setPointerCapture(event.pointerId);
+    } catch {
+      // Some synthetic or interrupted touch streams do not have an active pointer to capture.
+    }
   });
   const move = (event) => {
     if (!dragging) return;
@@ -2102,6 +2579,7 @@ function normalizeDegrees(value) {
 
 function openAdminGate() {
   if (!els.adminGate || !els.adminPassword) return;
+  closeOnboarding();
   els.adminGate.classList.remove('hidden', 'invalid');
   if (els.adminGateError) els.adminGateError.textContent = '';
   els.adminPassword.value = '';
@@ -2110,6 +2588,7 @@ function openAdminGate() {
 
 function closeAdminGate() {
   els.adminGate?.classList.add('hidden');
+  maybeOpenPendingOnboarding();
 }
 
 async function loginAdmin() {
@@ -2210,7 +2689,11 @@ function setupDragRotation() {
     event.preventDefault();
     dragging = true;
     start = { x: event.clientX, y: event.clientY, rx: state.rotation.x, ry: state.rotation.y };
-    els.stage.setPointerCapture(event.pointerId);
+    try {
+      els.stage.setPointerCapture(event.pointerId);
+    } catch {
+      // Some synthetic or interrupted touch streams do not have an active pointer to capture.
+    }
   });
   els.stage.addEventListener('pointermove', (event) => {
     if (!dragging) return;
@@ -2234,14 +2717,31 @@ function setupDragRotation() {
 function setupPreviewTouchGestures() {
   if (!els.stage) return;
   let gesture = null;
+  let tapStart = null;
+  let lastTapAt = 0;
   const getTouches = (event) => [...event.touches].slice(0, 2);
   const getDistance = ([first, second]) => Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
   const getMidpoint = ([first, second]) => ({
     x: (first.clientX + second.clientX) / 2,
     y: (first.clientY + second.clientY) / 2,
   });
+  const isPreviewGestureTarget = (target) => (
+    target instanceof Element
+      && !target.closest('button, label, input, select, textarea, .preview-alert, .control-panel, .mobile-command-bar')
+  );
   const startGesture = (event) => {
-    if (event.touches.length < 2 || event.target.closest('button, label, input, select, textarea, .preview-alert')) return;
+    if (!isPreviewGestureTarget(event.target)) return;
+    if (event.touches.length === 1) {
+      const [touch] = getTouches(event);
+      tapStart = {
+        x: touch.clientX,
+        y: touch.clientY,
+        at: performance.now(),
+      };
+      return;
+    }
+    tapStart = null;
+    if (event.touches.length < 2) return;
     const touches = getTouches(event);
     const midpoint = getMidpoint(touches);
     gesture = {
@@ -2276,20 +2776,51 @@ function setupPreviewTouchGestures() {
     }, 60);
   };
   els.stage.addEventListener('touchend', (event) => {
+    if (!gesture && tapStart && event.touches.length === 0 && event.changedTouches.length === 1) {
+      const [touch] = [...event.changedTouches];
+      const now = performance.now();
+      const moved = Math.hypot(touch.clientX - tapStart.x, touch.clientY - tapStart.y);
+      const elapsed = now - tapStart.at;
+      if (moved < 18 && elapsed < 260) {
+        if (now - lastTapAt < 320) {
+          event.preventDefault();
+          resetGesturePreviewView();
+          lastTapAt = 0;
+        } else {
+          lastTapAt = now;
+        }
+      }
+      tapStart = null;
+    }
     if (event.touches.length < 2) stopGesture();
   });
-  els.stage.addEventListener('touchcancel', stopGesture);
+  els.stage.addEventListener('touchcancel', () => {
+    tapStart = null;
+    stopGesture();
+  });
 }
 
 function setupProjectAccordion() {
   if (!els.projectSection || !els.projectSectionHeading) return;
   const toggle = () => {
-    const expanded = els.projectSection.classList.toggle('mobile-expanded');
-    els.projectSection.classList.toggle('mobile-collapsed', !expanded);
-    els.projectSectionHeading.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    setProjectSectionExpanded(!els.projectSection.classList.contains('mobile-expanded'));
   };
   els.projectSectionHeading.addEventListener('click', toggle);
   els.projectSectionHeading.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    toggle();
+  });
+}
+
+function setupMobileAdvancedAccordion() {
+  if (!els.mobileAdvancedSection || !els.mobileAdvancedHeading) return;
+  setMobileAdvancedExpanded(false);
+  const toggle = () => {
+    setMobileAdvancedExpanded(!els.mobileAdvancedSection.classList.contains('mobile-expanded'));
+  };
+  els.mobileAdvancedHeading.addEventListener('click', toggle);
+  els.mobileAdvancedHeading.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
     toggle();
@@ -2640,7 +3171,7 @@ async function loadDefaultPreview() {
     resetRotation();
     state.rotation = { x: 0, y: -18, z: 0 };
     initEditState(artwork);
-    state.processed = processArtwork(artwork);
+    state.processed = processArtwork(artwork, { maxSide: 420 });
     if (state.processed.naturalColourCount) state.targetColorCount = state.processed.naturalColourCount;
     syncColorOverrides();
     renderPreview();
@@ -2812,6 +3343,8 @@ function cropFromBounds(bounds, width, height, padRatio = 0.04) {
 }
 
 function openWizard(step) {
+  closeMobileControlSheet();
+  closeOnboarding();
   state.wizardStep = step;
   document.body.classList.add('wizard-open');
   updateViewportUnits();
@@ -2826,11 +3359,13 @@ function closeWizard() {
   document.body.classList.remove('wizard-open');
   els.wizard.classList.add('hidden');
   els.wizard.setAttribute('aria-hidden', 'true');
+  maybeOpenPendingOnboarding();
 }
 
 function renderWizardStep() {
   if (!state.wizardStep || !state.artwork) return;
   closeColourPopover();
+  els.wizard.dataset.step = state.wizardStep;
   if (state.wizardStep === 'edit') renderEditStep();
   if (state.wizardStep === 'vector') renderVectorStep();
   if (state.wizardStep === 'mapping') renderMappingStep();
@@ -2838,8 +3373,8 @@ function renderWizardStep() {
 }
 
 function renderEditStep() {
+  if (isResponsiveViewport()) state.edit.cropAspect = 'free';
   els.wizardTitle.textContent = 'Edit Your Image';
-  if (isMobilePreviewViewport()) state.edit.cropAspect = 'free';
   els.wizardImage.onload = () => updateCropBox();
   els.wizardImage.src = renderEditArtworkPreviewUrl(state.artwork);
   els.wizardImage.style.setProperty('--wizard-zoom', state.edit.zoom);
@@ -2847,8 +3382,8 @@ function renderEditStep() {
   els.cropBox.classList.toggle('circle', state.edit.cropAspect === 'circle');
   els.previewTools.classList.remove('hidden');
   els.wizardSide.innerHTML = `
-    <h3 class="crop-settings-title">Crop</h3>
-    <div class="crop-presets">
+    <h3 class="wizard-crop-controls">Crop</h3>
+    <div class="crop-presets wizard-crop-controls">
       ${CROP_PRESETS.map((preset) => `
         <button class="crop-preset ${state.edit.cropAspect === preset.id ? 'active' : ''}" type="button" data-crop-preset="${preset.id}">
           <span class="crop-icon ${preset.icon}"></span>
@@ -2860,12 +3395,12 @@ function renderEditStep() {
       <span>Remove Background</span>
       <input id="wizardRemoveBg" type="checkbox" ${state.removeBg ? 'checked' : ''} />
     </label>
-    <p class="wizard-helper-text">Enable if your image does not already have a transparent checkerboard background.</p>
+    <p class="wizard-helper-text">Use this if your image background is solid, white, or not transparent.</p>
     <label class="switch-row">
       <span>Fix floating regions</span>
       <input id="wizardFixFloatingRegions" type="checkbox" ${state.fixFloatingRegions ? 'checked' : ''} />
     </label>
-    <p class="wizard-helper-text">Enable if your logo has floating pieces disconnected from the main shape.</p>
+    <p class="wizard-helper-text">Use this if your logo has separate pieces that are not connected to the main shape.</p>
   `;
   els.wizardFooter.innerHTML = `
     <button class="secondary-button" type="button" data-wizard-action="cancel">Cancel</button>
@@ -2939,8 +3474,8 @@ function renderVectorStep() {
     <h3>Vectorized result</h3>
     <p>The artwork has been flattened into printable colour regions and a custom outer silhouette. If this does not look right, try again or go back to crop/background cleanup.</p>
     <div class="detail-list vector-summary-list">
-      <div class="detail-row"><span class="map-number">${state.processed?.colours.length || 0}</span><span>detected colours</span><strong>max 8</strong></div>
-      <div class="detail-row"><span class="map-number">${state.tolerance}</span><span>merge tolerance</span><strong>auto</strong></div>
+      <div class="detail-row vector-summary-row"><span class="map-number">${state.processed?.colours.length || 0}</span><span>detected colours</span><strong>max 8</strong></div>
+      <div class="detail-row vector-summary-row"><span class="map-number">${state.tolerance}</span><span>merge tolerance</span><strong>auto</strong></div>
     </div>
     ${renderMappingControlsMarkup()}
   `;
@@ -3799,21 +4334,49 @@ function initThreeStage() {
   floor.receiveShadow = true;
   scene.add(floor);
 
-  state.three = { renderer, scene, camera, floor, group: null, floorGroup: null, resources: [], resizeObserver: null };
+  state.three = {
+    renderer,
+    scene,
+    camera,
+    environmentLights: { hemi, key, rim, floorFill },
+    floor,
+    group: null,
+    floorGroup: null,
+    resources: [],
+    resizeObserver: null,
+    resizeFrame: null,
+    resizeWidth: 0,
+    resizeHeight: 0,
+  };
+  applyPreviewEnvironment();
   resizeThree();
-  window.addEventListener('resize', resizeThree);
+  window.addEventListener('resize', scheduleThreeResize);
   if (window.ResizeObserver) {
-    state.three.resizeObserver = new ResizeObserver(() => resizeThree());
+    state.three.resizeObserver = new ResizeObserver(() => scheduleThreeResize());
     state.three.resizeObserver.observe(els.stage);
   }
   renderThree();
 }
 
+function scheduleThreeResize() {
+  if (!state.three || state.three.resizeFrame) return;
+  state.three.resizeFrame = window.requestAnimationFrame(() => {
+    if (!state.three) return;
+    state.three.resizeFrame = null;
+    resizeThree();
+  });
+}
+
 function resizeThree() {
   if (!state.three) return;
   const rect = els.stage.getBoundingClientRect();
-  state.three.renderer.setSize(Math.max(1, rect.width), Math.max(1, rect.height), false);
-  state.three.camera.aspect = Math.max(1, rect.width) / Math.max(1, rect.height);
+  const width = Math.max(1, Math.round(rect.width));
+  const height = Math.max(1, Math.round(rect.height));
+  if (state.three.resizeWidth === width && state.three.resizeHeight === height) return;
+  state.three.resizeWidth = width;
+  state.three.resizeHeight = height;
+  state.three.renderer.setSize(width, height, false);
+  state.three.camera.aspect = width / height;
   applyPreviewZoom();
   updateThreeModelPosition();
   state.three.camera.updateProjectionMatrix();
@@ -3840,6 +4403,7 @@ function applyIllumination() {
     lighting.keyholeInteriorMaterial.opacity = state.illuminated ? 1 : 0.54;
     lighting.keyholeInteriorMaterial.color.copy(makeThreeColour(state.illuminated ? '#ffffff' : '#343838'));
     updateFloorEffects();
+    applyPreviewEnvironment();
     renderThree();
   }
 }
@@ -3854,18 +4418,19 @@ function setPreviewZoom(value, options = {}) {
   const limits = getPreviewZoomLimits();
   state.previewZoom = clamp(Number(value) || 1, limits.min, limits.max);
   state.previewPan = clampPreviewPan(state.previewPan);
-  applyPreviewZoom();
+  applyPreviewZoom(options);
   if (options.render === false) return;
   renderActivePreviewFrame();
 }
 
-function applyPreviewZoom() {
+function applyPreviewZoom(options = {}) {
   const limits = getPreviewZoomLimits();
   const zoom = clamp(Number(state.previewZoom) || 1, limits.min, limits.max);
   state.previewZoom = zoom;
   if (els.previewZoomReset) els.previewZoomReset.textContent = isMobilePreviewViewport() ? 'Reset View' : `${Math.round(zoom * 100)}%`;
   if (state.three?.camera) {
-    state.three.camera.position.z = 430 / zoom;
+    const cameraScale = state.productType === 'led' ? (getPreviewEnvironmentSettings().cameraScale || 1) : 1;
+    state.three.camera.position.z = (430 * cameraScale) / zoom;
     state.three.camera.lookAt(0, 0, 0);
     state.three.camera.updateProjectionMatrix();
     updateThreeModelPosition();
@@ -3873,7 +4438,8 @@ function applyPreviewZoom() {
   if (state.hypeThree?.camera) {
     state.hypeThree.camera.near = HYPE_CAMERA_NEAR;
     state.hypeThree.camera.far = HYPE_CAMERA_FAR;
-    frameHypeCamera({ smooth: state.productType === 'hype' });
+    const smooth = options.smooth ?? (state.productType === 'hype' && !state.previewTouchGestureActive);
+    frameHypeCamera({ smooth });
     state.hypeThree.camera.updateProjectionMatrix();
   }
   if (els.modelStack) {
@@ -3931,6 +4497,21 @@ function resetPreviewView() {
   renderActivePreviewFrame();
 }
 
+function resetGesturePreviewView() {
+  state.previewZoom = 1;
+  state.previewPan = { x: 0, y: 0 };
+  if (state.productType === 'hype') {
+    state.hype.rotation = { x: -6, y: 0 };
+    updateHypeCssRotation();
+    updateHypeThreeRotation();
+  } else {
+    state.rotation = { x: 0, y: 0, z: 0 };
+  }
+  applyPreviewZoom();
+  applyPreviewPan();
+  renderActivePreviewFrame();
+}
+
 function renderActivePreviewFrame() {
   if (state.productType === 'hype') renderHypeThree();
   else renderThree();
@@ -3963,7 +4544,7 @@ function updateThreeModelPosition() {
 
 function getThreeModelYOffset(bounds = null) {
   if (!bounds) return isResponsiveViewport() ? -26 : 10;
-  const floorY = isResponsiveViewport() ? -94 : -74;
+  const floorY = isResponsiveViewport() ? -68 : -74;
   return floorY - bounds.minY;
 }
 
@@ -3972,7 +4553,7 @@ function isResponsiveViewport() {
 }
 
 function isMobilePreviewViewport() {
-  return window.matchMedia('(max-width: 768px), (max-width: 900px) and (max-height: 560px), (pointer: coarse)').matches;
+  return window.matchMedia('(max-width: 768px)').matches;
 }
 
 function buildThreeModel() {
@@ -4334,14 +4915,20 @@ function updateFloorEffects() {
   const frontAmount = clamp((Math.cos(yaw) + 1) / 2, 0, 1);
   const lit = state.illuminated ? 1 : 0;
   const lighting = state.three.group?.userData?.lighting;
+  const environment = getPreviewEnvironmentSettings();
+  const glowMultiplier = environment.glow ?? 1;
+  const wallHaloMultiplier = environment.wallHalo ?? 1;
+  const contactMultiplier = environment.contact ?? 1;
+  const castMultiplier = environment.cast ?? 1;
+  const wallMultiplier = environment.wall ?? 1;
 
   if (lighting) {
-    const diffuserStrength = lit ? 0.045 + frontAmount * 0.014 + sideAmount * 0.01 : 0.014;
-    const edgeGlowStrength = lit ? 0.024 + frontAmount * 0.01 + sideAmount * 0.01 : 0.004;
+    const diffuserStrength = (lit ? 0.045 + frontAmount * 0.014 + sideAmount * 0.01 : 0.014) * glowMultiplier;
+    const edgeGlowStrength = (lit ? 0.024 + frontAmount * 0.01 + sideAmount * 0.01 : 0.004) * glowMultiplier;
     lighting.illuminatedFaceMaterial.opacity = lit ? 0.004 + frontAmount * 0.005 : 0;
-    lighting.diffusionMaterial.opacity = diffuserStrength;
-    lighting.glowMaterial.opacity = edgeGlowStrength;
-    lighting.innerLight.intensity = lit ? 0.032 + sideAmount * 0.012 : 0.004;
+    lighting.diffusionMaterial.opacity = clamp(diffuserStrength, 0.004, 0.09);
+    lighting.glowMaterial.opacity = clamp(edgeGlowStrength, 0.002, 0.07);
+    lighting.innerLight.intensity = lit ? (0.032 + sideAmount * 0.012) * glowMultiplier : 0.004;
     const faceBrightness = lit ? 0.965 + sideAmount * 0.01 : 0.74;
     lighting.faceMaterial.color.setRGB(faceBrightness, faceBrightness, faceBrightness);
     lighting.faceMaterial.emissiveIntensity = lit ? 0.003 + sideAmount * 0.004 : 0.0015;
@@ -4349,8 +4936,8 @@ function updateFloorEffects() {
     lighting.sideMaterial.emissiveIntensity = lit ? 0.08 + sideAmount * 0.035 : 0.018;
     lighting.frontBackerMaterial.emissiveIntensity = lit ? 0.075 + sideAmount * 0.03 : 0.014;
     lighting.backMaterial.emissiveIntensity = lit ? 0.04 : 0.008;
-    lighting.wallOcclusionMaterial.opacity = 0.2 + sideAmount * 0.16 + topAmount * 0.04 - lit * frontAmount * 0.035;
-    lighting.wallHaloMaterial.opacity = lit ? 0.08 + frontAmount * 0.06 + sideAmount * 0.025 : 0.004;
+    lighting.wallOcclusionMaterial.opacity = clamp((0.2 + sideAmount * 0.16 + topAmount * 0.04 - lit * frontAmount * 0.035) * wallMultiplier, 0.08, 0.58);
+    lighting.wallHaloMaterial.opacity = (lit ? 0.08 + frontAmount * 0.06 + sideAmount * 0.025 : 0.004) * wallHaloMultiplier;
     lighting.keyholeInteriorMaterial.opacity = lit ? 1 : 0.54;
     lighting.keyholeInteriorMaterial.color.copy(makeThreeColour(lit ? '#ffffff' : '#343838'));
   }
@@ -4369,7 +4956,7 @@ function updateFloorEffects() {
     );
     floorGlow.rotation.z = yawSide * 0.06;
     floorGlow.scale.set(0.95 + sideAmount * 0.32, 0.86 + topAmount * 0.12, 1);
-    floorGlow.material.opacity = lit ? 0.28 + frontAmount * 0.08 : 0.01;
+    floorGlow.material.opacity = (lit ? 0.28 + frontAmount * 0.08 : 0.01) * glowMultiplier;
   }
 
   const floorHalo = floorGroup.getObjectByName('floorHalo');
@@ -4381,7 +4968,7 @@ function updateFloorEffects() {
     );
     floorHalo.rotation.z = yawSide * 0.035;
     floorHalo.scale.set(0.96 + sideAmount * 0.22, 0.72 + topAmount * 0.12, 1);
-    floorHalo.material.opacity = lit ? 0.1 + frontAmount * 0.04 : 0;
+    floorHalo.material.opacity = (lit ? 0.1 + frontAmount * 0.04 : 0) * glowMultiplier;
   }
 
   const contactShadow = floorGroup.getObjectByName('contactShadow');
@@ -4393,7 +4980,7 @@ function updateFloorEffects() {
     );
     contactShadow.rotation.z = yawSide * 0.035;
     contactShadow.scale.set(0.9 + sideAmount * 0.42, 0.54 + topAmount * 0.18, 1);
-    contactShadow.material.opacity = 0.36 + sideAmount * 0.1;
+    contactShadow.material.opacity = clamp((0.36 + sideAmount * 0.1) * contactMultiplier, 0.16, 0.66);
   }
 
   const castShadow = floorGroup.getObjectByName('castShadow');
@@ -4405,7 +4992,7 @@ function updateFloorEffects() {
     );
     castShadow.rotation.z = -yawSide * 0.08;
     castShadow.scale.set(0.9 + sideAmount * 0.78, 0.5 + topAmount * 0.32, 1);
-    castShadow.material.opacity = 0.14 + sideAmount * 0.2 + topAmount * 0.06;
+    castShadow.material.opacity = clamp((0.14 + sideAmount * 0.2 + topAmount * 0.06) * castMultiplier, 0.04, 0.52);
   }
 
   const wallZ = -shellDepth - 10;
@@ -4416,7 +5003,7 @@ function updateFloorEffects() {
     wallOcclusion.position.set(shadowShiftX, modelY + shadowShiftY, wallZ);
     wallOcclusion.rotation.z = -yawSide * 0.035;
     wallOcclusion.scale.set(1.02 + sideAmount * 0.22, 1.02 + topAmount * 0.12, 1);
-    wallOcclusion.material.opacity = clamp(0.22 + sideAmount * 0.18 + topAmount * 0.04 - lit * frontAmount * 0.045, 0.13, 0.46);
+    wallOcclusion.material.opacity = clamp((0.22 + sideAmount * 0.18 + topAmount * 0.04 - lit * frontAmount * 0.045) * wallMultiplier, 0.08, 0.6);
   }
 
   const wallHalo = floorGroup.getObjectByName('wallHalo');
@@ -4428,7 +5015,7 @@ function updateFloorEffects() {
     );
     wallHalo.rotation.z = -yawSide * 0.02;
     wallHalo.scale.set(1.04 + sideAmount * 0.16, 1.04 + topAmount * 0.08, 1);
-    wallHalo.material.opacity = lit ? 0.08 + frontAmount * 0.06 + sideAmount * 0.025 : 0.004;
+    wallHalo.material.opacity = (lit ? 0.08 + frontAmount * 0.06 + sideAmount * 0.025 : 0.004) * wallHaloMultiplier;
   }
 }
 
@@ -5017,11 +5604,11 @@ function createThreeArtworkCanvas(processed) {
   return canvas;
 }
 
-function processArtwork(artwork) {
+function processArtwork(artwork, options = {}) {
   const crop = state.edit.crop || { x: 0, y: 0, w: 1, h: 1 };
   const srcW = Math.max(1, Math.round(artwork.image.naturalWidth * crop.w));
   const srcH = Math.max(1, Math.round(artwork.image.naturalHeight * crop.h));
-  const maxSide = artwork.type === 'svg' ? 1500 : 1200;
+  const maxSide = Number(options.maxSide) || (artwork.type === 'svg' ? 1500 : 1200);
   const scale = artwork.type === 'svg'
     ? maxSide / Math.max(srcW, srcH)
     : Math.min(maxSide / srcW, maxSide / srcH, 1);
@@ -6458,42 +7045,12 @@ function setWarnings(warnings) {
   els.warnings.innerHTML = warnings.map((warning) => `<li class="${warning.level}">${warning.text}</li>`).join('');
 }
 
-function renderPreviewAlert(warnings) {
+function renderPreviewAlert() {
   if (!els.previewAlert) return;
-  if (!state.isAdmin) {
-    els.previewAlert.hidden = true;
-    els.previewAlert.innerHTML = '';
-    els.previewAlert.dataset.signature = '';
-    els.previewAlert.classList.remove('expanded', 'error');
-    return;
-  }
-  const visibleWarnings = warnings.filter((warning) => warning.level === 'warn' || warning.level === 'error');
-  const signature = visibleWarnings.map((warning) => `${warning.level}:${warning.text}`).join('|');
-  if (!visibleWarnings.length) {
-    els.previewAlert.hidden = true;
-    els.previewAlert.innerHTML = '';
-    els.previewAlert.dataset.signature = '';
-    return;
-  }
-  const hasError = visibleWarnings.some((warning) => warning.level === 'error');
-  els.previewAlert.hidden = false;
-  els.previewAlert.dataset.signature = signature;
-  els.previewAlert.classList.toggle('error', hasError);
-  els.previewAlert.classList.remove('expanded');
-  els.previewAlert.innerHTML = `
-    <button class="preview-alert-trigger" type="button" data-open-preview-alert aria-label="Open print checks">
-      <svg viewBox="0 0 32 32" aria-hidden="true">
-        <circle cx="16" cy="16" r="13.5"></circle>
-        <path d="M11.8 12.1a4.5 4.5 0 0 1 4.4-3.1c3 0 5 1.8 5 4.3 0 2.1-1.1 3.2-2.8 4.3-1.3.9-1.8 1.5-1.8 3.1"></path>
-        <path d="M16.5 25h.01"></path>
-      </svg>
-    </button>
-    <button class="preview-alert-close" type="button" data-close-preview-alert aria-label="Close print checks">x</button>
-    <div class="preview-alert-content">
-      <strong>${hasError ? 'Needs attention' : 'Print checks'}</strong>
-      <ul>${visibleWarnings.slice(0, 3).map((warning) => `<li>${escapeHtml(warning.text)}</li>`).join('')}</ul>
-    </div>
-  `;
+  els.previewAlert.hidden = true;
+  els.previewAlert.innerHTML = '';
+  els.previewAlert.dataset.signature = '';
+  els.previewAlert.classList.remove('expanded', 'error');
 }
 
 function scalePoints(points, scale, width = 1000, height = 1000) {
@@ -6527,6 +7084,7 @@ function updateStats() {
   if (els.usageOutput) els.usageOutput.textContent = usage.label;
   els.dimensionStat.textContent = state.productType === 'hype' ? getHypeSpecLabel() : `${preset.label} - ${usage.label}`;
   if (els.depthStat) els.depthStat.textContent = `${preset.depth} mm depth`;
+  syncMobileCommandBar();
 }
 
 function applyShellColours() {
@@ -6572,6 +7130,7 @@ function updateProjectControls() {
       ? !hasOrderableHypeLogo
       : disabled || !state.uploadedFile;
   }
+  syncMobileCommandBar();
 }
 
 function getDesignName() {
@@ -6580,12 +7139,14 @@ function getDesignName() {
 
 function renderPreviewTitle() {
   if (state.productType === 'hype') {
-    els.previewTitle.textContent = state.designName.trim()
-      || (state.hype.variant === 'spinner' ? 'Spinner Hype Chain' : 'Classic Hype Chain');
+    const hypeDesignName = state.designName.trim();
+    els.previewTitle.textContent = hypeDesignName && !/\b(led|lightbox)\b/i.test(hypeDesignName)
+      ? hypeDesignName
+      : (state.hype.variant === 'spinner' ? 'Spinner Hype Chain' : 'Classic Hype Chain');
   } else if (state.productType === 'plaque') {
     els.previewTitle.textContent = '3D Wall Plaque';
   } else {
-    els.previewTitle.textContent = state.isDefaultPreview ? 'Example lightbox preview' : getDesignName();
+    els.previewTitle.textContent = state.isDefaultPreview || !state.uploadedFile ? 'Example LED Sign preview' : getDesignName();
   }
   els.designName.value = state.designName || '';
 }
@@ -6693,7 +7254,8 @@ async function placeOrderRequest() {
   }
   if (!state.processed || !state.uploadedFile) return;
   setStatus('Preparing order');
-  els.submitNote.classList.remove('checkout-fallback-note');
+  closeOnboarding();
+  clearCheckoutFallback();
   if (els.submitDesign) els.submitDesign.disabled = true;
   els.placeOrder.disabled = true;
   els.saveProject.disabled = true;
@@ -6702,15 +7264,14 @@ async function placeOrderRequest() {
     const project = await buildSignGuyProject();
     state.projectId = project.id;
     const localOrder = isLocalTesting();
-    const screenshots = await captureOrderScreenshots(captureSubmissionScreenshots, 'LED Lightbox');
+    const screenshots = await captureSubmissionScreenshots();
     const uploadResult = localOrder
       ? { ok: true, localTesting: true, emailSent: false }
       : await uploadProjectFolder(project, {
         screenshots,
         sendOrderEmail: true,
-        subject: makeOrderEmailSubject('LED Sign'),
+        subject: ORDER_SUBMISSION_SUBJECT,
         message: makeEmailBody('Shopify checkout order started'),
-        messageHtml: makeEmailHtml('Shopify checkout order started'),
       });
     if (localOrder) downloadProjectPayload(project);
     try {
@@ -6739,21 +7300,21 @@ async function placeHypeChainOrder() {
     return;
   }
   setStatus('Preparing order');
-  els.submitNote.classList.remove('checkout-fallback-note');
+  closeOnboarding();
+  clearCheckoutFallback();
   els.placeOrder.disabled = true;
   try {
     queueEmailMarketingSubscription(state.customerEmail);
     const project = await buildHypeChainProject();
     const localOrder = isLocalTesting();
-    const screenshots = await captureOrderScreenshots(captureHypeSubmissionScreenshots, 'Hype Chain');
+    const screenshots = await captureHypeSubmissionScreenshots();
     const uploadResult = localOrder
       ? { ok: true, localTesting: true, emailSent: false }
       : await uploadProjectFolder(project, {
         screenshots,
         sendOrderEmail: true,
-        subject: makeOrderEmailSubject('Hype Chain'),
+        subject: HYPE_CHAIN_ORDER_SUBJECT,
         message: makeHypeEmailBody('Shopify checkout order started'),
-        messageHtml: makeHypeEmailHtml('Shopify checkout order started'),
       });
     if (localOrder) downloadProjectPayload(project);
     try {
@@ -7121,32 +7682,53 @@ function renderProjectLog() {
   els.projectCount.textContent = countText;
   if (els.projectHeadingCount) els.projectHeadingCount.textContent = `(${countText})`;
   if (!projects.length) {
-    els.projectList.innerHTML = '';
+    els.projectList.innerHTML = '<p class="project-empty">No saved designs yet. Save your first design to come back to it later.</p>';
     els.projectNote.textContent = '';
     return;
   }
-  els.projectList.innerHTML = projects.map((project) => `
-    <article class="project-item" data-load-project="${escapeHtml(project.id)}">
+  els.projectList.innerHTML = projects.map((project) => {
+    const previewImage = getProjectPreviewImage(project);
+    return `
+    <article class="project-item" data-project-id="${escapeHtml(project.id)}" data-restore-project="${escapeHtml(project.id)}" role="button" tabindex="0" aria-label="Restore ${escapeHtml(project.name || 'saved design')}">
+      ${previewImage
+        ? `<img class="project-thumb" src="${escapeHtml(previewImage)}" alt="" />`
+        : '<div class="project-thumb project-thumb-placeholder" aria-hidden="true"></div>'}
       <button class="project-delete" type="button" data-delete-project="${escapeHtml(project.id)}" aria-label="Delete ${escapeHtml(project.name || 'saved design')}">x</button>
-      <img class="project-thumb" src="${escapeHtml(project.preview?.screenshotDataUrl || project.source?.dataUrl || '')}" alt="" />
     </article>
-  `).join('');
-  els.projectList.querySelectorAll('article[data-load-project]').forEach((item) => {
-    item.addEventListener('click', async (event) => {
-      if (event.target.closest('[data-delete-project], [data-download-project]')) return;
-      const project = await getProjectRecord(item.dataset.loadProject);
+  `;
+  }).join('');
+  els.projectList.querySelectorAll('[data-restore-project]').forEach((button) => {
+    const restoreProject = async () => {
+      const project = await getProjectRecord(button.dataset.restoreProject);
       await restoreSignGuyProject(project);
-      els.projectNote.textContent = `${project.name}.SignGuy restored from recent saves.`;
+      els.projectNote.textContent = `${project.name || 'Saved design'}.SignGuy restored from recent saves.`;
       setStatus('Project open');
+      if (isMobileControlLayout()) closeMobileControlSheet();
+    };
+    button.addEventListener('click', async (event) => {
+      if (event.target.closest('[data-delete-project]')) return;
+      await restoreProject();
+    });
+    button.addEventListener('keydown', async (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      await restoreProject();
     });
   });
   els.projectList.querySelectorAll('[data-delete-project]').forEach((button) => {
     button.addEventListener('click', async () => {
+      const project = projects.find((item) => item.id === button.dataset.deleteProject);
+      const projectName = project?.name || 'this saved design';
+      if (!window.confirm(`Delete ${projectName}? This cannot be undone.`)) return;
       await deleteProjectRecord(button.dataset.deleteProject);
       await refreshProjectLog();
       els.projectNote.textContent = 'Saved design deleted.';
     });
   });
+}
+
+function getProjectPreviewImage(project) {
+  return project?.preview?.screenshotDataUrl || project?.source?.dataUrl || '';
 }
 
 function downloadProjectPayload(project) {
@@ -7170,9 +7752,6 @@ async function uploadProjectFolder(project, options = {}) {
     form.append('sendOrderEmail', 'true');
     form.append('subject', options.subject || ORDER_SUBMISSION_SUBJECT);
     form.append('message', options.message || makeEmailBody('Shopify checkout order started'));
-    if (options.messageHtml) form.append('messageHtml', options.messageHtml);
-    const logoPreview = await makeEmailLogoPreviewFile(project);
-    if (logoPreview) form.append('logoPreview', logoPreview, logoPreview.name);
   }
   form.append('projectFile', new Blob([JSON.stringify(project, null, 2)], { type: 'application/x-signguy+json' }), projectName);
   form.append('logo', logoFile, logoFile.name || project.source.fileName || 'uploaded-logo');
@@ -7217,12 +7796,18 @@ function redirectToShopifyCheckout(project, uploadResult = {}) {
   if (!variantId) throw new Error('No matching Shopify variant was found.');
   const projectName = `${projectFileBaseName(project)}.SignGuy`;
   const params = new URLSearchParams();
+
   params.set('id', variantId);
   params.set('quantity', '1');
   params.set('return_to', '/cart');
-  if (state.customerEmail) params.set('checkout[email]', state.customerEmail);
+
+  if (state.customerEmail) {
+    params.set('checkout[email]', state.customerEmail);
+  }
+
   setShopifyOrderField(params, 'Customer email', state.customerEmail || '');
   setShopifyOrderField(params, 'Design name', project.name || getDesignName());
+
   if (project.type === 'SignGuy.HypeChainStudio') {
     setShopifyOrderField(params, 'Product', 'Hype Chain');
     setShopifyOrderField(params, 'Style', state.hype.variant === 'spinner' ? 'Spinner' : 'Classic');
@@ -7232,7 +7817,6 @@ function redirectToShopifyCheckout(project, uploadResult = {}) {
     if (getHypePatternLength() >= 3) setShopifyOrderField(params, 'Tertiary chain colour', normalizeHex(state.hype.tertiary));
     setShopifyOrderField(params, 'Connector and attachment colour', normalizeHex(state.hype.primary));
     setShopifyOrderField(params, 'Pendant backing sides and hook colour', getHypePendantBodyColour());
-    setShopifyOrderField(params, 'Pendant text', state.hype.text || '');
     setShopifyOrderField(params, 'Chain length', state.hype.chainLength);
   } else {
     setShopifyOrderField(params, 'Product', 'LED Sign');
@@ -7240,6 +7824,7 @@ function redirectToShopifyCheckout(project, uploadResult = {}) {
     setShopifyOrderField(params, 'Usage', USAGE_PRESETS[state.usage]?.label || USAGE_PRESETS.indoor.label);
   }
   setShopifyOrderField(params, 'SignGuy file', projectName);
+
   navigateToCheckoutUrl(`${SHOPIFY_CHECKOUT_BASE_URL}/add?${params.toString()}`);
 }
 
@@ -7263,6 +7848,7 @@ function navigateToCheckoutUrl(url) {
     window.setTimeout(() => showCheckoutFallback(url), 1200);
     return;
   }
+
   try {
     if (window.top && window.top !== window.self) {
       window.top.location.href = url;
@@ -7271,6 +7857,7 @@ function navigateToCheckoutUrl(url) {
   } catch (error) {
     console.warn('Top-level checkout navigation was blocked by the iframe host.', error);
   }
+
   const opened = window.open(url, '_top');
   if (!opened) {
     window.location.assign(url);
@@ -7280,8 +7867,10 @@ function navigateToCheckoutUrl(url) {
 function postCheckoutMessage(url) {
   const payload = { type: 'SIGN_STUDIO_CHECKOUT', url };
   const legacyPayload = { signStudioCheckoutUrl: url };
+
   [window.parent, window.top].forEach((target) => {
     if (!target || target === window.self) return;
+
     try {
       target.postMessage(payload, '*');
       target.postMessage(legacyPayload, '*');
@@ -7293,8 +7882,13 @@ function postCheckoutMessage(url) {
 
 function showCheckoutFallback(url) {
   if (!els.submitNote || window.location.href.startsWith(url)) return;
+
   els.submitNote.classList.add('checkout-fallback-note');
   els.submitNote.innerHTML = `Cart should open automatically. <a href="${escapeHtml(url)}" target="_blank" rel="noopener">Open your Shopify cart</a>.`;
+}
+
+function clearCheckoutFallback() {
+  els.submitNote?.classList.remove('checkout-fallback-note');
 }
 
 function getShopifyVariantId() {
@@ -7326,9 +7920,7 @@ function describeOrderError(error) {
     }
     return 'Could not match this size and usage to a checkout product variant.';
   }
-  return error?.message
-    ? `Could not prepare this order: ${error.message}`
-    : 'Could not prepare this order. Try again after the preview finishes loading.';
+  return 'Could not prepare this order. Try again after the preview finishes loading.';
 }
 
 function projectFileBaseName(project) {
@@ -7526,39 +8118,6 @@ async function captureSubmissionScreenshots() {
   }));
 }
 
-async function captureOrderScreenshots(captureScreenshots, productLabel) {
-  try {
-    return await captureScreenshots();
-  } catch (error) {
-    console.warn(`${productLabel} order screenshots could not be captured. Continuing to checkout.`, error);
-    return [];
-  }
-}
-
-async function makeEmailLogoPreviewFile(project) {
-  try {
-    const image = await loadImage(project.source?.dataUrl || '');
-    const maxWidth = 720;
-    const maxHeight = 520;
-    const scale = Math.min(1, maxWidth / image.width, maxHeight / image.height);
-    const width = Math.max(1, Math.round(image.width * scale));
-    const height = Math.max(1, Math.round(image.height * scale));
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-    ctx.clearRect(0, 0, width, height);
-    ctx.drawImage(image, 0, 0, width, height);
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-    if (!blob) return null;
-    return new File([blob], `${projectFileBaseName(project)}-logo-preview.png`, { type: 'image/png' });
-  } catch (error) {
-    console.warn('Could not create logo preview for order email.', error);
-    return null;
-  }
-}
-
 async function submitDesignToEndpoint({ endpoint, subject, body, screenshots }) {
   const form = new FormData();
   form.append('to', CONTACT_EMAIL);
@@ -7697,6 +8256,7 @@ async function captureHypeVisualizerBlob() {
 
 function drawHypeChainCanvas(ctx, hype, width, height, logoImage = null) {
   const primary = normalizeHex(hype.primary);
+  const border = normalizeHex(hype.border || hype.primary);
   const pendant = normalizeHex(hype.pendantCasing || hype.pendant);
   const connectorColour = primary;
   ctx.save();
@@ -7814,47 +8374,6 @@ function makeEmailBody(context = 'Design submission') {
   ].join('\n');
 }
 
-function makeOrderEmailSubject(productLabel) {
-  const email = normalizeEmail(state.customerEmail) || 'A customer';
-  return `${email} placed a ${productLabel} order`;
-}
-
-function makeEmailHtml(context = 'Design submission') {
-  const preset = SIZE_PRESETS[state.size];
-  const usage = USAGE_PRESETS[state.usage] || USAGE_PRESETS.indoor;
-  const frontColours = (state.processed?.colours || []).map((region, index) => ({
-    label: `Front colour ${index + 1}`,
-    hex: getDisplayColour(index, region.hex),
-  }));
-  return makeOrderEmailHtml({
-    title: 'Custom lightbox request',
-    context,
-    logoTitle: 'Uploaded logo',
-    details: [
-      ['Customer email', state.customerEmail || 'Not provided'],
-      ['Sign name', getDesignName()],
-      ['Uploaded file', state.fileName || 'logo file'],
-      ['Size', preset.label],
-      ['Usage', usage.label],
-      ['Depth', `${preset.depth} mm`],
-      ['Preview lighting', state.illuminated ? 'Illuminated' : 'Not illuminated'],
-    ],
-    colourSections: [
-      {
-        title: 'Front colours',
-        colours: frontColours,
-      },
-      {
-        title: 'Body colours',
-        colours: [
-          { label: 'Side colour', hex: state.shellColours.side },
-          { label: 'Back colour', hex: state.shellColours.back },
-        ],
-      },
-    ],
-  });
-}
-
 function makeHypeEmailBody(context = 'Design submission') {
   const hype = state.hype;
   return [
@@ -7875,104 +8394,6 @@ function makeHypeEmailBody(context = 'Design submission') {
     `Quantity requested: ${hype.quantity || 1}`,
     `Render screenshots: current Hype Chain view and angled view`,
   ].join('\n');
-}
-
-function makeHypeEmailHtml(context = 'Design submission') {
-  const hype = state.hype;
-  const patternLength = getHypePatternLength(hype.patternLength);
-  const chainColours = [
-    { label: 'Primary chain colour', hex: hype.primary },
-    ...(patternLength >= 2 ? [{ label: 'Secondary chain colour', hex: hype.secondary }] : []),
-    ...(patternLength >= 3 ? [{ label: 'Tertiary chain colour', hex: hype.tertiary }] : []),
-  ];
-  const pendantColours = getHypePendantColours().map((hex, index) => ({
-    label: `Pendant colour ${getHypePendantColourLabel(index)}`,
-    hex,
-  }));
-  return makeOrderEmailHtml({
-    title: 'Hype Chain request',
-    context,
-    logoTitle: 'Uploaded Hype Chain logo',
-    details: [
-      ['Customer email', state.customerEmail || 'Not provided'],
-      ['Style', hype.variant === 'spinner' ? 'Spinner' : 'Classic'],
-      ['Uploaded file', hype.logoFileName || 'No logo uploaded'],
-      ['Pattern length', `${patternLength} link${patternLength === 1 ? '' : 's'}`],
-      ['Pendant text', hype.text || 'None'],
-      ['Chain length', hype.chainLength],
-      ['Quantity requested', String(hype.quantity || 1)],
-    ],
-    colourSections: [
-      {
-        title: 'Chain colours',
-        colours: [
-          ...chainColours,
-          { label: 'Connector and attachment colour', hex: hype.primary },
-        ],
-      },
-      {
-        title: 'Pendant colours',
-        colours: [
-          { label: 'Backing, sides, and hook colour', hex: getHypePendantBodyColour() },
-          ...pendantColours,
-        ],
-      },
-    ],
-  });
-}
-
-function makeOrderEmailHtml({ title, context, logoTitle, details, colourSections }) {
-  const rows = details.map(([label, value]) => `
-    <tr>
-      <th style="text-align:left;padding:8px 12px;border-bottom:1px solid #ece6d8;color:#5f5a50;font-size:13px;">${escapeHtml(label)}</th>
-      <td style="padding:8px 12px;border-bottom:1px solid #ece6d8;font-size:14px;">${escapeHtml(value)}</td>
-    </tr>
-  `).join('');
-  const sections = colourSections.map((section) => makeEmailColourSectionHtml(section.title, section.colours)).join('');
-  return `
-    <div style="margin:0;padding:24px;background:#f7f3e8;color:#171717;font-family:Arial,Helvetica,sans-serif;">
-      <div style="max-width:720px;margin:0 auto;background:#fffdf8;border:1px solid #ded6c6;border-radius:14px;overflow:hidden;">
-        <div style="padding:22px 24px;background:#ffc529;">
-          <h1 style="margin:0;font-size:24px;line-height:1.15;color:#171717;">${escapeHtml(title)}</h1>
-          <p style="margin:8px 0 0;font-size:14px;color:#413816;">${escapeHtml(context)}</p>
-        </div>
-        <div style="padding:22px 24px;">
-          <h2 style="margin:0 0 12px;font-size:16px;">${escapeHtml(logoTitle)}</h2>
-          <div style="display:inline-block;padding:14px;background:#f2eee4;border:1px solid #ded6c6;border-radius:12px;">
-            <img src="cid:uploaded-logo" alt="${escapeHtml(logoTitle)}" style="display:block;max-width:360px;max-height:260px;width:auto;height:auto;" />
-          </div>
-          <h2 style="margin:24px 0 10px;font-size:16px;">Order details</h2>
-          <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;border:1px solid #ece6d8;border-radius:10px;overflow:hidden;">
-            ${rows}
-          </table>
-          ${sections}
-          <p style="margin:22px 0 0;color:#69645b;font-size:13px;">Attached files include the .SignGuy project file, uploaded logo, and any captured preview screenshots.</p>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function makeEmailColourSectionHtml(title, colours) {
-  const uniqueColours = (colours || [])
-    .filter((item) => item && item.hex)
-    .map((item) => ({ label: item.label, hex: normalizeHex(item.hex) }));
-  if (!uniqueColours.length) return '';
-  const rows = uniqueColours.map((item) => `
-    <tr>
-      <td style="padding:8px 12px;border-bottom:1px solid #ece6d8;">
-        <span style="display:inline-block;width:24px;height:24px;border-radius:999px;border:1px solid #b9b2a4;background:${escapeHtml(item.hex)};vertical-align:middle;margin-right:10px;"></span>
-        <span style="vertical-align:middle;">${escapeHtml(item.label)}</span>
-      </td>
-      <td style="padding:8px 12px;border-bottom:1px solid #ece6d8;font-family:Consolas,Menlo,monospace;font-size:14px;text-transform:uppercase;">${escapeHtml(item.hex)}</td>
-    </tr>
-  `).join('');
-  return `
-    <h2 style="margin:24px 0 10px;font-size:16px;">${escapeHtml(title)}</h2>
-    <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;border:1px solid #ece6d8;border-radius:10px;overflow:hidden;">
-      ${rows}
-    </table>
-  `;
 }
 
 function makeHypePlaceholderLogoDataUrl() {
