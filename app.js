@@ -147,6 +147,7 @@ const state = {
   requiresEmailGate: false,
   studioInitialized: false,
   studioInitializing: null,
+  orderInProgress: false,
   onboardingDismissedFallback: false,
   onboardingPending: false,
   previewRenderTimer: null,
@@ -1007,7 +1008,7 @@ function syncMobileCommandBar() {
     els.mobileSelectionSummary.textContent = getMobileCheckoutSelectionLabel();
   }
   if (els.mobileCheckoutReason && els.placeOrder) {
-    const reason = els.placeOrder.disabled ? getMobilePlaceOrderDisabledReason() : '';
+    const reason = els.placeOrder.disabled && !state.orderInProgress ? getMobilePlaceOrderDisabledReason() : '';
     els.mobileCheckoutReason.textContent = reason;
     els.mobileCheckoutReason.hidden = !reason;
   }
@@ -7267,9 +7268,11 @@ async function placeOrderRequest() {
   setStatus('Preparing order');
   closeOnboarding();
   clearCheckoutFallback();
+  state.orderInProgress = true;
   if (els.submitDesign) els.submitDesign.disabled = true;
   els.placeOrder.disabled = true;
   els.saveProject.disabled = true;
+  syncMobileCommandBar();
   try {
     queueEmailMarketingSubscription(state.customerEmail);
     const project = await buildSignGuyProject();
@@ -7301,6 +7304,7 @@ async function placeOrderRequest() {
     console.error(error);
     els.submitNote.textContent = describeOrderError(error);
     setStatus('Order failed');
+    state.orderInProgress = false;
     updateProjectControls();
     if (els.submitDesign) els.submitDesign.disabled = false;
   }
@@ -7314,7 +7318,9 @@ async function placeHypeChainOrder() {
   setStatus('Preparing order');
   closeOnboarding();
   clearCheckoutFallback();
+  state.orderInProgress = true;
   els.placeOrder.disabled = true;
+  syncMobileCommandBar();
   try {
     queueEmailMarketingSubscription(state.customerEmail);
     const project = await buildHypeChainProject();
@@ -7345,6 +7351,7 @@ async function placeHypeChainOrder() {
     console.error(error);
     els.submitNote.textContent = describeOrderError(error);
     setStatus('Order failed');
+    state.orderInProgress = false;
     updateProjectControls();
   }
 }
