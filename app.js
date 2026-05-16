@@ -63,6 +63,8 @@ const MOBILE_PREVIEW_ZOOM_MAX = 2.5;
 const MOBILE_SHEET_SWIPE_THRESHOLD = 44;
 const IMAGE_DECODE_TIMEOUT_MS = 15000;
 const MAX_UPLOAD_BYTES = 28 * 1024 * 1024;
+const HEIC_CONVERT_TIMEOUT_MS = 30000;
+const HEIC2ANY_CDN_URL = 'https://cdnjs.cloudflare.com/ajax/libs/heic2any/0.0.4/heic2any.min.js';
 const DESKTOP_PREVIEW_ZOOM_MIN = 0.55;
 const DESKTOP_PREVIEW_ZOOM_MAX = 2.4;
 const HYPE_CAMERA_DISTANCE = 1120;
@@ -152,6 +154,7 @@ const state = {
   orderInProgress: false,
   onboardingDismissedFallback: false,
   onboardingPending: false,
+  heicConverterPromise: null,
   previewRenderTimer: null,
   hype: {
     initialized: false,
@@ -2855,15 +2858,19 @@ async function handleFiles(fileList, options = {}) {
   }
 
   setUploadLoading(target);
+  let uploadFile = file;
   state.isDefaultPreview = false;
-  state.fileName = file.name;
   state.designName = '';
   els.designName.value = '';
-  state.uploadedFile = file;
-  renderUploadControl();
   state.projectId = null;
   try {
-    state.artwork = validation.kind === 'svg' ? await readSvgArtwork(file) : await readRasterArtwork(file);
+    if (validation.kind === 'heic') {
+      uploadFile = await convertHeicToPngFile(file);
+    }
+    state.fileName = uploadFile.name;
+    state.uploadedFile = uploadFile;
+    renderUploadControl();
+    state.artwork = validation.kind === 'svg' ? await readSvgArtwork(uploadFile) : await readRasterArtwork(uploadFile);
     state.removeBg = state.artwork.hasTransparency ? false : true;
     els.removeBg.checked = state.removeBg;
     state.fixFloatingRegions = false;
@@ -2898,17 +2905,14 @@ function validateUploadFile(file) {
   const isJpeg = type.includes('jpeg') || type.includes('jpg') || name.endsWith('.jpg') || name.endsWith('.jpeg');
   const isHeic = type.includes('heic') || type.includes('heif') || name.endsWith('.heic') || name.endsWith('.heif');
 
-  if (isHeic) {
-    return { ok: false, message: 'This image format may not be supported. Please try a PNG or JPG.' };
-  }
-  if (!isSvg && !isPng && !isJpeg) {
+  if (!isSvg && !isPng && !isJpeg && !isHeic) {
     return { ok: false, message: 'This image format may not be supported. Please try a PNG or JPG.' };
   }
   if (file.size > MAX_UPLOAD_BYTES) {
     return { ok: false, message: 'This image is very large. Please try a smaller PNG or JPG.' };
   }
 
-  return { ok: true, kind: isSvg ? 'svg' : 'raster' };
+  return { ok: true, kind: isSvg ? 'svg' : (isHeic ? 'heic' : 'raster') };
 }
 
 function setUploadLoading(target) {
@@ -2931,10 +2935,67 @@ function getUploadErrorMessage(error) {
   if (error?.code === 'image-decode-timeout') {
     return 'This image is taking too long to load. Please try a smaller PNG or JPG.';
   }
+  if (error?.code === 'heic-conversion-failed') {
+    return 'This HEIC image could not be converted. Please try a PNG or JPG.';
+  }
   if (error?.code === 'unsupported-image-format') {
     return 'This image format may not be supported. Please try a PNG or JPG.';
   }
   return 'The image could not be loaded. Please try a PNG or JPG.';
+}
+
+async function convertHeicToPngFile(file) {
+  setStatus('Converting HEIC');
+  if (els.submitNote) els.submitNote.textContent = 'Converting HEIC image...';
+  try {
+    const heic2any = await loadHeicConverter();
+    const output = await withTimeout(
+      heic2any({ blob: file, toType: 'image/png', quality: 0.92 }),
+      HEIC_CONVERT_TIMEOUT_MS,
+      'heic-conversion-failed',
+    );
+    const blob = Array.isArray(output) ? output[0] : output;
+    if (!blob) throw new Error('HEIC conversion returned no image data.');
+    const fileName = makeConvertedHeicFileName(file.name);
+    return new File([blob], fileName, { type: 'image/png' });
+  } catch (error) {
+    console.warn('HEIC conversion failed.', error);
+    const wrapped = new Error('HEIC conversion failed.');
+    wrapped.code = 'heic-conversion-failed';
+    throw wrapped;
+  }
+}
+
+function loadHeicConverter() {
+  if (typeof window.heic2any === 'function') return Promise.resolve(window.heic2any);
+  if (state.heicConverterPromise) return state.heicConverterPromise;
+
+  state.heicConverterPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = HEIC2ANY_CDN_URL;
+    script.async = true;
+    script.crossOrigin = 'anonymous';
+    script.referrerPolicy = 'no-referrer';
+    script.onload = () => {
+      if (typeof window.heic2any === 'function') {
+        resolve(window.heic2any);
+        return;
+      }
+      reject(new Error('HEIC converter loaded but was unavailable.'));
+    };
+    script.onerror = () => reject(new Error('Could not load HEIC converter.'));
+    document.head.appendChild(script);
+  }).catch((error) => {
+    state.heicConverterPromise = null;
+    throw error;
+  });
+
+  return state.heicConverterPromise;
+}
+
+function makeConvertedHeicFileName(fileName) {
+  const cleanName = String(fileName || 'uploaded-logo').replace(/\.(heic|heif)$/i, '');
+  return `${cleanName || 'uploaded-logo'}.png`;
 }
 
 function captureLedUploadState() {
