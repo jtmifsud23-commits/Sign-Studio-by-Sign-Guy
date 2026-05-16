@@ -826,7 +826,7 @@ function applyPreviewEnvironment() {
 
 function updateProductCta() {
   if (!els.placeOrder) return;
-  els.placeOrder.textContent = state.productType === 'hype' ? 'Place Order' : 'Place Order';
+  els.placeOrder.textContent = state.orderInProgress ? 'Placing Order...' : 'Place Order';
   syncMobileCommandBar();
 }
 
@@ -996,7 +996,7 @@ function setMobileAdvancedExpanded(expanded) {
 function syncMobileCommandBar() {
   if (els.mobilePlaceOrder && els.placeOrder) {
     els.mobilePlaceOrder.disabled = els.placeOrder.disabled;
-    els.mobilePlaceOrder.textContent = 'Place Order';
+    els.mobilePlaceOrder.textContent = state.orderInProgress ? 'Placing Order...' : 'Place Order';
   }
   if (els.mobileSaveProject && els.saveProject) {
     els.mobileSaveProject.disabled = els.saveProject.disabled;
@@ -7130,6 +7130,7 @@ function updateProjectControls() {
   els.saveProject.disabled = disabled;
   if (els.placeOrder) {
     els.placeOrder.disabled = disabled || !state.customerEmail;
+    els.placeOrder.textContent = state.orderInProgress ? 'Placing Order...' : 'Place Order';
   }
   syncMobileCommandBar();
 }
@@ -7271,6 +7272,7 @@ async function placeOrderRequest() {
   state.orderInProgress = true;
   if (els.submitDesign) els.submitDesign.disabled = true;
   els.placeOrder.disabled = true;
+  els.placeOrder.textContent = 'Placing Order...';
   els.saveProject.disabled = true;
   syncMobileCommandBar();
   try {
@@ -7305,6 +7307,7 @@ async function placeOrderRequest() {
     els.submitNote.textContent = describeOrderError(error);
     setStatus('Order failed');
     state.orderInProgress = false;
+    els.placeOrder.textContent = 'Place Order';
     updateProjectControls();
     if (els.submitDesign) els.submitDesign.disabled = false;
   }
@@ -7320,6 +7323,7 @@ async function placeHypeChainOrder() {
   clearCheckoutFallback();
   state.orderInProgress = true;
   els.placeOrder.disabled = true;
+  els.placeOrder.textContent = 'Placing Order...';
   syncMobileCommandBar();
   try {
     queueEmailMarketingSubscription(state.customerEmail);
@@ -7352,6 +7356,7 @@ async function placeHypeChainOrder() {
     els.submitNote.textContent = describeOrderError(error);
     setStatus('Order failed');
     state.orderInProgress = false;
+    els.placeOrder.textContent = 'Place Order';
     updateProjectControls();
   }
 }
