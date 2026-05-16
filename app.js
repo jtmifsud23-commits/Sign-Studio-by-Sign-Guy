@@ -61,6 +61,8 @@ const LOADING_MIN_VISIBLE_MS = 900;
 const MOBILE_PREVIEW_ZOOM_MIN = 0.75;
 const MOBILE_PREVIEW_ZOOM_MAX = 2.5;
 const MOBILE_SHEET_SWIPE_THRESHOLD = 44;
+const IMAGE_DECODE_TIMEOUT_MS = 15000;
+const MAX_UPLOAD_BYTES = 28 * 1024 * 1024;
 const DESKTOP_PREVIEW_ZOOM_MIN = 0.55;
 const DESKTOP_PREVIEW_ZOOM_MAX = 2.4;
 const HYPE_CAMERA_DISTANCE = 1120;
@@ -357,7 +359,11 @@ async function initializeStudioAppOnce() {
     event.preventDefault();
     els.fileInput.click();
   });
-  els.fileInput.addEventListener('change', () => handleFiles(els.fileInput.files));
+  els.fileInput.addEventListener('change', async () => {
+    const files = cloneFileList(els.fileInput.files);
+    els.fileInput.value = '';
+    await handleFiles(files);
+  });
   els.illuminateToggle.addEventListener('change', () => {
     state.illuminated = els.illuminateToggle.checked;
     applyIllumination();
@@ -1138,10 +1144,11 @@ function setupHypeChainControls() {
     });
   });
   els.hypeLogoInput?.addEventListener('change', async () => {
-    const file = els.hypeLogoInput.files?.[0];
-    if (!file) return;
-    await handleFiles(els.hypeLogoInput.files, { target: 'hype' });
+    const files = cloneFileList(els.hypeLogoInput.files);
     els.hypeLogoInput.value = '';
+    const file = files[0];
+    if (!file) return;
+    await handleFiles(files, { target: 'hype' });
   });
   setupFileButtonKeyboard(els.hypeChooseFile, els.hypeLogoInput);
   setupDropZone(els.hypeDropZone, (files) => handleFiles(files, { target: 'hype' }));
@@ -2680,6 +2687,10 @@ function setupFileButtonKeyboard(label, input) {
   });
 }
 
+function cloneFileList(fileList) {
+  return fileList ? [...fileList] : [];
+}
+
 function setupDragRotation() {
   let dragging = false;
   let start = null;
@@ -2831,19 +2842,19 @@ function setupMobileAdvancedAccordion() {
 async function handleFiles(fileList, options = {}) {
   const file = fileList?.[0];
   if (!file) return;
-  const isSvg = file.type.includes('svg') || file.name.toLowerCase().endsWith('.svg');
-  const isPng = file.type.includes('png') || file.name.toLowerCase().endsWith('.png');
-  if (!isSvg && !isPng) {
-    setStatus('Unsupported');
-    setWarnings([{ level: 'error', text: 'Please upload an SVG or PNG file.' }]);
+  const target = options.target === 'hype' ? 'hype' : 'led';
+  state.uploadTarget = target;
+  state.ledUploadSnapshot = captureLedUploadState();
+
+  const validation = validateUploadFile(file);
+  if (!validation.ok) {
+    if (target === 'hype') restoreLedUploadState();
+    else state.ledUploadSnapshot = null;
+    showUploadError(validation.message);
     return;
   }
 
-  const target = options.target === 'hype' ? 'hype' : 'led';
-  state.uploadTarget = target;
-  if (target === 'hype') state.ledUploadSnapshot = captureLedUploadState();
-
-  setStatus('Importing');
+  setUploadLoading(target);
   state.isDefaultPreview = false;
   state.fileName = file.name;
   state.designName = '';
@@ -2852,7 +2863,7 @@ async function handleFiles(fileList, options = {}) {
   renderUploadControl();
   state.projectId = null;
   try {
-    state.artwork = isSvg ? await readSvgArtwork(file) : await readPngArtwork(file);
+    state.artwork = validation.kind === 'svg' ? await readSvgArtwork(file) : await readRasterArtwork(file);
     state.removeBg = state.artwork.hasTransparency ? false : true;
     els.removeBg.checked = state.removeBg;
     state.fixFloatingRegions = false;
@@ -2868,13 +2879,62 @@ async function handleFiles(fileList, options = {}) {
     resetRotation();
     initEditState(state.artwork);
     await reprocess();
+    if (els.submitNote) els.submitNote.textContent = '';
     openWizard('edit');
+    if (target === 'led') state.ledUploadSnapshot = null;
   } catch (error) {
-    if (target === 'hype') restoreLedUploadState();
-    console.error(error);
-    setStatus('Import failed');
-    setWarnings([{ level: 'error', text: error.message || 'The artwork could not be imported.' }]);
+    restoreLedUploadState();
+    console.warn('Logo upload failed.', error);
+    showUploadError(getUploadErrorMessage(error));
   }
+}
+
+function validateUploadFile(file) {
+  if (!file) return { ok: false, message: 'No logo file was selected.' };
+  const name = String(file.name || '').toLowerCase();
+  const type = String(file.type || '').toLowerCase();
+  const isSvg = type.includes('svg') || name.endsWith('.svg');
+  const isPng = type.includes('png') || name.endsWith('.png');
+  const isJpeg = type.includes('jpeg') || type.includes('jpg') || name.endsWith('.jpg') || name.endsWith('.jpeg');
+  const isHeic = type.includes('heic') || type.includes('heif') || name.endsWith('.heic') || name.endsWith('.heif');
+
+  if (isHeic) {
+    return { ok: false, message: 'This image format may not be supported. Please try a PNG or JPG.' };
+  }
+  if (!isSvg && !isPng && !isJpeg) {
+    return { ok: false, message: 'This image format may not be supported. Please try a PNG or JPG.' };
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return { ok: false, message: 'This image is very large. Please try a smaller PNG or JPG.' };
+  }
+
+  return { ok: true, kind: isSvg ? 'svg' : 'raster' };
+}
+
+function setUploadLoading(target) {
+  closeMobileControlSheet();
+  closeOnboarding();
+  setStatus('Loading logo');
+  if (els.submitNote) {
+    els.submitNote.textContent = target === 'hype' ? 'Loading Hype Chain logo...' : 'Loading LED Sign logo...';
+  }
+}
+
+function showUploadError(message) {
+  setStatus('Upload failed');
+  const safeMessage = message || 'The image could not be loaded. Please try a PNG or JPG.';
+  if (els.submitNote) els.submitNote.textContent = safeMessage;
+  setWarnings([{ level: 'error', text: safeMessage }]);
+}
+
+function getUploadErrorMessage(error) {
+  if (error?.code === 'image-decode-timeout') {
+    return 'This image is taking too long to load. Please try a smaller PNG or JPG.';
+  }
+  if (error?.code === 'unsupported-image-format') {
+    return 'This image format may not be supported. Please try a PNG or JPG.';
+  }
+  return 'The image could not be loaded. Please try a PNG or JPG.';
 }
 
 function captureLedUploadState() {
@@ -2956,10 +3016,13 @@ async function readSvgArtwork(file) {
   const palette = extractSvgPalette(documentSvg);
   const blob = new Blob([normalizedText], { type: 'image/svg+xml' });
   const url = URL.createObjectURL(blob);
-  const image = await loadImage(url);
-  URL.revokeObjectURL(url);
-  const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(normalizedText)}`;
-  return { type: 'svg', image, dataUrl, pathCount, gradients, palette, hasTransparency: imageHasTransparency(image), name: file.name };
+  try {
+    const image = await loadImage(url, { timeout: IMAGE_DECODE_TIMEOUT_MS });
+    const dataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(normalizedText)}`;
+    return { type: 'svg', image, dataUrl, pathCount, gradients, palette, hasTransparency: imageHasTransparency(image), name: file.name };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 function normalizeSvgForImage(documentSvg) {
@@ -2992,12 +3055,16 @@ function parseViewBox(value) {
   return parts.length === 4 && parts.every(Number.isFinite) ? parts : null;
 }
 
-async function readPngArtwork(file) {
+async function readRasterArtwork(file) {
   const url = URL.createObjectURL(file);
-  const dataUrl = await readAsDataUrl(file);
-  const image = await loadImage(url);
-  URL.revokeObjectURL(url);
-  return { type: 'png', image, dataUrl, pathCount: 0, gradients: 0, hasTransparency: imageHasTransparency(image), name: file.name };
+  try {
+    await verifyImageDecodes(file, url);
+    const image = await loadImage(url, { timeout: IMAGE_DECODE_TIMEOUT_MS });
+    const dataUrl = await makeNormalizedRasterDataUrl(image);
+    return { type: 'png', image, dataUrl, pathCount: 0, gradients: 0, hasTransparency: imageHasTransparency(image), name: file.name };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 function imageHasTransparency(image) {
@@ -3063,12 +3130,100 @@ function inferArtworkType(dataUrl, filename = '') {
   return raw.includes('image/svg') || raw.includes('.svg') ? 'svg' : 'png';
 }
 
-function loadImage(src) {
+async function verifyImageDecodes(file, url) {
+  if (!('createImageBitmap' in window)) return;
+  let bitmap = null;
+  try {
+    bitmap = await withTimeout(
+      createImageBitmap(file, { imageOrientation: 'from-image' }),
+      IMAGE_DECODE_TIMEOUT_MS,
+      'image-decode-timeout',
+    );
+  } catch (error) {
+    if (error?.code === 'image-decode-timeout') throw error;
+    // Mobile Safari may reject createImageBitmap for formats Image can still decode.
+    console.warn('createImageBitmap could not decode upload; falling back to Image decode.', error);
+  } finally {
+    bitmap?.close?.();
+  }
+}
+
+async function makeNormalizedRasterDataUrl(image) {
+  const width = image.naturalWidth || image.width;
+  const height = image.naturalHeight || image.height;
+  if (!width || !height) {
+    const error = new Error('The image could not be decoded.');
+    error.code = 'unsupported-image-format';
+    throw error;
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, width, height);
+  ctx.drawImage(image, 0, 0, width, height);
+  return canvas.toDataURL('image/png');
+}
+
+function loadImage(src, options = {}) {
+  const timeout = options.timeout || IMAGE_DECODE_TIMEOUT_MS;
   return new Promise((resolve, reject) => {
     const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('The image could not be loaded.'));
+    let settled = false;
+    const timer = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      image.onload = null;
+      image.onerror = null;
+      image.src = '';
+      const error = new Error('The image took too long to load.');
+      error.code = 'image-decode-timeout';
+      reject(error);
+    }, timeout);
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      image.onload = null;
+      image.onerror = null;
+      callback(value);
+    };
+    image.onload = async () => {
+      if (image.decode) {
+        try {
+          await image.decode();
+        } catch (error) {
+          console.warn('Image.decode failed after upload image loaded; continuing with loaded image.', error);
+        }
+      }
+      finish(resolve, image);
+    };
+    image.onerror = () => {
+      const error = new Error('The image could not be loaded.');
+      error.code = 'unsupported-image-format';
+      finish(reject, error);
+    };
     image.src = src;
+  });
+}
+
+function withTimeout(promise, timeout, code) {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      const error = new Error('The image took too long to load.');
+      error.code = code;
+      reject(error);
+    }, timeout);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
   });
 }
 
