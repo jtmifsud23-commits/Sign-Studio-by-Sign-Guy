@@ -65,6 +65,10 @@ const IMAGE_DECODE_TIMEOUT_MS = 15000;
 const MAX_UPLOAD_BYTES = 28 * 1024 * 1024;
 const HEIC_CONVERT_TIMEOUT_MS = 30000;
 const HEIC2ANY_CDN_URL = 'https://cdnjs.cloudflare.com/ajax/libs/heic2any/0.0.4/heic2any.min.js';
+const ORDER_SCREENSHOT_MAX_SIDE = 900;
+const ORDER_SCREENSHOT_QUALITY = 0.74;
+const ORDER_PROJECT_PREVIEW_MAX_SIDE = 760;
+const ORDER_LOGO_MAX_SIDE = 1400;
 const DESKTOP_PREVIEW_ZOOM_MIN = 0.55;
 const DESKTOP_PREVIEW_ZOOM_MAX = 2.4;
 const HYPE_CAMERA_DISTANCE = 1120;
@@ -7981,13 +7985,13 @@ async function uploadProjectFolder(project, options = {}) {
   const endpoint = getProjectSaveEndpoint();
   if (!endpoint) throw new Error('Project save endpoint is unavailable.');
   queueEmailMarketingSubscription(project.customerEmail || state.customerEmail);
-  const projectName = `${projectFileBaseName(project)}.SignGuy`;
-  const logoFile = project.type === 'SignGuy.HypeChainStudio'
-    ? dataUrlToFile(project.source.dataUrl, project.source.fileName || 'hype-chain-logo.png')
-    : state.uploadedFile || dataUrlToFile(project.source.dataUrl, project.source.fileName || `${baseName()}.png`);
-  const screenshots = options.screenshots || await captureSubmissionScreenshots();
+  const uploadProject = options.sendOrderEmail ? await makeCompactOrderProject(project) : project;
+  const projectName = `${projectFileBaseName(uploadProject)}.SignGuy`;
+  const logoFile = await makeProjectUploadLogoFile(uploadProject, { compact: Boolean(options.sendOrderEmail) });
+  const rawScreenshots = options.screenshots || await captureSubmissionScreenshots();
+  const screenshots = options.sendOrderEmail ? await compactSubmissionScreenshots(rawScreenshots) : rawScreenshots;
   const form = new FormData();
-  form.append('customerEmail', project.customerEmail || state.customerEmail);
+  form.append('customerEmail', uploadProject.customerEmail || state.customerEmail);
   form.append('projectName', projectName);
   if (options.sendOrderEmail) {
     form.append('sendOrderEmail', 'true');
@@ -7996,13 +8000,13 @@ async function uploadProjectFolder(project, options = {}) {
     if (options.messageHtml) {
       form.append('messageHtml', options.messageHtml);
     }
-    const logoPreview = await makeEmailLogoPreviewFile(project);
+    const logoPreview = await makeEmailLogoPreviewFile(uploadProject);
     if (logoPreview) {
       form.append('logoPreview', logoPreview, logoPreview.name);
     }
   }
-  form.append('projectFile', new Blob([JSON.stringify(project, null, 2)], { type: 'application/x-signguy+json' }), projectName);
-  form.append('logo', logoFile, logoFile.name || project.source.fileName || 'uploaded-logo');
+  form.append('projectFile', new Blob([JSON.stringify(uploadProject, null, 2)], { type: 'application/x-signguy+json' }), projectName);
+  form.append('logo', logoFile, logoFile.name || uploadProject.source.fileName || 'uploaded-logo');
   screenshots.forEach((shot, idx) => {
     form.append(`renderScreenshot${idx + 1}`, shot.file, shot.file.name);
     form.append(`renderScreenshot${idx + 1}Label`, shot.label);
@@ -8057,6 +8061,97 @@ async function makeEmailLogoPreviewFile(project) {
     console.warn('Could not create email logo preview.', error);
     return null;
   }
+}
+
+async function makeProjectUploadLogoFile(project, options = {}) {
+  const sourceDataUrl = project.source?.dataUrl || '';
+  const sourceName = project.source?.fileName || (project.type === 'SignGuy.HypeChainStudio' ? 'hype-chain-logo.png' : `${baseName()}.png`);
+  if (!options.compact) {
+    return project.type === 'SignGuy.HypeChainStudio'
+      ? dataUrlToFile(sourceDataUrl, sourceName)
+      : state.uploadedFile || dataUrlToFile(sourceDataUrl, sourceName);
+  }
+  return makeCompactLogoFile(sourceDataUrl, sourceName);
+}
+
+async function makeCompactOrderProject(project) {
+  const compact = JSON.parse(JSON.stringify(project));
+  if (compact.source?.dataUrl) {
+    const sourceName = compact.source.fileName || 'uploaded-logo.png';
+    compact.source.dataUrl = await makeCompactLogoDataUrl(compact.source.dataUrl);
+    compact.source.fileName = sourceName.replace(/\.(heic|heif|jpe?g|png)$/i, '.png') || 'uploaded-logo.png';
+    compact.source.artworkType = inferArtworkType(compact.source.dataUrl, compact.source.fileName);
+  }
+  if (compact.preview?.screenshotDataUrl) {
+    compact.preview.screenshotDataUrl = await compressDataUrlImage(compact.preview.screenshotDataUrl, {
+      maxSide: ORDER_PROJECT_PREVIEW_MAX_SIDE,
+      type: 'image/jpeg',
+      quality: ORDER_SCREENSHOT_QUALITY,
+      background: '#222625',
+    });
+  }
+  if (compact.type === 'SignGuy.HypeChainStudio' && compact.config?.hype) {
+    if (compact.config.hype.logoDataUrl) compact.config.hype.logoDataUrl = compact.source?.dataUrl || compact.config.hype.logoDataUrl;
+    if (compact.config.hype.pendantBaseDataUrl) compact.config.hype.pendantBaseDataUrl = compact.source?.dataUrl || compact.config.hype.pendantBaseDataUrl;
+  }
+  return compact;
+}
+
+async function makeCompactLogoFile(dataUrl, fileName) {
+  const compactDataUrl = await makeCompactLogoDataUrl(dataUrl);
+  return dataUrlToFile(compactDataUrl, String(fileName || 'uploaded-logo.png').replace(/\.(heic|heif|jpe?g|png)$/i, '.png'));
+}
+
+function makeCompactLogoDataUrl(dataUrl) {
+  return compressDataUrlImage(dataUrl, {
+    maxSide: ORDER_LOGO_MAX_SIDE,
+    type: 'image/png',
+  });
+}
+
+async function compactSubmissionScreenshots(shots) {
+  return Promise.all((shots || []).map(async (shot) => {
+    const blob = await compressImageBlob(shot.blob || shot.file, {
+      maxSide: ORDER_SCREENSHOT_MAX_SIDE,
+      type: 'image/jpeg',
+      quality: ORDER_SCREENSHOT_QUALITY,
+      background: '#222625',
+    });
+    const fileName = String(shot.fileName || shot.file?.name || 'visualizer.jpg').replace(/\.(png|jpe?g)$/i, '.jpg');
+    return {
+      ...shot,
+      blob,
+      fileName,
+      file: new File([blob], fileName, { type: 'image/jpeg' }),
+    };
+  }));
+}
+
+async function compressImageBlob(blob, options = {}) {
+  const dataUrl = await blobToDataUrl(blob);
+  const compactDataUrl = await compressDataUrlImage(dataUrl, options);
+  return dataUrlToBlob(compactDataUrl);
+}
+
+async function compressDataUrlImage(dataUrl, options = {}) {
+  const image = await loadImage(dataUrl);
+  const width = image.naturalWidth || image.width || 1;
+  const height = image.naturalHeight || image.height || 1;
+  const scale = Math.min(1, (options.maxSide || Math.max(width, height)) / Math.max(width, height));
+  const targetWidth = Math.max(1, Math.round(width * scale));
+  const targetHeight = Math.max(1, Math.round(height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  const ctx = canvas.getContext('2d');
+  if (options.background) {
+    ctx.fillStyle = options.background;
+    ctx.fillRect(0, 0, targetWidth, targetHeight);
+  } else {
+    ctx.clearRect(0, 0, targetWidth, targetHeight);
+  }
+  ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
+  return canvas.toDataURL(options.type || 'image/png', options.quality);
 }
 
 async function makeRasterLogoPreviewDataUrl(dataUrl) {
