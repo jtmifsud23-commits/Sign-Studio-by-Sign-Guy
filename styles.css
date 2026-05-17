@@ -3576,11 +3576,23 @@ button.detail-row {
     justify-content: space-between;
     gap: 12px;
     margin: -10px -12px 0;
-    padding: 12px 12px 10px;
+    padding: 20px 12px 10px;
     border-bottom: 1px solid rgba(222, 215, 203, 0.82);
     background: rgba(255, 255, 255, 0.96);
     backdrop-filter: blur(12px);
     touch-action: none;
+  }
+
+  .mobile-sheet-header::before {
+    content: "";
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    width: 48px;
+    height: 5px;
+    border-radius: 999px;
+    background: rgba(23, 23, 23, 0.32);
+    transform: translateX(-50%);
   }
 
   .mobile-sheet-header .eyebrow {
@@ -3646,14 +3658,8 @@ button.detail-row {
     grid-column: 1 / -1;
     display: grid;
     justify-items: center;
-    gap: 4px;
-    margin: -3px 0 1px;
-    color: rgba(255, 255, 255, 0.68);
-    font-size: 10.5px;
-    font-weight: 900;
-    letter-spacing: 0.04em;
-    line-height: 1;
-    text-transform: uppercase;
+    margin: -2px 0 0;
+    line-height: 0;
   }
 
   .mobile-command-swipe-hint::before {
