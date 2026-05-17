@@ -4309,10 +4309,7 @@ function openFrontColourPopover(index, anchor) {
   state.selectedColor = index;
   const hex = getDisplayColour(index, state.processed?.colours[index]?.hex);
   updatePopoverInputs(hex);
-  const rect = anchor.getBoundingClientRect();
-  els.colourPopover.style.left = `${Math.min(window.innerWidth - 275, rect.left + 8)}px`;
-  els.colourPopover.style.top = `${Math.min(window.innerHeight - 360, rect.bottom + 8)}px`;
-  els.colourPopover.classList.remove('hidden');
+  positionColourPopover(anchor);
   renderUsedColourGrid();
   setPopoverTab('preset');
 }
@@ -4321,10 +4318,7 @@ function openShellColourPopover(part, anchor) {
   state.selectedColourTarget = { type: 'shell', part };
   const hex = normalizeHex(state.shellColours[part]);
   updatePopoverInputs(hex);
-  const rect = anchor.getBoundingClientRect();
-  els.colourPopover.style.left = `${Math.min(window.innerWidth - 275, rect.left + 8)}px`;
-  els.colourPopover.style.top = `${Math.min(window.innerHeight - 360, rect.bottom + 8)}px`;
-  els.colourPopover.classList.remove('hidden');
+  positionColourPopover(anchor);
   renderUsedColourGrid();
   setPopoverTab('preset');
 }
@@ -4333,10 +4327,7 @@ function openHypeColourPopover(part, anchor) {
   state.selectedColourTarget = { type: 'hype', part };
   const hex = normalizeHex(state.hype[part] || '#ffffff');
   updatePopoverInputs(hex);
-  const rect = anchor.getBoundingClientRect();
-  els.colourPopover.style.left = `${Math.min(window.innerWidth - 275, rect.left + 8)}px`;
-  els.colourPopover.style.top = `${Math.min(window.innerHeight - 360, rect.bottom + 8)}px`;
-  els.colourPopover.classList.remove('hidden');
+  positionColourPopover(anchor);
   renderUsedColourGrid();
   setPopoverTab('preset');
 }
@@ -4346,16 +4337,30 @@ function openHypePendantColourPopover(index, anchor) {
   state.selectedColourTarget = { type: 'hypePendant', index };
   const hex = normalizeHex(colours[index] || '#ffffff');
   updatePopoverInputs(hex);
-  const rect = anchor.getBoundingClientRect();
-  els.colourPopover.style.left = `${Math.min(window.innerWidth - 275, rect.left + 8)}px`;
-  els.colourPopover.style.top = `${Math.min(window.innerHeight - 360, rect.bottom + 8)}px`;
-  els.colourPopover.classList.remove('hidden');
+  positionColourPopover(anchor);
   renderUsedColourGrid();
   setPopoverTab('used');
 }
 
+function positionColourPopover(anchor) {
+  if (isMobileControlLayout()) {
+    updateViewportUnits();
+    els.colourPopover.style.left = '';
+    els.colourPopover.style.top = '';
+    document.body.classList.add('colour-popover-open');
+  } else {
+    const rect = anchor.getBoundingClientRect();
+    els.colourPopover.style.left = `${Math.min(window.innerWidth - 275, rect.left + 8)}px`;
+    els.colourPopover.style.top = `${Math.min(window.innerHeight - 360, rect.bottom + 8)}px`;
+    document.body.classList.remove('colour-popover-open');
+  }
+
+  els.colourPopover.classList.remove('hidden');
+}
+
 function closeColourPopover() {
   els.colourPopover.classList.add('hidden');
+  document.body.classList.remove('colour-popover-open');
 }
 
 function setPopoverTab(tab) {
