@@ -6,7 +6,7 @@
     <title>MySignGuy.ca Sign Studio</title>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23151515'/%3E%3Cpath d='M7 21.5h18v3H7zM9.5 7.5h13v11h-13z' fill='%23ffc529'/%3E%3Cpath d='M12 10h8v6h-8z' fill='%23151515'/%3E%3C/svg%3E" />
-    <link rel="stylesheet" href="./styles.css?v=20260514-07" />
+    <link rel="stylesheet" href="./styles.css?v=20260528-02" />
   </head>
   <body class="studio-loading">
     <main class="app-shell">
@@ -33,10 +33,7 @@
           </div>
           <button class="product-tab active" type="button" data-product-type="led" aria-pressed="true">LED Sign</button>
           <button class="product-tab" type="button" data-product-type="hype" aria-disabled="false">Hype Chain</button>
-          <button class="product-tab product-tab-locked" type="button" data-product-type="plaque" aria-disabled="true" aria-describedby="productLockTooltip">
-            <span class="product-lock" aria-hidden="true">🔒</span>
-            <span>3D Plaque</span>
-          </button>
+          <button class="product-tab" type="button" data-product-type="plaque" aria-disabled="false">3D Plaque</button>
           <span class="product-tooltip" id="productLockTooltip" role="tooltip">Coming soon</span>
         </nav>
 
@@ -191,10 +188,58 @@
         </section>
 
         <section class="panel-section plaque-studio hidden" id="plaqueStudio">
-          <div class="section-heading">
-            <h2>3D Wall Plaque</h2>
-          </div>
-          <p class="product-placeholder">Admin preview space reserved for the 3D Wall Plaque configurator.</p>
+          <section class="plaque-section plaque-upload-section">
+            <div class="mobile-control-section-heading">
+              <h3>Upload / Artwork</h3>
+              <p>Upload and clean a logo for layered 3D printing.</p>
+            </div>
+            <label class="primary-button upload-button plaque-upload-button" id="plaqueChooseFile" for="fileInput" role="button" tabindex="0">
+              <span class="upload-mark" aria-hidden="true">+</span>
+              <span id="plaqueChooseFileText">Upload logo</span>
+            </label>
+            <p class="upload-helper-text">Best results: SVG or transparent PNG with clear separated colours.</p>
+          </section>
+
+          <section class="plaque-section plaque-options-section">
+            <div class="mobile-control-section-heading">
+              <h3>Size / Options</h3>
+              <p>Set plaque size and the main base thickness.</p>
+            </div>
+            <div class="section-heading">
+              <h2>3D Plaque size</h2>
+            </div>
+            <div class="segmented" role="radiogroup" aria-label="3D Wall Plaque size">
+              <button class="seg" type="button" data-size="small">Small<br /><span>10"</span></button>
+              <button class="seg active" type="button" data-size="large">Large<br /><span>13"</span></button>
+              <button class="seg" type="button" data-size="xl">XL<br /><span>16"</span></button>
+            </div>
+            <div class="section-heading usage-heading">
+              <h2>Where will the sign be used?</h2>
+            </div>
+            <div class="segmented usage-segmented" role="radiogroup" aria-label="3D Wall Plaque usage">
+              <button class="seg active" type="button" data-plaque-usage="indoor">Indoor</button>
+              <button class="seg" type="button" data-plaque-usage="outdoor">Outdoor</button>
+            </div>
+            <div class="plaque-trace-quality" hidden aria-hidden="true">
+              <div class="plaque-trace-quality-label">Plaque Trace Quality</div>
+              <div class="segmented plaque-trace-tabs" role="radiogroup" aria-label="Plaque Trace Quality">
+                <button class="seg" type="button" data-plaque-trace-quality="clean">Clean Plaque</button>
+                <button class="seg active" type="button" data-plaque-trace-quality="smooth">Smooth Plaque</button>
+                <button class="seg" type="button" data-plaque-trace-quality="raw">Raw Pixel Trace</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="plaque-section plaque-layer-section">
+            <div class="mobile-control-section-heading">
+              <h3>Colours / Layers</h3>
+              <p>Select a colour and adjust how far it stands proud.</p>
+            </div>
+            <div class="plaque-layer-list" id="plaqueLayerList">
+              <p class="plate-empty">Upload artwork to detect colour layers.</p>
+            </div>
+          </section>
+
         </section>
 
         <section class="panel-section submit-section">
@@ -230,7 +275,7 @@
           <p id="projectNote"></p>
         </section>
         <button class="secondary-button back-to-visualizer-button" id="backToVisualizer" type="button">Back to Visualizer</button>
-        <p class="menu-build-version">Build 2.019</p>
+        <p class="menu-build-version">Build 2.209</p>
       </aside>
 
       <section class="preview-panel" aria-label="3D lightbox preview">
@@ -251,10 +296,7 @@
               <nav class="visualizer-product-switcher" aria-label="Visualizer product type">
                 <button class="product-tab visualizer-product-tab active" type="button" data-product-type="led" aria-pressed="true">LED Sign</button>
                 <button class="product-tab visualizer-product-tab" type="button" data-product-type="hype" aria-disabled="false">Hype Chain</button>
-                <button class="product-tab visualizer-product-tab product-tab-locked" type="button" data-product-type="plaque" aria-disabled="true" aria-describedby="productLockTooltip">
-                  <span class="product-lock" aria-hidden="true">🔒</span>
-                  <span>3D Plaque</span>
-                </button>
+                <button class="product-tab visualizer-product-tab" type="button" data-product-type="plaque" aria-disabled="false">3D Plaque</button>
               </nav>
             </div>
             <div class="preview-stats">
@@ -287,6 +329,14 @@
             <button class="zoom-button" id="previewZoomIn" type="button" aria-label="Zoom in">+</button>
           </div>
           <p class="preview-gesture-hint" id="previewGestureHint">Drag to rotate &bull; Pinch to zoom</p>
+          <section class="plaque-visual-layer-tray" id="plaqueVisualLayerTray" aria-label="Raised layer controls" hidden>
+            <button class="plaque-visual-layer-toggle" id="plaqueVisualLayerToggle" type="button" aria-expanded="true" aria-controls="plaqueVisualLayerList">
+              <span>Raised Layers</span>
+              <span class="plaque-visual-layer-chevron" aria-hidden="true"></span>
+            </button>
+            <div class="plaque-visual-layer-list" id="plaqueVisualLayerList"></div>
+          </section>
+          <img class="default-led-preview-image" id="defaultLedPreviewImage" alt="" hidden />
           <div class="scene" id="scene">
             <div class="model-stack" id="modelStack">
               <div class="shadow"></div>
@@ -468,8 +518,11 @@
     </div>
 
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script defer src="./assets/hype-chain/default-hype-chain-project.js?v=20260513-01"></script>
-    <script defer src="./app.js?v=20260514-05"></script>
+    <script defer src="./assets/core/three-runtime.js?v=20260529-02"></script>
+    <script defer src="./assets/led/led-product.js?v=20260529-01"></script>
+    <script defer src="./assets/hype-chain/hype-chain-product.js?v=20260529-01"></script>
+    <script defer src="./assets/plaque/plaque-product.js?v=20260529-03"></script>
+    <script defer src="./app.js?v=20260529-01"></script>
     <script defer src="./submit-fix.js?v=20260510-22"></script>
     <script defer src="./used-colours.js?v=20260513-09"></script>
   </body>
