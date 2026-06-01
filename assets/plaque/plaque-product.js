@@ -2981,7 +2981,7 @@ function getPlaqueRasterPreviewQuality(processed) {
   }
   if (state.plaque.fastPreviewOnly) {
     return {
-      maxTraceSide: isMobilePreviewViewport() ? 1180 : 1500,
+      maxTraceSide: 1500,
       smoothingPasses: 4,
       simplifyTolerance: 1.85,
       polishPasses: 2,
@@ -2995,11 +2995,10 @@ function getPlaqueRasterPreviewQuality(processed) {
       bevelSize: 0.055,
     };
   }
-  const mobilePenalty = isMobilePreviewViewport() ? 160 : 0;
   const sizePenalty = sourceSide > 1100 ? 80 : 0;
   const layerPenalty = Math.max(0, layerCount - 5) * 36;
   const maxTraceSide = clamp(
-    PLAQUE_RASTER_PREVIEW_TRACE_MAX_SIDE - mobilePenalty - sizePenalty - layerPenalty,
+    PLAQUE_RASTER_PREVIEW_TRACE_MAX_SIDE - sizePenalty - layerPenalty,
     PLAQUE_RASTER_PREVIEW_TRACE_MIN_SIDE,
     PLAQUE_RASTER_PREVIEW_TRACE_MAX_SIDE,
   );
