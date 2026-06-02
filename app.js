@@ -136,7 +136,7 @@ const PLAQUE_UPLOAD_PROCESSED_CACHE_VERSION = 1;
 const PLAQUE_UPLOAD_PROCESSED_CACHE_PREFIX = 'uploaded-plaque:';
 const PLAQUE_UPLOAD_PROCESSED_CACHE_LIMIT = 18;
 const PLAQUE_CONTOUR_CACHE_VERSION = 1;
-const PLAQUE_BASE_SILHOUETTE_CACHE_VERSION = 1;
+const PLAQUE_BASE_SILHOUETTE_CACHE_VERSION = 6;
 const PLAQUE_PROCESSING_WORKER_SRC = './assets/plaque/plaque-processing-worker.js?v=20260526-11';
 const PLAQUE_PROCESSING_WORKER_TIMEOUT_MS = 90000;
 const LED_THREE_UPGRADE_DELAY_MS = 80;
@@ -300,6 +300,7 @@ const state = {
     backingColourOverride: '',
     layerDepths: [],
     colourOverrides: [],
+    layerSourceIndices: [],
     selectedLayer: 0,
     visualLayerTrayCollapsed: false,
     visualLayerEditorOpen: false,
@@ -3642,7 +3643,7 @@ function renderUsedColourGrid() {
   }
   if (state.productType === 'plaque') {
     if (label) label.textContent = '3D Plaque colours';
-    const colours = getPlaqueLayerDescriptors().map((layer, index) => getPlaqueLayerDisplayHex(layer, index));
+    const colours = getPlaqueSubmittedColourItems().map((item) => item.display);
     renderUsedColourButtons(colours, 'Upload plaque artwork first.');
     return;
   }
@@ -6671,13 +6672,17 @@ async function buildSignGuyProject() {
     },
     preview: {
       screenshotDataUrl,
-      colours: (state.processed?.colours || []).map((region, idx) => ({
-        index: idx,
-        source: region.hex,
-        display: state.productType === 'plaque'
-          ? getPlaqueLayerDisplayHex(getPlaqueLayerDescriptors()[idx] || { type: 'raster', hex: region.hex }, idx)
-          : getDisplayColour(idx, region.hex),
-      })),
+      colours: state.productType === 'plaque'
+        ? getPlaqueSubmittedColourItems().map((item) => ({
+          index: item.index,
+          source: item.source,
+          display: item.display,
+        }))
+        : (state.processed?.colours || []).map((region, idx) => ({
+          index: idx,
+          source: region.hex,
+          display: getDisplayColour(idx, region.hex),
+        })),
       dimensions: {
         faceInches: SIZE_PRESETS[state.size].inches,
         depthMm: state.productType === 'plaque' ? state.plaque.baseThickness : SIZE_PRESETS[state.size].depth,
@@ -6685,6 +6690,25 @@ async function buildSignGuyProject() {
       },
     },
   };
+}
+
+function getPlaqueSubmittedColourItems() {
+  const backingHex = getPlaqueBackingHex(state.processed);
+  const layers = getPlaqueLayerDescriptors();
+  return [
+    {
+      index: 'backing',
+      label: 'Backing',
+      source: backingHex,
+      display: backingHex,
+    },
+    ...layers.map((layer, index) => ({
+      index,
+      label: `Raised layer ${index + 1}`,
+      source: normalizeHex(layer?.hex || '#ffffff'),
+      display: getPlaqueLayerDisplayHex(layer, index),
+    })),
+  ];
 }
 
 async function getArtworkProjectDataUrl() {
@@ -6771,6 +6795,7 @@ async function restoreSignGuyProject(project, options = {}) {
       backingColourOverride: config.plaque?.backingColourOverride ? normalizeHex(config.plaque.backingColourOverride) : '',
       layerDepths: Array.isArray(config.plaque?.layerDepths) ? config.plaque.layerDepths.map((value) => clamp(Number(value) || PLAQUE_DEFAULT_LAYER_DEPTH, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX)) : [],
       colourOverrides: Array.isArray(config.plaque?.colourOverrides) ? config.plaque.colourOverrides.map((value) => value ? normalizeHex(value) : '') : [],
+      layerSourceIndices: [],
       selectedLayer: Number(config.plaque?.selectedLayer) || 0,
       traceQuality: normalizePlaqueTraceQuality(config.plaque?.traceQuality),
       zeroGapColourLayers: config.plaque?.zeroGapColourLayers !== false,
@@ -7635,7 +7660,7 @@ async function submitDesignToEndpoint({ endpoint, subject, body, screenshots }) 
   form.append('sideColour', normalizeHex(state.shellColours.side));
   form.append('backColour', normalizeHex(state.shellColours.back));
   const submittedColours = state.productType === 'plaque'
-    ? getPlaqueLayerDescriptors().map((layer, idx) => getPlaqueLayerDisplayHex(layer, idx))
+    ? getPlaqueSubmittedColourItems().map((item) => item.display)
     : (state.processed?.colours || []).map((region, idx) => getDisplayColour(idx, region.hex));
   form.append('frontColours', JSON.stringify(submittedColours));
   form.append('logo', state.uploadedFile, state.uploadedFile.name || 'uploaded-logo');
@@ -7707,9 +7732,9 @@ function makeEmailBody(context = 'Design submission') {
   const isPlaque = state.productType === 'plaque';
   const usage = getActiveUsagePreset();
   const colours = (isPlaque
-    ? getPlaqueLayerDescriptors().map((layer, idx) => ({
-      label: `Layer ${idx + 1}`,
-      hex: getPlaqueLayerDisplayHex(layer, idx),
+    ? getPlaqueSubmittedColourItems().map((item) => ({
+      label: item.label,
+      hex: item.display,
     }))
     : (state.processed?.colours || []).map((region, idx) => ({
       label: `Colour ${idx + 1}`,
@@ -7833,9 +7858,9 @@ function makeEmailHtml(context = 'Design submission') {
   const usage = getActiveUsagePreset();
 
   const frontColours = isPlaque
-    ? getPlaqueLayerDescriptors().map((layer, index) => ({
-      label: `Plaque layer ${index + 1}`,
-      hex: getPlaqueLayerDisplayHex(layer, index),
+    ? getPlaqueSubmittedColourItems().map((item) => ({
+      label: item.label,
+      hex: item.display,
     }))
     : (state.processed?.colours || []).map((region, index) => ({
       label: `Front colour ${index + 1}`,

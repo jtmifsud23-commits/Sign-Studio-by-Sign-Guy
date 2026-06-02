@@ -2,6 +2,7 @@
 
 const DEFAULT_PLAQUE_DESKTOP_PREVIEW_ZOOM = 1;
 const DEFAULT_PLAQUE_MOBILE_PREVIEW_ZOOM = 1;
+const plaqueBaseDilationOffsetCache = new Map();
 
 function normalizePlaqueTraceQuality() {
   return 'smooth';
@@ -223,6 +224,7 @@ async function handlePlaqueFiles(fileList) {
       targetColorCount: state.plaque.targetColorCount,
       colorOverrides: [...(state.plaque.colorOverrides || [])],
       colourOverrides: [...(state.plaque.colourOverrides || [])],
+      layerSourceIndices: [...(state.plaque.layerSourceIndices || [])],
       backingColourOverride: state.plaque.backingColourOverride || '',
       frontColoursCustomized: state.plaque.frontColoursCustomized,
     selectedColor: state.plaque.selectedColor,
@@ -302,6 +304,7 @@ async function handlePlaqueFiles(fileList) {
     state.plaque.targetColorCount = 8;
     state.plaque.colorOverrides = [];
     state.plaque.colourOverrides = [];
+    state.plaque.layerSourceIndices = [];
     state.plaque.svgLayerCache = null;
     state.plaque.fastPreviewOnly = false;
     state.plaque.previewDebugMode = 'extruded';
@@ -1588,7 +1591,6 @@ function buildPlaqueThreeModel() {
     baseMaterial.side = THREE.DoubleSide;
     const svgBounds = getSvgArtworkBounds();
     const baseShape = makeSvgPlaqueBackingShape(svgLayers, svgBounds, bounds) || makePlaqueBaseShape(processed, bounds);
-    addPlaqueSawtoothHole(baseShape, bounds);
     const baseGeometry = new THREE.ExtrudeBufferGeometry(baseShape, {
       depth: baseThickness,
       bevelEnabled: true,
@@ -1653,7 +1655,6 @@ function buildFastRaisedRasterPlaquePreview(group, processed, bounds, baseThickn
   const baseMaterial = makePlaqueMaterial(baseHex, { roughness: 0.9, colourAccurate: true, colourBoost: 0.08 });
   baseMaterial.side = THREE.DoubleSide;
   const baseShape = makePlaqueBaseShape(processed, bounds);
-  addPlaqueSawtoothHole(baseShape, bounds);
   const baseGeometry = new THREE.ExtrudeBufferGeometry(baseShape, {
     depth: baseThickness,
     bevelEnabled: true,
@@ -1679,10 +1680,8 @@ function buildFastRaisedRasterPlaquePreview(group, processed, bounds, baseThickn
   group.add(backingGroup);
   resources.push(baseGeometry, baseMaterial);
 
-  (processed.colours || []).forEach((region, index) => {
-    const depth = index === 0
-      ? Math.min(getPlaqueLayerDepthForIndex(index), 1.2)
-      : getPlaqueLayerDepthForIndex(index);
+  getPlaqueRaisedRasterRenderRegions(processed).forEach((region, index) => {
+    const depth = getPlaqueLayerDepthForIndex(index);
     const hex = getPlaqueLayerDisplayHex({ type: 'raster', hex: region.hex }, index);
     const layerGroup = new THREE.Group();
     layerGroup.name = `plaqueFastRaisedLayer${index}`;
@@ -1694,7 +1693,7 @@ function buildFastRaisedRasterPlaquePreview(group, processed, bounds, baseThickn
       fastRaisedPreview: true,
       zOffset: index * 0.035,
     };
-    const surface = makeRasterPlaqueFastLayerSurface(processed, index, bounds, baseThickness + depth + layerGroup.userData.zOffset, hex);
+    const surface = makeRasterPlaqueFastLayerSurface(processed, region.sourceIndex ?? index, bounds, baseThickness + depth + layerGroup.userData.zOffset, hex);
     if (!surface) return;
     surface.userData = { plaqueLayer: index, depth };
     layerGroup.add(surface);
@@ -1738,7 +1737,7 @@ function buildDefaultPlaqueExampleModel(group, processed, bounds, baseThickness)
   group.add(backingGroup);
   resources.push(baseGeometry, baseMaterial);
 
-  const artwork = makeRasterPlaqueExactArtworkSurface(processed, bounds, baseThickness);
+  const artwork = makeRasterPlaqueExactArtworkSurface(processed, bounds, baseThickness, { forceOriginal: true });
   if (artwork) {
     artwork.name = 'defaultPlaqueExampleArtwork';
     artwork.position.z = baseThickness + 0.12;
@@ -1758,12 +1757,12 @@ function limitPlaquePreviewSilhouette(points, maxPoints) {
 function buildRasterPlaqueLayers(group, processed, bounds) {
   const resources = state.three.resources;
   let maxDepth = 0;
-  processed.colours.forEach((region, index) => {
+  getPlaqueRaisedRasterRenderRegions(processed).forEach((region, index) => {
     const depth = clamp(Number(state.plaque.layerDepths[index]) || PLAQUE_DEFAULT_LAYER_DEPTH, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
     maxDepth = Math.max(maxDepth, depth + index * 0.08);
     const hex = getPlaqueLayerDisplayHex({ type: 'raster', hex: region.hex }, index);
     const material = makePlaqueMaterial(hex, { roughness: 0.9 });
-    const layerGroup = buildRasterPlaqueContourGroup(region.mask, processed.width, processed.height, bounds, { depth, hex, index, material, cacheOwner: region });
+    const layerGroup = buildRasterPlaqueContourGroup(region.mask, processed.width, processed.height, bounds, { depth, hex, index, material, cacheOwner: region.sourceRegion || region });
     if (!layerGroup.children.length) return;
     layerGroup.userData = { ...layerGroup.userData, plaqueLayer: index, depth, hex, material };
     layerGroup.renderOrder = 10 + index;
@@ -1924,7 +1923,6 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
   const baseMaterial = makePlaqueMaterial(backingHex, { roughness: 0.88, colourAccurate: true, colourBoost: 0.1 });
   baseMaterial.side = THREE.DoubleSide;
   const baseShape = makePlaqueBaseShape(processed, bounds);
-  addPlaqueSawtoothHole(baseShape, bounds);
   const baseGeometry = new THREE.ExtrudeBufferGeometry(baseShape, {
     depth: baseThickness,
     bevelEnabled: true,
@@ -1951,7 +1949,7 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
   backingGroup.add(baseMesh);
   group.add(backingGroup);
   resources.push(baseGeometry, baseMaterial);
-  const renderRegions = getPlaqueRasterRenderRegions(processed);
+  const renderRegions = getPlaqueRaisedRasterRenderRegions(processed);
   const seamUnderpaint = state.plaque.hideTopTexture === true
     ? null
     : makeRasterPlaqueSeamUnderpaintSurface(processed, bounds, baseThickness + 0.006);
@@ -1974,10 +1972,8 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
   };
   let maxLayerDepth = 0;
   renderRegions.forEach((region, index) => {
-    const layerRise = index === 0
-      ? clamp(Number(state.plaque.layerDepths[index]) || PLAQUE_BASE_LAYER_DEPTH, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX)
-      : clamp(Number(state.plaque.layerDepths[index]) || PLAQUE_DEFAULT_LAYER_DEPTH, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
-    const depth = index === 0 ? Math.min(layerRise, 1.2) : layerRise;
+    const layerRise = clamp(Number(state.plaque.layerDepths[index]) || getDefaultPlaqueLayerDepth(index, region), PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
+    const depth = layerRise;
     maxLayerDepth = Math.max(maxLayerDepth, depth);
     const hex = getPlaqueLayerDisplayHex({ type: 'raster', hex: region.hex }, index);
     const material = makePlaqueExtrudeMaterials(hex, { roughness: 0.86 });
@@ -1988,7 +1984,7 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
       index,
       material,
       zBase: baseThickness + 0.01,
-      cacheOwner: region,
+      cacheOwner: region.sourceRegion || region,
       ...previewQuality,
       ...contourOptions,
     });
@@ -2092,14 +2088,14 @@ function getPlaqueBackingHex(processed) {
   const colours = processed?.colours || [];
   const edgeIndex = getPlaqueOuterEdgeColourIndex(processed);
   if (edgeIndex >= 0 && colours[edgeIndex]) {
-    return getPlaqueLayerDisplayHex({ type: 'raster', hex: colours[edgeIndex].hex }, edgeIndex);
+    return normalizeHex(colours[edgeIndex].hex);
   }
   if (processed?.plaqueEdgeHex) return normalizeHex(processed.plaqueEdgeHex);
   const nonWhite = colours
-    .map((region, index) => ({ region, index, hex: getPlaqueLayerDisplayHex({ type: 'raster', hex: region.hex }, index) }))
+    .map((region, index) => ({ region, index, hex: normalizeHex(region.hex) }))
     .filter((item) => !isNearWhiteHex(item.hex))
     .sort((a, b) => (b.region.count || 0) - (a.region.count || 0));
-  return nonWhite[0]?.hex || getPlaqueLayerDisplayHex({ type: 'raster', hex: colours[0]?.hex || '#f2efe7' }, 0);
+  return nonWhite[0]?.hex || normalizeHex(colours[0]?.hex || '#f2efe7');
 }
 
 function getPlaqueBasePlateHex(processed) {
@@ -2418,8 +2414,8 @@ function makeRasterPlaqueSeamUnderpaintSurface(processed, bounds, z) {
   const alphaMask = processed?.plaqueLabelledMap?.alphaMask || processed?.alphaMask;
   if (!width || !height || !regionIndex || !alphaMask || !bounds?.width || !bounds?.height) return null;
   const renderRegions = getPlaqueRasterRenderRegions(processed);
-  const displayColours = renderRegions.map((region, index) => hexToRgb(getPlaqueLayerDisplayHex({ type: 'raster', hex: region.hex }, index)));
   const backingRegion = getPlaqueBackingRegionForUnderpaint(processed, renderRegions, regionIndex, alphaMask, width, height);
+  const displayColours = renderRegions.map((region, index) => hexToRgb(getPlaqueRasterRegionDisplayHex(processed, renderRegions, index, backingRegion)));
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
@@ -2496,10 +2492,7 @@ function getPlaqueBackingRegionForUnderpaint(processed, renderRegions, regionInd
   });
   if (bestScore >= 0) return bestRegion;
   const backingHex = normalizeHex(getPlaqueBackingHex(processed));
-  const matchIndex = renderRegions.findIndex((region, index) => (
-    normalizeHex(getPlaqueLayerDisplayHex({ type: 'raster', hex: region.hex }, index)) === backingHex
-      || normalizeHex(region.hex) === backingHex
-  ));
+  const matchIndex = renderRegions.findIndex((region) => normalizeHex(region.hex) === backingHex);
   return matchIndex >= 0 ? matchIndex : 0;
 }
 
@@ -2547,8 +2540,10 @@ function plaqueUnderpaintPixelTouchesTransparent(alphaMask, width, height, x, y,
   return false;
 }
 
-function makeRasterPlaqueExactArtworkSurface(processed, bounds, maxDepth) {
-  const source = state.frontColoursCustomized ? createMappedArtworkCanvas(processed) : processed.artworkCanvas;
+function makeRasterPlaqueExactArtworkSurface(processed, bounds, maxDepth, options = {}) {
+  const source = options.forceOriginal || state.isDefaultPreview || !state.frontColoursCustomized
+    ? processed.artworkCanvas
+    : createMappedArtworkCanvas(processed);
   if (!source) return null;
   const canvas = document.createElement('canvas');
   canvas.width = source.width;
@@ -2566,15 +2561,15 @@ function makeRasterPlaqueExactArtworkSurface(processed, bounds, maxDepth) {
   texture.generateMipmaps = false;
   texture.needsUpdate = true;
   const geometry = new THREE.PlaneBufferGeometry(bounds.width, bounds.height);
-  const material = new THREE.MeshStandardMaterial({
+  const material = new THREE.MeshBasicMaterial({
     map: texture,
     transparent: true,
     alphaTest: 0.015,
-    roughness: 0.94,
-    metalness: 0,
     side: THREE.FrontSide,
+    depthTest: true,
     depthWrite: false,
   });
+  material.toneMapped = false;
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = 'plaqueExactArtworkSurface';
   mesh.position.z = Math.max(PLAQUE_DEFAULT_LAYER_DEPTH, maxDepth) + 0.42;
@@ -2718,6 +2713,8 @@ function makePlaqueGlossyDarkSideMaterial(hex) {
 
 function makePlaqueBaseShape(processed, bounds) {
   const padding = clamp(Number(state.plaque.basePadding) || PLAQUE_DEFAULT_BASE_PADDING, 0, 6);
+  const dieCutShape = makeDieCutPlaqueBackingShape(processed, bounds, padding);
+  if (dieCutShape) return dieCutShape;
   const outerSilhouette = buildSmoothPlaqueBaseSilhouette(processed);
   const points = silhouetteToThreePoints(outerSilhouette?.length >= 3 ? outerSilhouette : processed.silhouette, bounds, 1);
   const cleanPoints = cleanPlaqueBackingPlatePoints(points, bounds);
@@ -2726,28 +2723,53 @@ function makePlaqueBaseShape(processed, bounds) {
   return makeThreeShape(cleanPaddedPoints);
 }
 
+function makeDieCutPlaqueBackingShape(processed, bounds, padding) {
+  const contours = getDieCutPlaqueBackingContours(processed, bounds, padding);
+  if (!contours?.length) return null;
+  const shapes = contours
+    .map((loop) => makePlaqueDieCutShapeFromNormalizedLoop(loop, bounds))
+    .filter(Boolean);
+  if (!shapes.length) return null;
+  return shapes.length === 1 ? shapes[0] : shapes;
+}
+
+function makePlaqueDieCutShapeFromNormalizedLoop(loop, bounds) {
+  if (!Array.isArray(loop) || loop.length < 8) return null;
+  const points = silhouetteToThreePoints(loop, bounds, 1);
+  const cleanPoints = cleanPlaqueBackingPlatePoints(points, bounds, { exactBacking: true });
+  if (cleanPoints.length < 8) return null;
+  const shape = new THREE.Shape();
+  addSmoothClosedPlaquePath(shape, cleanPoints);
+  return shape;
+}
+
 function cleanPlaqueBackingPlatePoints(points, bounds, options = {}) {
   if (!Array.isArray(points) || points.length < 8) return points?.map((point) => point.clone()) || [];
   const maxDimension = Math.max(Number(bounds?.width) || 148, Number(bounds?.height) || 148);
   const afterOffset = options.afterOffset === true;
-  const tolerance = afterOffset
+  const exactBacking = options.exactBacking === true;
+  const tolerance = exactBacking
+    ? clamp(maxDimension / 1800, 0.035, 0.09)
+    : afterOffset
     ? clamp(maxDimension / 920, 0.08, 0.2)
     : clamp(maxDimension / 960, 0.08, 0.18);
   let loop = points.map((point) => [point.x, point.y]);
   loop = removePlaqueBackingMicroBurrs(
     loop,
-    afterOffset ? 1.45 : 0.95,
-    afterOffset ? 0.5 : 0.32,
+    exactBacking ? 0.76 : (afterOffset ? 1.45 : 0.95),
+    exactBacking ? 0.24 : (afterOffset ? 0.5 : 0.32),
   );
   loop = simplifyClosedPlaqueLoop(loop, tolerance);
-  if (afterOffset) {
+  if (afterOffset && !exactBacking) {
     loop = smoothPlaqueBackingPlateSideLoop(loop, bounds, 2);
     loop = densifyClosedPlaqueLoop(loop, clamp(maxDimension / 150, 0.78, 1.28));
+  } else if (exactBacking) {
+    loop = densifyClosedPlaqueLoop(loop, clamp(maxDimension / 240, 0.42, 0.78));
   }
   loop = removePlaqueBackingMicroBurrs(
     loop,
-    afterOffset ? 1.7 : 1.1,
-    afterOffset ? 0.58 : 0.4,
+    exactBacking ? 0.86 : (afterOffset ? 1.7 : 1.1),
+    exactBacking ? 0.28 : (afterOffset ? 0.58 : 0.4),
   );
   loop = removeNearDuplicatePoints(loop, Math.max(0.025, tolerance * 0.14));
   return loop.length >= 8 ? loop.map(([x, y]) => new THREE.Vector2(x, y)) : points.map((point) => point.clone());
@@ -2888,49 +2910,277 @@ function smoothPlaqueBackingSideNormals(geometry, depth, zMinOverride = 0, zMaxO
   normal.needsUpdate = true;
 }
 
-function buildSmoothPlaqueBaseSilhouette(processed) {
+function buildSmoothPlaqueBaseSilhouette(processed, padding = 0, bounds = null) {
   if (!processed?.alphaMask || !processed.width || !processed.height) return processed?.silhouette || [];
+  const paddingKey = Math.round((Number(padding) || 0) * 1000);
   const cached = processed.plaqueBaseSilhouetteCache;
   if (
     cached?.version === PLAQUE_BASE_SILHOUETTE_CACHE_VERSION
     && cached.width === processed.width
     && cached.height === processed.height
+    && cached.padding === paddingKey
     && Array.isArray(cached.points)
     && cached.points.length >= 3
   ) {
     return cached.points.map((point) => [point[0], point[1]]);
-  }
-  const traced = traceMaskOutline(processed.alphaMask, processed.width, processed.height);
-  if (traced.length >= 12) {
-    const largestSide = Math.max(processed.width, processed.height);
-    const smoothed = makePlaqueSmoothLoop(traced, {
-      smoothingPasses: 4,
-      simplifyTolerance: Math.max(0.35, largestSide / 2200),
-      polishPasses: 2,
-      finalPointSpacing: Math.max(0.35, largestSide / 1800),
-    });
-    if (smoothed.length >= 12) {
-      const points = smoothed.map(([x, y]) => [
-        clamp(x / processed.width, 0, 1),
-        clamp(y / processed.height, 0, 1),
-      ]);
-      processed.plaqueBaseSilhouetteCache = {
-        version: PLAQUE_BASE_SILHOUETTE_CACHE_VERSION,
-        width: processed.width,
-        height: processed.height,
-        points: clonePlaqueContourLoop(points),
-      };
-      return points;
-    }
   }
   const points = buildExactAlphaSilhouette(processed.alphaMask, processed.width, processed.height);
   processed.plaqueBaseSilhouetteCache = {
     version: PLAQUE_BASE_SILHOUETTE_CACHE_VERSION,
     width: processed.width,
     height: processed.height,
+    padding: paddingKey,
     points: clonePlaqueContourLoop(points),
   };
   return points;
+}
+
+function getDieCutPlaqueBackingContours(processed, bounds, padding) {
+  if (!processed?.width || !processed.height || !bounds?.width || !bounds?.height) return null;
+  const paddingKey = Math.round((Number(padding) || 0) * 1000);
+  const cached = processed.plaqueDieCutBackingCache;
+  if (
+    cached?.version === PLAQUE_BASE_SILHOUETTE_CACHE_VERSION
+    && cached.width === processed.width
+    && cached.height === processed.height
+    && cached.padding === paddingKey
+    && Array.isArray(cached.contours)
+    && cached.contours.length
+  ) {
+    return cached.contours.map(clonePlaqueContourLoop);
+  }
+
+  const source = getPlaqueDieCutSourceMask(processed) || getPlaqueVisibleAlphaMask(processed);
+  if (!source?.mask || !source.width || !source.height) return null;
+  const traceMask = preparePlaqueTraceMask(source.mask, source.width, source.height, 1500);
+  let sourceMask = traceMask.mask;
+  if (!sourceMask || !traceMask.width || !traceMask.height) return null;
+  const visiblePixels = countPlaqueMaskPixels(sourceMask);
+  if (!visiblePixels) return null;
+  if (typeof keepPrintableMaskComponents === 'function') {
+    sourceMask = keepPrintableMaskComponents(sourceMask, traceMask.width, traceMask.height, Math.max(12, Math.round(visiblePixels * 0.000035)));
+  }
+  sourceMask = closePlaqueMask(sourceMask, traceMask.width, traceMask.height, getPlaqueTinyGapClosingRadius());
+  const visibleBounds = getPlaqueMaskBounds(sourceMask, traceMask.width, traceMask.height);
+  if (!visibleBounds) return null;
+  const offsetPx = getPlaqueDieCutBackingOffsetPixels(padding, visibleBounds, traceMask.width, traceMask.height, bounds);
+  const backingMask = dilatePlaqueMask(sourceMask, traceMask.width, traceMask.height, offsetPx);
+  const contours = traceDieCutPlaqueOuterContours(backingMask, traceMask.width, traceMask.height, offsetPx);
+  if (!contours.length) return null;
+  processed.plaqueDieCutBackingCache = {
+    version: PLAQUE_BASE_SILHOUETTE_CACHE_VERSION,
+    width: processed.width,
+    height: processed.height,
+    padding: paddingKey,
+    contours: contours.map(clonePlaqueContourLoop),
+  };
+  return contours;
+}
+
+function getPlaqueVisibleAlphaMask(processed) {
+  const canvas = processed?.artworkCanvas;
+  if (canvas?.width && canvas?.height) {
+    try {
+      const width = Math.max(1, Number(processed.width) || canvas.width);
+      const height = Math.max(1, Number(processed.height) || canvas.height);
+      const sampleCanvas = document.createElement('canvas');
+      sampleCanvas.width = width;
+      sampleCanvas.height = height;
+      const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
+      sampleCtx.clearRect(0, 0, width, height);
+      sampleCtx.drawImage(canvas, 0, 0, width, height);
+      const data = sampleCtx.getImageData(0, 0, width, height).data;
+      const mask = new Uint8Array(width * height);
+      for (let index = 0; index < mask.length; index += 1) {
+        mask[index] = data[index * 4 + 3] >= 96 ? 1 : 0;
+      }
+      if (countPlaqueMaskPixels(mask)) return { mask, width, height };
+    } catch (error) {
+      // Fall back to the processed alpha mask below.
+    }
+  }
+  if (!processed?.alphaMask || !processed.width || !processed.height) return null;
+  return {
+    mask: new Uint8Array(processed.alphaMask),
+    width: processed.width,
+    height: processed.height,
+  };
+}
+
+function getPlaqueDieCutSourceMask(processed) {
+  if (!processed?.alphaMask || !processed.width || !processed.height || !processed.regionIndex) return null;
+  const regions = processed.colours || [];
+  if (regions.length < 2) return null;
+  const backingIndex = getPlaqueBackingRenderRegionIndex(processed, regions);
+  if (backingIndex < 0 || backingIndex >= regions.length) return null;
+  const totalVisible = countPlaqueMaskPixels(processed.alphaMask);
+  if (!totalVisible) return null;
+  const backingMask = regions[backingIndex]?.mask;
+  let backingPixels = backingMask ? countPlaqueMaskPixels(backingMask) : 0;
+  if (!backingPixels) {
+    for (let index = 0; index < processed.regionIndex.length; index += 1) {
+      if (processed.alphaMask[index] && processed.regionIndex[index] === backingIndex) backingPixels += 1;
+    }
+  }
+  const backingRatio = backingPixels / totalVisible;
+  if (backingRatio > 0.28) return null;
+  const mask = new Uint8Array(processed.width * processed.height);
+  let raisedPixels = 0;
+  for (let index = 0; index < processed.regionIndex.length; index += 1) {
+    if (!processed.alphaMask[index]) continue;
+    const region = processed.regionIndex[index];
+    if (region < 0 || region === backingIndex) continue;
+    mask[index] = 1;
+    raisedPixels += 1;
+  }
+  if (raisedPixels < Math.max(64, totalVisible * 0.18)) return null;
+  return {
+    mask,
+    width: processed.width,
+    height: processed.height,
+  };
+}
+
+function getPlaqueTinyGapClosingRadius() {
+  return 1;
+}
+
+function getPlaqueDieCutBackingOffsetPixels(padding, visibleBounds, width, height, bounds) {
+  const logoWidth = Math.max(1, visibleBounds.maxX - visibleBounds.minX + 1);
+  const paddingScale = clamp((Number(padding) || PLAQUE_DEFAULT_BASE_PADDING) / PLAQUE_DEFAULT_BASE_PADDING, 0.35, 1.85);
+  const ratioRadius = logoWidth * 0.012 * paddingScale;
+  const modelUnitsPerPixel = Math.max(0.0001, (Number(bounds?.width) || 148) / width);
+  const modelRadius = ((Number(padding) || PLAQUE_DEFAULT_BASE_PADDING) * 0.42) / modelUnitsPerPixel;
+  const radius = Math.min(ratioRadius, modelRadius);
+  return clamp(Math.round(radius), 2, Math.round(Math.max(width, height) * 0.02));
+}
+
+function getPlaqueMaskBounds(mask, width, height) {
+  let minX = width;
+  let minY = height;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < height; y += 1) {
+    const row = y * width;
+    for (let x = 0; x < width; x += 1) {
+      if (!mask[row + x]) continue;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  return maxX >= minX && maxY >= minY ? { minX, minY, maxX, maxY } : null;
+}
+
+function traceDieCutPlaqueOuterContours(mask, width, height, offsetPx) {
+  const minArea = width * height * 0.00008;
+  return traceMaskLoops(mask, width, height)
+    .map((loop) => ({ loop, area: polygonArea(loop) }))
+    .filter((item) => item.area >= minArea)
+    .sort((a, b) => b.area - a.area)
+    .slice(0, 8)
+    .map((item) => smoothDieCutPlaqueLoop(item.loop, width, height, offsetPx))
+    .filter((loop) => loop.length >= 8)
+    .map((loop) => loop.map(([x, y]) => [
+      clamp(x / width, 0, 1),
+      clamp(y / height, 0, 1),
+    ]));
+}
+
+function smoothDieCutPlaqueLoop(loop, width, height, offsetPx) {
+  const maxSide = Math.max(width, height);
+  const tolerance = clamp(maxSide / 3200, 0.18, 0.55);
+  let output = removeNearDuplicatePoints(loop, 0.01);
+  output = simplifyClosedPlaqueLoop(output, tolerance);
+  output = removePlaqueBackingMicroBurrs(output, Math.max(1.1, offsetPx * 0.05), Math.max(0.38, offsetPx * 0.018));
+  if (typeof chaikinSmoothClosed === 'function') {
+    output = chaikinSmoothClosed(output, 1);
+    output = simplifyClosedPlaqueLoop(output, tolerance * 0.55);
+  }
+  output = removeNearDuplicatePoints(output, Math.max(0.015, tolerance * 0.18));
+  return output;
+}
+
+function countPlaqueMaskPixels(mask) {
+  let count = 0;
+  for (let index = 0; index < mask.length; index += 1) {
+    if (mask[index]) count += 1;
+  }
+  return count;
+}
+
+function dilatePlaqueMask(mask, width, height, radiusPx) {
+  const radius = clamp(Math.round(Number(radiusPx) || 0), 0, 72);
+  const output = new Uint8Array(mask);
+  if (!radius) return output;
+  const offsets = getPlaqueBaseDilationOffsets(radius);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = y * width + x;
+      if (!mask[index] || !isPlaqueMaskBoundaryPixel(mask, width, height, x, y)) continue;
+      offsets.forEach(([ox, oy]) => {
+        const nx = x + ox;
+        const ny = y + oy;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) return;
+        output[ny * width + nx] = 1;
+      });
+    }
+  }
+  return output;
+}
+
+function erodePlaqueMask(mask, width, height, radiusPx) {
+  const radius = clamp(Math.round(Number(radiusPx) || 0), 0, 16);
+  if (!radius) return new Uint8Array(mask);
+  const offsets = getPlaqueBaseDilationOffsets(radius);
+  const output = new Uint8Array(mask.length);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = y * width + x;
+      if (!mask[index]) continue;
+      let keep = true;
+      for (let offsetIndex = 0; offsetIndex < offsets.length; offsetIndex += 1) {
+        const [ox, oy] = offsets[offsetIndex];
+        const nx = x + ox;
+        const ny = y + oy;
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height || !mask[ny * width + nx]) {
+          keep = false;
+          break;
+        }
+      }
+      if (keep) output[index] = 1;
+    }
+  }
+  return output;
+}
+
+function closePlaqueMask(mask, width, height, radiusPx) {
+  const radius = clamp(Math.round(Number(radiusPx) || 0), 0, 8);
+  if (!radius) return new Uint8Array(mask);
+  return erodePlaqueMask(dilatePlaqueMask(mask, width, height, radius), width, height, radius);
+}
+
+function getPlaqueBaseDilationOffsets(radius) {
+  if (plaqueBaseDilationOffsetCache.has(radius)) return plaqueBaseDilationOffsetCache.get(radius);
+  const offsets = [];
+  const limit = radius * radius;
+  for (let oy = -radius; oy <= radius; oy += 1) {
+    for (let ox = -radius; ox <= radius; ox += 1) {
+      if (ox * ox + oy * oy <= limit) offsets.push([ox, oy]);
+    }
+  }
+  plaqueBaseDilationOffsetCache.set(radius, offsets);
+  return offsets;
+}
+
+function isPlaqueMaskBoundaryPixel(mask, width, height, x, y) {
+  if (x <= 0 || y <= 0 || x >= width - 1 || y >= height - 1) return true;
+  const index = y * width + x;
+  return !mask[index - 1]
+    || !mask[index + 1]
+    || !mask[index - width]
+    || !mask[index + width];
 }
 
 function getPlaqueRasterPreviewQuality(processed) {
@@ -3025,6 +3275,8 @@ function getPlaqueRasterPreviewQuality(processed) {
 function getPlaqueContourClassOptions(region, index, processed, baseOptions = {}) {
   const traceQuality = normalizePlaqueTraceQuality(state.plaque.traceQuality);
   if (traceQuality === 'raw') return { contourClass: 'raw-pixel', contourOverlap: 0 };
+  const sourceIndex = Number(region?.sourceIndex);
+  const originalIndex = Number.isFinite(sourceIndex) ? sourceIndex : index;
   const hex = normalizeHex(region?.hex || '#ffffff');
   const rgb = hexToRgb(hex);
   const luma = colourLuma(rgb);
@@ -3033,7 +3285,7 @@ function getPlaqueContourClassOptions(region, index, processed, baseOptions = {}
   const share = Number(region?.count || 0) / opaquePixels;
   const isWhiteTextLike = luma >= 222 && chroma <= 38;
   const isDarkFaceLike = luma <= 58 && chroma <= 38;
-  const isSmallInteriorDetail = share > 0 && share < 0.075 && index > 0;
+  const isSmallInteriorDetail = share > 0 && share < 0.075 && originalIndex > 0;
   if (traceQuality !== 'raw' && (isWhiteTextLike || isSmallInteriorDetail)) {
     return {
       contourClass: isWhiteTextLike ? 'text-details' : 'small-interior-details',
@@ -3064,8 +3316,8 @@ function getPlaqueContourClassOptions(region, index, processed, baseOptions = {}
     };
   }
   return {
-    contourClass: index === 0 ? 'outer-silhouette' : 'large-smooth-shape',
-    contourOverlap: index === 0 ? 0.06 : 0.18,
+    contourClass: originalIndex === 0 ? 'outer-silhouette' : 'large-smooth-shape',
+    contourOverlap: originalIndex === 0 ? 0.06 : 0.18,
   };
 }
 
@@ -4340,18 +4592,39 @@ function renderPlaqueBaseControl() {
 
 function syncPlaqueLayers() {
   const layers = getPlaqueLayerDescriptors();
+  const sourceIndices = getPlaqueLayerSourceIndices(layers);
+  const previousSourceIndices = Array.isArray(state.plaque.layerSourceIndices)
+    ? state.plaque.layerSourceIndices
+    : [];
+  const valuesAreAlreadyLayerAligned = sourceIndices.length === previousSourceIndices.length
+    && sourceIndices.every((sourceIndex, index) => Number(previousSourceIndices[index]) === sourceIndex);
+  const currentDepths = Array.isArray(state.plaque.layerDepths) ? state.plaque.layerDepths : [];
   state.plaque.layerDepths = layers.map((_, index) => {
-    const current = Number(state.plaque.layerDepths[index]);
+    const sourceIndex = sourceIndices[index];
+    if (!valuesAreAlreadyLayerAligned && Number.isFinite(sourceIndex) && sourceIndex !== index) {
+      const sourceCurrent = Number(currentDepths[sourceIndex]);
+      if (Number.isFinite(sourceCurrent)) return clamp(sourceCurrent, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
+    }
+    const current = Number(currentDepths[index]);
     if (Number.isFinite(current)) return clamp(current, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
     return getDefaultPlaqueLayerDepth(index, layers[index]);
   });
   const currentOverrides = Array.isArray(state.plaque.colourOverrides) ? state.plaque.colourOverrides : [];
   state.plaque.colourOverrides = layers.map((_, index) => {
-    const current = currentOverrides[index];
+    const sourceIndex = sourceIndices[index];
+    const current = (!valuesAreAlreadyLayerAligned && Number.isFinite(sourceIndex) && sourceIndex !== index ? currentOverrides[sourceIndex] : '') || currentOverrides[index];
     return current ? normalizeHex(current) : '';
   });
+  state.plaque.layerSourceIndices = sourceIndices;
   if (!layers.length) state.plaque.selectedLayer = 0;
   else state.plaque.selectedLayer = clamp(Number(state.plaque.selectedLayer) || 0, 0, layers.length - 1);
+}
+
+function getPlaqueLayerSourceIndices(layers) {
+  return (layers || []).map((layer, index) => {
+    const sourceIndex = Number(layer?.sourceIndex);
+    return Number.isFinite(sourceIndex) ? sourceIndex : index;
+  });
 }
 
 function renderPlaqueLayerControls() {
@@ -4516,9 +4789,10 @@ function renderPlaqueDiagnostics() {
 function getPlaqueLayerDescriptors() {
   const svgLayers = getSvgPlaqueLayers();
   if (svgLayers.length) return svgLayers;
-  return getPlaqueRasterRenderRegions(state.processed).map((region, index) => ({
+  return getPlaqueRaisedRasterRenderRegions(state.processed).map((region, index) => ({
     type: 'raster',
     index,
+    sourceIndex: region.sourceIndex ?? index,
     hex: region.hex,
     region,
   }));
@@ -4533,6 +4807,38 @@ function getPlaqueRasterRenderRegions(processed) {
     return processed.plaqueLabelledMap.regions;
   }
   return processed?.colours || [];
+}
+
+function getPlaqueBackingRenderRegionIndex(processed, regions = getPlaqueRasterRenderRegions(processed)) {
+  if (!regions?.length) return -1;
+  const edgeIndex = getPlaqueOuterEdgeColourIndex(processed);
+  if (edgeIndex >= 0 && edgeIndex < regions.length) return edgeIndex;
+  const backingHex = normalizeHex(getPlaqueBackingHex(processed));
+  const matchIndex = regions.findIndex((region) => normalizeHex(region?.hex || '') === backingHex);
+  if (matchIndex >= 0) return matchIndex;
+  return regions.length > 1 ? 0 : -1;
+}
+
+function getPlaqueRaisedRasterRenderRegions(processed) {
+  const regions = getPlaqueRasterRenderRegions(processed);
+  if (!regions?.length) return [];
+  const backingIndex = getPlaqueBackingRenderRegionIndex(processed, regions);
+  if (regions.length <= 1) return [];
+  return regions
+    .map((region, sourceIndex) => ({
+      ...region,
+      sourceIndex,
+      sourceRegion: region,
+    }))
+    .filter((region) => region.sourceIndex !== backingIndex);
+}
+
+function getPlaqueRasterRegionDisplayHex(processed, regions, sourceIndex, backingIndex = getPlaqueBackingRenderRegionIndex(processed, regions)) {
+  if (sourceIndex === backingIndex) return getPlaqueBackingHex(processed);
+  const raisedRegions = getPlaqueRaisedRasterRenderRegions(processed);
+  const raisedIndex = raisedRegions.findIndex((region) => region.sourceIndex === sourceIndex);
+  if (raisedIndex >= 0) return getPlaqueLayerDisplayHex(raisedRegions[raisedIndex], raisedIndex);
+  return normalizeHex(regions?.[sourceIndex]?.hex || '#ffffff');
 }
 
 function getPlaqueLayerDisplayHex(layer, index) {
@@ -4721,7 +5027,6 @@ function getPlaqueLayerDepthForIndex(index) {
 }
 
 function getDefaultPlaqueLayerDepth(index, layer) {
-  if (Number(index) === 0) return PLAQUE_BASE_LAYER_DEPTH;
   const rgb = hexToRgb(normalizeHex(layer?.hex || '#ffffff'));
   const luma = colourLuma(rgb);
   const chroma = colourChroma(rgb);
