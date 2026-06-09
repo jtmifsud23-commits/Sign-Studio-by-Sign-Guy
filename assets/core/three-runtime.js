@@ -124,10 +124,61 @@ function updateThreeModelPosition() {
 }
 
 function getThreeModelYOffset(bounds = null) {
-  const plaqueMobileLift = state.productType === 'plaque' && isMobilePreviewViewport() ? 36 : 0;
+  if (state.productType === 'plaque' && isMobilePreviewViewport() && bounds) {
+    const safePlaqueOffset = getMobilePlaqueSafeModelYOffset(bounds);
+    if (Number.isFinite(safePlaqueOffset)) return safePlaqueOffset;
+  }
+  const plaqueMobileLift = state.productType === 'plaque' && isMobilePreviewViewport() ? 0 : 0;
   if (!bounds) return (isResponsiveViewport() ? -26 : 10) + plaqueMobileLift;
   const floorY = isResponsiveViewport() ? -68 : -74;
   return floorY - bounds.minY + plaqueMobileLift;
+}
+
+function getMobilePlaqueSafeFrame() {
+  if (state.productType !== 'plaque' || !isMobilePreviewViewport() || !els.stage) return null;
+  const stageRect = els.stage.getBoundingClientRect();
+  if (!stageRect.width || !stageRect.height) return null;
+  const ribbonRect = els.stage.querySelector('.stage-ribbon')?.getBoundingClientRect?.();
+  const trayVisible = els.plaqueVisualLayerTray && !els.plaqueVisualLayerTray.hidden;
+  const trayRect = trayVisible ? els.plaqueVisualLayerTray.getBoundingClientRect() : null;
+  const commandRect = els.mobileCommandBar?.getBoundingClientRect?.();
+  const margin = clamp(stageRect.height * 0.018, 10, 18);
+  const top = Math.max(0, ribbonRect ? ribbonRect.bottom - stageRect.top : 0) + margin;
+  const fallbackBottom = commandRect ? commandRect.top - stageRect.top : stageRect.height;
+  const bottomAnchor = trayRect ? trayRect.top - stageRect.top : fallbackBottom;
+  const bottom = Math.min(stageRect.height, bottomAnchor) - margin;
+  if (!Number.isFinite(top) || !Number.isFinite(bottom) || bottom - top < 110) return null;
+  return {
+    top,
+    bottom,
+    height: bottom - top,
+    centerY: (top + bottom) / 2,
+    stageHeight: stageRect.height,
+  };
+}
+
+function getMobilePlaqueCameraDistanceScale(bounds = state.three?.group?.userData?.bounds) {
+  if (state.productType !== 'plaque' || !isMobilePreviewViewport() || !bounds || !state.three?.camera) return 1;
+  const frame = getMobilePlaqueSafeFrame();
+  if (!frame) return 1;
+  const zoom = clamp(Number(state.previewZoom) || 1, MOBILE_PREVIEW_ZOOM_MIN, MOBILE_PREVIEW_ZOOM_MAX);
+  const baseDistance = 430 / zoom;
+  const visibleHeightWorld = 2 * baseDistance * Math.tan(THREE.Math.degToRad(state.three.camera.fov) / 2);
+  const safeHeightWorld = (frame.height / frame.stageHeight) * visibleHeightWorld;
+  const modelHeight = Math.max(1, Number(bounds.maxY) - Number(bounds.minY));
+  const paddedModelHeight = modelHeight * 1.12;
+  if (!Number.isFinite(safeHeightWorld) || safeHeightWorld <= 0) return 1;
+  return clamp(paddedModelHeight / safeHeightWorld, 1, 1.75);
+}
+
+function getMobilePlaqueSafeModelYOffset(bounds) {
+  const frame = getMobilePlaqueSafeFrame();
+  if (!frame || !state.three?.camera || !bounds) return NaN;
+  const visibleHeightWorld = 2 * state.three.camera.position.z * Math.tan(THREE.Math.degToRad(state.three.camera.fov) / 2);
+  const worldPerPixel = visibleHeightWorld / frame.stageHeight;
+  const desiredCenterWorldY = (frame.stageHeight / 2 - frame.centerY) * worldPerPixel;
+  const modelCenterY = ((Number(bounds.minY) || 0) + (Number(bounds.maxY) || 0)) / 2;
+  return desiredCenterWorldY - modelCenterY;
 }
 
 function isThreeVector2Like(value) {

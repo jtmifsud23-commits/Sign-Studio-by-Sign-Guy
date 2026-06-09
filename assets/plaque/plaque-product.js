@@ -4686,6 +4686,17 @@ function renderPlaqueVisualizerLayerTray(layers = getPlaqueLayerDescriptors()) {
   els.plaqueVisualLayerToggle?.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
   els.plaqueVisualLayerList.innerHTML = renderPlaqueVisualizerLayerMarkup(layers);
   els.plaqueVisualLayerList.querySelectorAll('[data-plaque-depth]').forEach(updateRangeFill);
+  refreshMobilePlaqueSafeFrame();
+}
+
+function refreshMobilePlaqueSafeFrame() {
+  if (state.productType !== 'plaque' || !isMobilePreviewViewport() || !state.three?.group) return;
+  window.requestAnimationFrame(() => {
+    if (state.productType !== 'plaque' || !state.three?.group) return;
+    applyPreviewZoom({ render: false });
+    applyPreviewPan();
+    renderThree();
+  });
 }
 
 function renderPlaqueVisualizerLayerMarkup(layers = getPlaqueLayerDescriptors()) {

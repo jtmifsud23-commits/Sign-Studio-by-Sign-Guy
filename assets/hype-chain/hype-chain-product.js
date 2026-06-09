@@ -1,18 +1,67 @@
 // Hype Chain product runtime. Loaded before app.js so app.js can stay focused on core studio orchestration.
 
+const HYPE_SPINNER_BASE_SCENE_SCALE = 2.1;
+const HYPE_SPINNER_PENDANT_SCALE = 0.8;
+const HYPE_SPINNER_CONNECTOR_SCALE = 1.3;
+const HYPE_SPINNER_CONNECTOR_STL_HOLE_X_MM = 7.45;
+const HYPE_SPINNER_CONNECTOR_STL_HOLE_Y_MM = 23;
+const HYPE_SPINNER_CONNECTOR_ENTRY_BLEND = 0.28;
+const HYPE_SPINNER_CONNECTOR_ENTRY_FORWARD_Z = -35;
+const HYPE_SPINNER_CONNECTOR_ENTRY_CLEARANCE_INSET_X = 5;
+const HYPE_SPINNER_CONNECTOR_ENTRY_CLEARANCE_DROP_Y = -11;
+const HYPE_SPINNER_BASE_FORWARD_DEPTH_OFFSET = 20;
+const HYPE_SPINNER_FIXED_CENTER_LOGO_FORWARD_DEPTH_OFFSET = 20;
+const HYPE_SPINNER_FIXED_CENTER_LOGO_VERTICAL_OFFSET = 0;
+const HYPE_PENDANT_FRAME_PADDING = 1.24;
+const HYPE_PENDANT_BOTTOM_SAFE_PADDING = 0.18;
+const HYPE_PENDANT_FIT_RELAX_ZOOM = 2.4;
+const HYPE_SPINNER_FONT_OPTIONS = Object.freeze([
+  'Adidas Half Block 2016',
+  'Bebas Neue Bold',
+  'Big Noodle Titling',
+  'Bulletproof BB',
+  'Bungee',
+  'Cocogoose',
+  'DIN Pro Black',
+  'DIN Pro Cond Black',
+  'Futura LT ExtraBold',
+  'Limerick-Serial-Heavy',
+  'Market Pro',
+  'Modica Black',
+  'Molot',
+  'Montserrat Alternates Black',
+  'Montserrat Black',
+  'Norwester',
+  'Poppins Black',
+  'Raleway Black',
+  'Roboto Black',
+  'SF Pro Display Black',
+  'Soccer League',
+  'Source Serif Pro Black',
+  'Spartan MB Black',
+  'Stop MN',
+  'Sullivan Fill',
+]);
+const hypeSpinnerRequestedFonts = new Set();
+
 function setupHypeChainControls() {
   document.querySelectorAll('[data-hype-variant]').forEach((button) => {
     button.addEventListener('click', () => {
-      if (button.dataset.hypeVariant === 'spinner' && !state.isAdmin) return;
       document.querySelectorAll('[data-hype-variant]').forEach((item) => item.classList.remove('active'));
       button.classList.add('active');
       state.hype.variant = button.dataset.hypeVariant || 'classic';
+      syncHypeSpinnerConfig();
+      applyHypeStateToControls();
       updateStats();
       scheduleHypeRender();
+      if (typeof refreshProjectLog === 'function') refreshProjectLog();
     });
   });
   els.hypeColourButtons.forEach((button) => {
     button.addEventListener('click', () => openHypeColourPopover(button.dataset.hypeColour, button));
+  });
+  document.querySelectorAll('[data-hype-spinner-colour]').forEach((button) => {
+    button.addEventListener('click', () => openHypeSpinnerColourPopover(button.dataset.hypeSpinnerColour, button));
   });
   [
     [els.hypePrimaryColour, 'primary'],
@@ -40,6 +89,64 @@ function setupHypeChainControls() {
       syncHypeDerivedColours();
       scheduleHypeRender(0);
     });
+  });
+  [
+    [els.hypeSpinnerTopText, 'topText', 'text'],
+    [els.hypeSpinnerBottomText, 'bottomText', 'text'],
+    [els.hypeSpinnerFontFamily, 'fontFamily', 'text'],
+    [els.hypeSpinnerRingColor, 'ringColor', 'color'],
+    [els.hypeSpinnerTextColor, 'textColor', 'color'],
+    [els.hypeSpinnerBaseColor, 'baseColor', 'color'],
+    [els.hypeSpinnerRingDiameter, 'ringDiameter', 'number'],
+    [els.hypeSpinnerRingThickness, 'ringThickness', 'number'],
+    [els.hypeSpinnerRingClearance, 'ringClearance', 'number'],
+  ].forEach(([input, key, type]) => {
+    input?.addEventListener('input', () => {
+      const spinner = syncHypeSpinnerConfig();
+      spinner[key] = type === 'number'
+        ? Number(input.value)
+        : String(input.value || '');
+      state.hype.spinner = normalizeHypeSpinnerConfig(spinner);
+      applyHypeSpinnerStateToControls();
+      scheduleHypeRender(0);
+    });
+  });
+  els.hypeSpinnerFontButton?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const isOpen = !els.hypeSpinnerFontMenu?.classList.contains('hidden');
+    setHypeSpinnerFontMenuOpen(!isOpen);
+  });
+  els.hypeSpinnerFontMenu?.addEventListener('click', (event) => {
+    const button = event.target?.closest?.('[data-hype-spinner-font]');
+    if (!button) return;
+    const spinner = syncHypeSpinnerConfig();
+    spinner.fontFamily = normalizeHypeSpinnerFontFamily(button.dataset.hypeSpinnerFont);
+    state.hype.spinner = normalizeHypeSpinnerConfig(spinner);
+    setHypeSpinnerFontMenuOpen(false);
+    applyHypeSpinnerStateToControls();
+    scheduleHypeRender(0);
+  });
+  document.addEventListener('click', (event) => {
+    if (!event.target?.closest?.('.hype-spinner-font-field')) setHypeSpinnerFontMenuOpen(false);
+  });
+  els.hypeSpinnerSpinPreviewToggle?.addEventListener('pointerdown', (event) => {
+    if (event.pointerType === 'mouse' && Number.isFinite(event.button) && event.button > 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    startHypeSpinnerSpin();
+  });
+  els.hypeSpinnerSpinPreviewToggle?.addEventListener('pointerup', (event) => {
+    event.stopPropagation();
+  });
+  els.hypeSpinnerSpinPreviewToggle?.addEventListener('touchstart', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    startHypeSpinnerSpin();
+  }, { passive: false });
+  els.hypeSpinnerSpinPreviewToggle?.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    startHypeSpinnerSpin();
   });
   els.hypeLogoInput?.addEventListener('change', async () => {
     const files = cloneFileList(els.hypeLogoInput.files);
@@ -81,9 +188,12 @@ function scheduleHypeRender(delay = 120) {
 function renderHypeChain() {
   if (!els.hypeChainRender) return;
   syncHypeDerivedColours();
+  syncHypeSpinnerConfig();
   renderHypeColourControls();
   renderHypeVariantAccess();
+  applyHypeSpinnerStateToControls();
   const hype = state.hype;
+  els.hypeChainRender.classList.toggle('hype-spinner-mode', hype.variant === 'spinner');
   els.hypeVariantOutput.textContent = getHypeSpecLabel();
   els.hypeChainRender.style.setProperty('--hype-primary', normalizeHex(hype.primary));
   els.hypeChainRender.style.setProperty('--hype-secondary', normalizeHex(hype.secondary));
@@ -147,6 +257,12 @@ function initHypeThreeStage() {
   const rim = new THREE.DirectionalLight(0x9fb5ff, 0.45);
   rim.position.set(180, 70, -210);
   scene.add(rim);
+  const spinnerTextKey = new THREE.DirectionalLight(0xffffff, 0.34);
+  spinnerTextKey.position.set(250, 320, 360);
+  scene.add(spinnerTextKey);
+  const spinnerTextRim = new THREE.DirectionalLight(0xffffff, 0.24);
+  spinnerTextRim.position.set(-260, 220, 290);
+  scene.add(spinnerTextRim);
   const floor = new THREE.Mesh(
     new THREE.PlaneBufferGeometry(560, 360),
     new THREE.ShadowMaterial({ color: 0x000000, opacity: 0.28 }),
@@ -161,7 +277,7 @@ function initHypeThreeStage() {
     renderer,
     scene,
     camera,
-    environmentLights: { hemi, key, rim },
+    environmentLights: { hemi, key, rim, spinnerTextKey, spinnerTextRim },
     group: null,
     pendantGroup: null,
     focusLocal: null,
@@ -174,6 +290,14 @@ function initHypeThreeStage() {
     resizeHeight: 0,
     stlGeometries: null,
     stlLoadPromise: null,
+    spinnerStlGeometries: null,
+    spinnerStlLoadPromise: null,
+    spinnerRingGroup: null,
+    spinnerBaseGroup: null,
+    spinnerAnimationFrame: null,
+    spinnerLastFrameTime: 0,
+    spinnerSpinState: null,
+    pendantFrame: null,
   };
   applyPreviewEnvironment();
   els.hypePreview.classList.add('hype-three-active');
@@ -213,12 +337,16 @@ function resizeHypeThree() {
 
 function clearHypeThreeModel() {
   if (!state.hypeThree) return;
+  cancelHypeSpinnerSpin({ updateControls: false });
   if (state.hypeThree.cameraTween) window.cancelAnimationFrame(state.hypeThree.cameraTween);
   state.hypeThree.cameraTween = null;
   if (state.hypeThree.group) state.hypeThree.scene.remove(state.hypeThree.group);
   state.hypeThree.resources.forEach((resource) => resource?.dispose?.());
   state.hypeThree.group = null;
   state.hypeThree.pendantGroup = null;
+  state.hypeThree.spinnerRingGroup = null;
+  state.hypeThree.spinnerBaseGroup = null;
+  state.hypeThree.pendantFrame = null;
   state.hypeThree.resources = [];
 }
 
@@ -253,15 +381,23 @@ function applyHypeGroupRotation() {
   group.position.x += pan.x * 0.42;
   group.position.y -= pan.y * 0.42;
   group.updateMatrixWorld(true);
+  syncHypePendantFrameWorldTargets();
 }
 
 function frameHypeCamera(options = {}) {
   if (!state.hypeThree?.camera || !window.THREE) return;
   const camera = state.hypeThree.camera;
-  const target = state.hypeThree.focusTarget || new THREE.Vector3(0, HYPE_CAMERA_TARGET_Y, 0);
+  const pendantFrame = state.hypeThree.pendantFrame || refreshHypePendantFrameTargets();
+  let target = pendantFrame?.center || state.hypeThree.focusTarget || new THREE.Vector3(0, HYPE_CAMERA_TARGET_Y, 0);
   const limits = getPreviewZoomLimits();
   const zoom = clamp(Number(state.previewZoom) || 1, limits.min, limits.max);
-  const distance = (HYPE_CAMERA_DISTANCE * (getPreviewEnvironmentSettings().cameraScale || 1)) / zoom;
+  if (pendantFrame?.safeTarget && zoom > 1.02) {
+    const bottomBlend = clamp((zoom - 1) * 0.5, 0.08, 0.48);
+    target = target.clone().lerp(pendantFrame.safeTarget, bottomBlend);
+  }
+  const spinnerFrameScale = state.hype?.variant === 'spinner' ? 1.18 : 1;
+  const requestedDistance = (HYPE_CAMERA_DISTANCE * spinnerFrameScale * (getPreviewEnvironmentSettings().cameraScale || 1)) / zoom;
+  const distance = getHypePendantZoomDistance(camera, pendantFrame, requestedDistance, zoom);
   const viewTarget = new THREE.Vector3(target.x, target.y + HYPE_CAMERA_VIEW_OFFSET_Y, target.z);
   const nextPosition = new THREE.Vector3(viewTarget.x, viewTarget.y + 36, viewTarget.z + distance);
   if (!options.smooth || typeof window.requestAnimationFrame !== 'function') {
@@ -297,21 +433,92 @@ function frameHypeCamera(options = {}) {
 
 function updateHypeCameraFocus(preferredObject = null) {
   if (!state.hypeThree?.group || !window.THREE) return;
-  const focusObject = preferredObject || (state.hype.logoDataUrl ? state.hypeThree.pendantGroup : state.hypeThree.group);
+  const focusObject = getHypePendantFocusObject(preferredObject);
   const box = new THREE.Box3().setFromObject(focusObject || state.hypeThree.group);
   if (!Number.isFinite(box.min.x) || box.isEmpty()) {
     state.hypeThree.focusLocal = new THREE.Vector3(0, HYPE_CAMERA_TARGET_Y, 0);
     state.hypeThree.focusTarget.copy(state.hypeThree.focusLocal);
+    state.hypeThree.pendantFrame = null;
   } else {
     const center = box.getCenter(new THREE.Vector3());
-    const localCenter = state.hypeThree.group.worldToLocal(center.clone());
+    const pendantFrame = updateHypePendantFrameFromBox(box);
+    const localCenter = pendantFrame?.centerLocal?.clone?.() || state.hypeThree.group.worldToLocal(center.clone());
     state.hypeThree.focusLocal = localCenter;
     state.hypeThree.focusTarget.copy(center);
   }
   applyHypeGroupRotation();
-  const worldTarget = state.hypeThree.group.localToWorld(state.hypeThree.focusLocal.clone());
-  state.hypeThree.focusTarget.copy(worldTarget);
   frameHypeCamera();
+}
+
+function getHypePendantFocusObject(preferredObject = null) {
+  if (preferredObject) return preferredObject;
+  return state.hypeThree?.pendantGroup || state.hypeThree?.group || null;
+}
+
+function refreshHypePendantFrameTargets() {
+  if (!state.hypeThree?.group || !window.THREE) return null;
+  const focusObject = getHypePendantFocusObject();
+  if (!focusObject) return state.hypeThree.pendantFrame || null;
+  const box = new THREE.Box3().setFromObject(focusObject);
+  if (!Number.isFinite(box.min.x) || box.isEmpty()) return state.hypeThree.pendantFrame || null;
+  return updateHypePendantFrameFromBox(box);
+}
+
+function updateHypePendantFrameFromBox(box) {
+  if (!state.hypeThree || !window.THREE) return null;
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const safeTarget = new THREE.Vector3(
+    center.x,
+    center.y - size.y * HYPE_PENDANT_BOTTOM_SAFE_PADDING,
+    center.z,
+  );
+  const centerLocal = state.hypeThree.group?.worldToLocal(center.clone()) || null;
+  const safeTargetLocal = state.hypeThree.group?.worldToLocal(safeTarget.clone()) || null;
+  state.hypeThree.pendantFrame = {
+    center,
+    centerLocal,
+    safeTarget,
+    safeTargetLocal,
+    size,
+  };
+  return state.hypeThree.pendantFrame;
+}
+
+function syncHypePendantFrameWorldTargets() {
+  if (!state.hypeThree?.group || !window.THREE) return;
+  const frame = state.hypeThree.pendantFrame;
+  const focusLocal = state.hypeThree.focusLocal;
+  if (focusLocal) {
+    const center = state.hypeThree.group.localToWorld(focusLocal.clone());
+    state.hypeThree.focusTarget.copy(center);
+    if (frame?.center) frame.center.copy(center);
+  }
+  if (frame?.safeTarget && frame.safeTargetLocal) {
+    frame.safeTarget.copy(state.hypeThree.group.localToWorld(frame.safeTargetLocal.clone()));
+  }
+}
+
+function getHypePendantZoomDistance(camera, pendantFrame, requestedDistance, zoom) {
+  const fitDistance = getHypePendantFitDistance(camera, pendantFrame);
+  if (!fitDistance) return requestedDistance;
+  const relaxedFitDistance = zoom > HYPE_PENDANT_FIT_RELAX_ZOOM
+    ? fitDistance * (HYPE_PENDANT_FIT_RELAX_ZOOM / zoom)
+    : fitDistance;
+  return Math.max(requestedDistance, relaxedFitDistance);
+}
+
+function getHypePendantFitDistance(camera, pendantFrame) {
+  if (!camera || !pendantFrame?.size || !window.THREE) return 0;
+  const aspect = Number(camera.aspect) > 0 ? Number(camera.aspect) : 1;
+  const verticalFov = THREE.Math.degToRad(camera.fov || 36);
+  const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * aspect);
+  const width = Math.max(1, pendantFrame.size.x * HYPE_PENDANT_FRAME_PADDING);
+  const height = Math.max(1, pendantFrame.size.y * (HYPE_PENDANT_FRAME_PADDING + HYPE_PENDANT_BOTTOM_SAFE_PADDING));
+  const depth = Math.max(0, pendantFrame.size.z || 0);
+  const fitByHeight = height / (2 * Math.tan(verticalFov / 2));
+  const fitByWidth = width / (2 * Math.tan(horizontalFov / 2));
+  return Math.max(fitByHeight, fitByWidth) + depth * 0.5 + 28;
 }
 
 function updateHypeCssRotation() {
@@ -345,6 +552,91 @@ async function loadHypeStlGeometries() {
   return state.hypeThree.stlLoadPromise;
 }
 
+async function loadHypeSpinnerStlGeometries() {
+  if (!state.hypeThree || !window.THREE) return null;
+  if (state.hypeThree.spinnerStlGeometries) return state.hypeThree.spinnerStlGeometries;
+  if (state.hypeThree.spinnerStlLoadPromise) return state.hypeThree.spinnerStlLoadPromise;
+  els.hypePreview?.classList.add('loading');
+  state.hypeThree.spinnerStlLoadPromise = Promise.all([
+    loadBundledHypeSpinnerBaseGeometryCache().then((cachedBase) => cachedBase || fetchStlGeometry(HYPE_SPINNER_STL_ASSETS.base, 'spinnerBase')),
+    fetchStlGeometry(HYPE_SPINNER_STL_ASSETS.outerRing, 'spinnerOuterRing'),
+    fetchStlGeometry(HYPE_SPINNER_STL_ASSETS.connector, 'spinnerConnector'),
+  ]).then(([base, outerRing, connector]) => {
+    state.hypeThree.spinnerStlGeometries = { base, outerRing, connector };
+    state.hypeThree.spinnerStlLoadPromise = null;
+    els.hypePreview?.classList.remove('loading');
+    return state.hypeThree.spinnerStlGeometries;
+  }).catch((error) => {
+    state.hypeThree.spinnerStlLoadPromise = null;
+    throw error;
+  });
+  return state.hypeThree.spinnerStlLoadPromise;
+}
+
+async function loadBundledHypeSpinnerBaseGeometryCache() {
+  if (!window.THREE) return null;
+  if (!window.SIGN_GUY_HYPE_SPINNER_BASE_GEOMETRY_CACHE) {
+    try {
+      await loadScriptOnce(HYPE_SPINNER_BASE_GEOMETRY_CACHE_SCRIPT_SRC);
+    } catch (error) {
+      return null;
+    }
+  }
+  try {
+    return hydrateHypeSpinnerBaseCachedGeometry(window.SIGN_GUY_HYPE_SPINNER_BASE_GEOMETRY_CACHE);
+  } catch (error) {
+    console.warn('Cached Spinner base geometry could not be read.', error);
+    return null;
+  }
+}
+
+function hydrateHypeSpinnerBaseCachedGeometry(entry) {
+  if (!entry?.position) return null;
+  const quantizedPosition = hydrateHypeBundledValue(entry.position);
+  const min = Array.isArray(entry.position.min) ? entry.position.min : [-1, -1, -1];
+  const max = Array.isArray(entry.position.max) ? entry.position.max : [1, 1, 1];
+  const range = [
+    (Number(max[0]) || 0) - (Number(min[0]) || 0) || 1,
+    (Number(max[1]) || 0) - (Number(min[1]) || 0) || 1,
+    (Number(max[2]) || 0) - (Number(min[2]) || 0) || 1,
+  ];
+  const position = new Float32Array(quantizedPosition.length);
+  for (let index = 0; index < quantizedPosition.length; index += 3) {
+    position[index] = min[0] + (quantizedPosition[index] / 65535) * range[0];
+    position[index + 1] = min[1] + (quantizedPosition[index + 1] / 65535) * range[1];
+    position[index + 2] = min[2] + (quantizedPosition[index + 2] / 65535) * range[2];
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(position, 3));
+
+  const encodedNormal = entry.normal ? hydrateHypeBundledValue(entry.normal) : null;
+  const triangleCount = Math.floor(position.length / 9);
+  if (encodedNormal?.length === triangleCount * 3) {
+    const normal = new Float32Array(position.length);
+    for (let triangle = 0; triangle < triangleCount; triangle += 1) {
+      const normalOffset = triangle * 3;
+      const nx = encodedNormal[normalOffset] / 127;
+      const ny = encodedNormal[normalOffset + 1] / 127;
+      const nz = encodedNormal[normalOffset + 2] / 127;
+      const vertexOffset = triangle * 9;
+      for (let vertex = 0; vertex < 3; vertex += 1) {
+        const offset = vertexOffset + vertex * 3;
+        normal[offset] = nx;
+        normal[offset + 1] = ny;
+        normal[offset + 2] = nz;
+      }
+    }
+    geometry.setAttribute('normal', new THREE.BufferAttribute(normal, 3));
+  } else {
+    geometry.computeVertexNormals();
+  }
+
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
 async function loadBundledHypeGeometryCache() {
   if (!window.THREE) return null;
   if (!window.SIGN_GUY_HYPE_CHAIN_GEOMETRY_CACHE) {
@@ -371,8 +663,8 @@ async function loadBundledHypeGeometryCache() {
 
 function hydrateHypeCachedGeometry(entry) {
   const geometry = new THREE.BufferGeometry();
-  const position = hydrateBundledPlaqueProcessedValue(entry.position);
-  const normal = hydrateBundledPlaqueProcessedValue(entry.normal);
+  const position = hydrateHypeBundledValue(entry.position);
+  const normal = hydrateHypeBundledValue(entry.normal);
   geometry.setAttribute('position', new THREE.BufferAttribute(position, 3));
   if (normal?.length === position.length) {
     geometry.setAttribute('normal', new THREE.BufferAttribute(normal, 3));
@@ -384,8 +676,86 @@ function hydrateHypeCachedGeometry(entry) {
   return geometry;
 }
 
+function hydrateHypeBundledValue(value) {
+  if (!value || typeof value !== 'object') return value;
+  if (ArrayBuffer.isView(value)) return value;
+  if (Array.isArray(value)) return value.map(hydrateHypeBundledValue);
+  if (value.__typedArray && typeof value.data === 'string') {
+    return decodeHypeBundledTypedArray(value.__typedArray, value.data);
+  }
+  Object.keys(value).forEach((key) => {
+    value[key] = hydrateHypeBundledValue(value[key]);
+  });
+  return value;
+}
+
+function decodeHypeBundledTypedArray(type, base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  switch (type) {
+    case 'Uint8Array':
+      return new Uint8Array(buffer);
+    case 'Uint16Array':
+      return new Uint16Array(buffer);
+    case 'Uint32Array':
+      return new Uint32Array(buffer);
+    case 'Int8Array':
+      return new Int8Array(buffer);
+    case 'Int16Array':
+      return new Int16Array(buffer);
+    case 'Int32Array':
+      return new Int32Array(buffer);
+    case 'Float32Array':
+      return new Float32Array(buffer);
+    case 'Float64Array':
+      return new Float64Array(buffer);
+    default:
+      return bytes;
+  }
+}
+
 async function loadEmbeddedHypeStl(embeddedKey) {
   if (!embeddedKey) return '';
+  if (embeddedKey === 'spinnerBase') {
+    if (!window.SIGN_GUY_HYPE_SPINNER_BASE_STL_EMBEDDED) {
+      try {
+        await loadScriptOnce(HYPE_SPINNER_BASE_STL_EMBEDDED_SCRIPT_SRC);
+      } catch (error) {
+        console.warn('Could not load embedded Spinner base STL fallback.', error);
+      }
+    }
+    if (window.SIGN_GUY_HYPE_SPINNER_BASE_STL_EMBEDDED) {
+      return window.SIGN_GUY_HYPE_SPINNER_BASE_STL_EMBEDDED;
+    }
+  }
+  if (embeddedKey === 'spinnerOuterRing') {
+    if (!window.SIGN_GUY_HYPE_SPINNER_OUTER_RING_STL_EMBEDDED) {
+      try {
+        await loadScriptOnce(HYPE_SPINNER_OUTER_RING_STL_EMBEDDED_SCRIPT_SRC);
+      } catch (error) {
+        console.warn('Could not load embedded Spinner outer ring STL fallback.', error);
+      }
+    }
+    if (window.SIGN_GUY_HYPE_SPINNER_OUTER_RING_STL_EMBEDDED) {
+      return window.SIGN_GUY_HYPE_SPINNER_OUTER_RING_STL_EMBEDDED;
+    }
+  }
+  if (embeddedKey === 'spinnerConnector') {
+    if (!window.SIGN_GUY_HYPE_SPINNER_CONNECTOR_STL_EMBEDDED) {
+      try {
+        await loadScriptOnce(HYPE_SPINNER_CONNECTOR_STL_EMBEDDED_SCRIPT_SRC);
+      } catch (error) {
+        console.warn('Could not load embedded Spinner connector STL fallback.', error);
+      }
+    }
+    if (window.SIGN_GUY_HYPE_SPINNER_CONNECTOR_STL_EMBEDDED) {
+      return window.SIGN_GUY_HYPE_SPINNER_CONNECTOR_STL_EMBEDDED;
+    }
+  }
   if (!window.SIGN_GUY_HYPE_CHAIN_STL_EMBEDDED) {
     try {
       await loadScriptOnce(HYPE_CHAIN_STL_EMBEDDED_SCRIPT_SRC);
@@ -403,6 +773,14 @@ function buildHypeThreeModel() {
     loadHypeStlGeometries().then(() => scheduleHypeRender(0)).catch(() => {
       els.hypePreview?.classList.remove('loading');
       setStatus('Could not load Hype Chain STL files');
+    });
+    return;
+  }
+  const isSpinner = state.hype.variant === 'spinner';
+  if (isSpinner && !state.hypeThree.spinnerStlGeometries) {
+    loadHypeSpinnerStlGeometries().then(() => scheduleHypeRender(0)).catch(() => {
+      els.hypePreview?.classList.remove('loading');
+      setStatus('Could not load Spinner Hype Chain STL files');
     });
     return;
   }
@@ -424,9 +802,10 @@ function buildHypeThreeModel() {
   const linkGeometry = state.hypeThree.stlGeometries.link;
   const connectorGeometry = state.hypeThree.stlGeometries.connector;
   const uploadedChainDropY = state.hype.logoDataUrl ? HYPE_UPLOADED_CHAIN_DROP_Y : 0;
+  const spinnerChainLiftY = isSpinner ? getHypeSpinnerChainRigY() : uploadedChainDropY;
   const chainRig = new THREE.Group();
   chainRig.name = 'hypeChainAttachmentRig';
-  chainRig.position.y = uploadedChainDropY;
+  chainRig.position.y = spinnerChainLiftY;
 
   const linkCount = getHypeLinkCount(state.hype.chainLength, state.hype.linkCount);
   const patternMaterials = getHypePatternColours().map((hex) => makeHypeSilkMaterial(hex));
@@ -437,36 +816,1046 @@ function buildHypeThreeModel() {
     materials: patternMaterials,
   });
   chainRig.add(chainLinks.root);
-  const connectorEntryLinks = makeHypeConnectorEntryLinks(linkGeometry, patternMaterials, chainLinks.count);
+  const connectorEntryLinks = isSpinner
+    ? makeHypeSpinnerConnectorEntryLinks(linkGeometry, patternMaterials, chainLinks.count)
+    : makeHypeConnectorEntryLinks(linkGeometry, patternMaterials, chainLinks.count);
   chainRig.add(connectorEntryLinks);
 
-  const connector = new THREE.Mesh(connectorGeometry, connectorMaterial);
-  connector.name = 'stlFusedThreeWayChainConnector';
-  connector.position.set(0, -106, 0);
-  connector.castShadow = true;
-  connector.receiveShadow = true;
-  chainRig.add(connector);
+  if (!isSpinner) {
+    const connector = new THREE.Mesh(connectorGeometry, connectorMaterial);
+    connector.name = 'stlFusedThreeWayChainConnector';
+    connector.position.set(0, -106, 0);
+    connector.castShadow = true;
+    connector.receiveShadow = true;
+    chainRig.add(connector);
 
-  const attachmentLink = new THREE.Mesh(linkGeometry, attachmentMaterial);
-  attachmentLink.name = 'pendantAttachmentLink';
-  attachmentLink.position.set(0, state.hype.logoDataUrl ? -140 : -137, state.hype.logoDataUrl ? -2 : 4);
-  attachmentLink.rotation.z = Math.PI / 2;
-  attachmentLink.rotation.y = THREE.Math.degToRad(68);
-  attachmentLink.castShadow = true;
-  attachmentLink.receiveShadow = true;
-  chainRig.add(attachmentLink);
+    const attachmentLink = new THREE.Mesh(linkGeometry, attachmentMaterial);
+    attachmentLink.name = 'pendantAttachmentLink';
+    attachmentLink.position.set(0, state.hype.logoDataUrl ? -140 : -137, state.hype.logoDataUrl ? -2 : 4);
+    attachmentLink.rotation.z = Math.PI / 2;
+    attachmentLink.rotation.y = THREE.Math.degToRad(68);
+    attachmentLink.castShadow = true;
+    attachmentLink.receiveShadow = true;
+    chainRig.add(attachmentLink);
+  }
   group.add(chainRig);
 
-  const pendant = makeHypePendantMesh(pendantMaterial, resources);
-  pendant.position.set(0, state.hype.logoDataUrl ? -286 : -202, 0);
+  const pendant = isSpinner
+    ? makeHypeSpinnerPendantAssembly(pendantMaterial, connectorMaterial, resources)
+    : makeHypePendantMesh(pendantMaterial, resources);
+  pendant.position.set(
+    0,
+    isSpinner ? getHypeSpinnerPendantY() : state.hype.logoDataUrl ? -286 : -202,
+    isSpinner ? getHypeSpinnerPendantZ() : 0,
+  );
   group.add(pendant);
 
   state.hypeThree.group = group;
   state.hypeThree.pendantGroup = pendant;
   disableHypeFrustumCulling(group);
   state.hypeThree.scene.add(group);
-  updateHypeCameraFocus(state.hype.logoDataUrl ? pendant : group);
+  updateHypeCameraFocus(pendant);
+  updateHypeSpinnerAnimationState();
   renderHypeThree();
+  els.hypePreview?.classList.remove('loading');
+}
+
+function makeHypeSpinnerChainAttachment(material, resources) {
+  const group = new THREE.Group();
+  group.name = 'fixedSpinnerTwoProngChainAttachment';
+  const spinner = syncHypeSpinnerConfig();
+  const fixedConnectorMaterial = makeHypeSilkMaterial(spinner.ringColor);
+  resources.push(fixedConnectorMaterial);
+  const connectorGeometry = state.hypeThree?.spinnerStlGeometries?.connector;
+  if (!connectorGeometry) {
+    console.error('Exact Two Prong Chain Link Attachment STL is required for Spinner Hype Chain.');
+    return group;
+  }
+  const geometry = connectorGeometry.clone();
+  resources.push(geometry);
+  const mesh = new THREE.Mesh(geometry, fixedConnectorMaterial || material);
+  mesh.name = 'exactStlTwoProngChainLinkAttachment';
+  const scale = getHypeSpinnerConnectorSceneScale();
+  mesh.scale.set(scale, scale, scale);
+  mesh.rotation.z = Math.PI;
+  mesh.position.set(0, getHypeSpinnerConnectorPendantY(), getHypeSpinnerConnectorBackZ());
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  mesh.frustumCulled = false;
+  group.add(mesh);
+  return group;
+}
+
+function makeHypeSpinnerPendantAssembly(pendantMaterial, connectorMaterial, resources) {
+  const spinner = syncHypeSpinnerConfig();
+  const dims = getHypeSpinnerDimensions(spinner);
+  const group = new THREE.Group();
+  group.name = 'spinnerHypeChainPendantAssembly';
+
+  const base = makeHypeSpinnerBase(dims, pendantMaterial, connectorMaterial, resources);
+  group.add(base);
+  state.hypeThree.spinnerBaseGroup = base;
+
+  const innerPlate = makeHypeSpinnerInnerOpeningPlate(dims, resources);
+  group.add(innerPlate);
+
+  const ringGroup = makeHypeSpinnerOuterRing(dims, spinner, resources);
+  ringGroup.name = 'rotatingOuterTextRing';
+  group.add(ringGroup);
+  state.hypeThree.spinnerRingGroup = ringGroup;
+
+  const centerPendant = makeHypeSpinnerCenterPendant(dims, pendantMaterial, resources);
+  centerPendant.name = 'fixedCenterLogoPendant';
+  centerPendant.position.set(0, 0, dims.ringDepth / 2 + 2.2 + HYPE_SPINNER_FIXED_CENTER_LOGO_FORWARD_DEPTH_OFFSET);
+  group.add(centerPendant);
+
+  const connector = makeHypeSpinnerChainAttachment(connectorMaterial, resources);
+  group.add(connector);
+
+  return group;
+}
+
+function getHypeSpinnerDimensions(spinner = syncHypeSpinnerConfig()) {
+  const sceneScale = getHypeSpinnerSceneScale();
+  const ringDiameter = clamp(Number(spinner.ringDiameter) || DEFAULT_HYPE_SPINNER_CONFIG.ringDiameter, 120, 190);
+  const outerRadius = (ringDiameter * sceneScale) / 2;
+  const bandWidth = clamp(ringDiameter * 0.17, 21, 34) * sceneScale;
+  const clearance = clamp(Number(spinner.ringClearance) || DEFAULT_HYPE_SPINNER_CONFIG.ringClearance, 0.6, 3) * sceneScale;
+  const innerRadius = Math.max(42, outerRadius - bandWidth - clearance);
+  return {
+    outerRadius,
+    innerRadius,
+    bandWidth,
+    ringDepth: clamp(Number(spinner.ringThickness) || DEFAULT_HYPE_SPINNER_CONFIG.ringThickness, 8, 24) * sceneScale,
+    clearance,
+    textRadius: outerRadius - bandWidth * 0.41,
+    innerPlateRadius: innerRadius,
+    spinnerBaseRadius: innerRadius,
+  };
+}
+
+function getHypeSpinnerSceneScale() {
+  return HYPE_SPINNER_BASE_SCENE_SCALE * HYPE_SPINNER_PENDANT_SCALE;
+}
+
+function getHypeSpinnerConnectorSceneScale() {
+  return getHypeSpinnerSceneScale() * HYPE_SPINNER_CONNECTOR_SCALE;
+}
+
+function getHypeSpinnerChainRigY() {
+  return 30;
+}
+
+function getHypeSpinnerPendantY() {
+  return -192;
+}
+
+function getHypeSpinnerPendantZ() {
+  return 40;
+}
+
+function getHypeSpinnerConnectorPendantY() {
+  return 70;
+}
+
+function getHypeSpinnerConnectorBackZ() {
+  return -12;
+}
+
+function getHypeSpinnerConnectorHoleOffsetY() {
+  return HYPE_SPINNER_CONNECTOR_STL_HOLE_Y_MM * getHypeSpinnerConnectorSceneScale();
+}
+
+function getHypeSpinnerConnectorHoleX() {
+  return HYPE_SPINNER_CONNECTOR_STL_HOLE_X_MM * getHypeSpinnerConnectorSceneScale();
+}
+
+function getHypeSpinnerConnectorTopOffsetY() {
+  return 31.95 * getHypeSpinnerConnectorSceneScale();
+}
+
+function makeHypeSpinnerOuterRing(dims, spinner, resources) {
+  const group = new THREE.Group();
+  const material = makeHypeSilkMaterial(spinner.ringColor);
+  material.roughness = 0.26;
+  material.metalness = 0.28;
+  resources.push(material);
+
+  const referenceRingGeometry = state.hypeThree?.spinnerStlGeometries?.outerRing;
+  if (!referenceRingGeometry) {
+    throw new Error('Spinner outer ring STL geometry is required.');
+  }
+  const geometry = referenceRingGeometry.clone();
+  resources.push(geometry);
+  const ring = new THREE.Mesh(geometry, material);
+  ring.name = 'stlOuterSpinnerRingBody';
+  const scale = getHypeSpinnerSceneScale();
+  ring.scale.set(scale, scale, scale);
+  ring.castShadow = true;
+  ring.receiveShadow = true;
+  ring.frustumCulled = false;
+  group.add(ring);
+
+  group.add(makeHypeSpinnerRaisedTextMeshes(dims, spinner, resources));
+  return group;
+}
+
+function makeHypeSpinnerRingGeometry(outerRadius, innerRadius, depth) {
+  const shape = new THREE.Shape();
+  shape.absarc(0, 0, outerRadius, 0, Math.PI * 2, false);
+  const hole = new THREE.Path();
+  hole.absarc(0, 0, innerRadius, 0, Math.PI * 2, true);
+  shape.holes.push(hole);
+  const geometry = new THREE.ExtrudeBufferGeometry(shape, {
+    depth,
+    bevelEnabled: true,
+    bevelThickness: 1.6,
+    bevelSize: 1.6,
+    bevelSegments: 5,
+    curveSegments: 96,
+  });
+  geometry.translate(0, 0, -depth / 2);
+  geometry.computeBoundingSphere();
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function makeHypeSpinnerRaisedTextMeshes(dims, spinner, resources) {
+  const group = new THREE.Group();
+  group.name = 'raisedCurvedSpinnerTextMeshes';
+  const fontFamily = normalizeHypeSpinnerFontFamily(spinner.fontFamily);
+  requestHypeSpinnerFont(fontFamily);
+  const textMaterial = makeHypeSpinnerTextMaterial(spinner.textColor);
+  if (Array.isArray(textMaterial)) {
+    resources.push(...textMaterial);
+  } else {
+    resources.push(textMaterial);
+  }
+  const textDepth = clamp(dims.ringDepth * 0.24, 5.2, 7.4);
+  const metrics = {
+    height: clamp(dims.bandWidth * 1.08, 42, 64),
+    width: clamp(dims.bandWidth * 0.76, 30, 48),
+    stroke: clamp(dims.bandWidth * 0.16, 7.5, 12),
+    depth: textDepth,
+    gap: clamp(dims.bandWidth * 0.145, 7.2, 13.6),
+    radius: dims.textRadius,
+    z: dims.ringDepth / 2 + textDepth / 2 - 1.2,
+    fontFamily,
+  };
+  group.add(makeHypeSpinnerTextArcMesh(spinner.topText, {
+    bottomArc: false,
+    centerAngle: Math.PI / 2,
+    material: textMaterial,
+    metrics,
+    resources,
+  }));
+  group.add(makeHypeSpinnerTextArcMesh(spinner.bottomText, {
+    bottomArc: true,
+    centerAngle: -Math.PI / 2,
+    material: textMaterial,
+    metrics,
+    resources,
+  }));
+  return group;
+}
+
+function makeHypeSpinnerTextArcMesh(text, options) {
+  const {
+    bottomArc,
+    centerAngle,
+    material,
+    metrics,
+    resources,
+  } = options;
+  const cleanText = sanitizeHypeSpinnerText(text, bottomArc ? DEFAULT_HYPE_SPINNER_CONFIG.bottomText : DEFAULT_HYPE_SPINNER_CONFIG.topText)
+    .toUpperCase();
+  const chars = Array.from(cleanText);
+  const rawWidths = chars.map((char) => getHypeBlockGlyphWidth(char, metrics));
+  const rawTotal = rawWidths.reduce((sum, width) => sum + width, 0) + Math.max(0, chars.length - 1) * metrics.gap;
+  const maxArcLength = metrics.radius * 1.78;
+  const fitScale = rawTotal > maxArcLength ? clamp(maxArcLength / rawTotal, 0.72, 1) : 1;
+  const fittedMetrics = {
+    ...metrics,
+    height: metrics.height * fitScale,
+    width: metrics.width * fitScale,
+    stroke: metrics.stroke * fitScale,
+    gap: metrics.gap * clamp(Math.sqrt(fitScale), 0.82, 1),
+  };
+  const widths = chars.map((char) => getHypeBlockGlyphWidth(char, fittedMetrics));
+  const total = widths.reduce((sum, width) => sum + width, 0) + Math.max(0, chars.length - 1) * fittedMetrics.gap;
+  let cursor = -total / 2;
+  const group = new THREE.Group();
+  group.name = bottomArc ? 'raisedBottomRingText' : 'raisedTopRingText';
+  chars.forEach((char, index) => {
+    const width = widths[index];
+    const midpoint = cursor + width / 2;
+    const angle = bottomArc
+      ? centerAngle + midpoint / fittedMetrics.radius
+      : centerAngle - midpoint / fittedMetrics.radius;
+    const glyph = makeHypeBlockGlyphMesh(char, material, resources, fittedMetrics);
+    glyph.position.set(
+      Math.cos(angle) * fittedMetrics.radius,
+      Math.sin(angle) * fittedMetrics.radius,
+      fittedMetrics.z,
+    );
+    glyph.rotation.z = bottomArc ? angle + Math.PI / 2 : angle - Math.PI / 2;
+    group.add(glyph);
+    cursor += width + fittedMetrics.gap;
+  });
+  return group;
+}
+
+function getHypeBlockGlyphWidth(char, metrics) {
+  if (char === ' ') return metrics.width * 0.62;
+  if (char === 'I' || char === '1') return metrics.width * 0.54;
+  if (char === 'M' || char === 'W') return metrics.width * 1.16;
+  return metrics.width;
+}
+
+function getHypeSpinnerTextRenderColour(hex) {
+  const normalized = normalizeHex(hex || '#000000');
+  if (isHypeVeryDarkColour(normalized)) return '#202020';
+  return normalized;
+}
+
+function isHypeVeryDarkColour(hex) {
+  const normalized = normalizeHex(hex || '#000000');
+  const rgb = hexToRgb(normalized);
+  const max = Math.max(...rgb);
+  return max <= 52;
+}
+
+function makeHypeSpinnerTextMaterial(hex) {
+  const normalized = normalizeHex(hex || '#000000');
+  if (isHypeVeryDarkColour(normalized)) {
+    const frontMaterial = makeHypeSilkMaterial(getHypeSpinnerTextRenderColour(normalized));
+    frontMaterial.roughness = 0.22;
+    frontMaterial.metalness = 0.08;
+    frontMaterial.envMapIntensity = 1.08;
+    const sideMaterial = makeHypeSilkMaterial('#2a2a2a');
+    sideMaterial.roughness = 0.2;
+    sideMaterial.metalness = 0.12;
+    sideMaterial.envMapIntensity = 1.28;
+    return [frontMaterial, sideMaterial];
+  }
+  const material = makeHypeSilkMaterial(normalized);
+  const textColourRgb = hexToRgb(normalized);
+  const textLuma = (0.2126 * textColourRgb[0] + 0.7152 * textColourRgb[1] + 0.0722 * textColourRgb[2]) / 255;
+  material.roughness = textLuma > 0.72 ? 0.28 : 0.32;
+  material.metalness = textLuma > 0.72 ? 0.08 : 0.1;
+  material.envMapIntensity = textLuma > 0.72 ? 0.75 : 0.68;
+  return material;
+}
+
+function makeHypeBlockGlyphMesh(char, material, resources, metrics) {
+  const group = new THREE.Group();
+  group.name = `raisedRingGlyph-${char === ' ' ? 'space' : char}`;
+  if (char === ' ') return group;
+  const vectorGeometry = makeHypeVectorGlyphGeometry(char, metrics);
+  if (vectorGeometry) {
+    resources.push(vectorGeometry);
+    const mesh = new THREE.Mesh(vectorGeometry, material);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.frustumCulled = false;
+    group.add(mesh);
+    return group;
+  }
+  const rectangles = getHypeRasterBlockGlyphRectangles(char, metrics);
+  rectangles.forEach((spec) => {
+    const geometry = new THREE.BoxBufferGeometry(spec.width, spec.height, metrics.depth);
+    resources.push(geometry);
+    const mesh = new THREE.Mesh(geometry, Array.isArray(material) ? material[0] : material);
+    mesh.position.set(spec.x, spec.y, 0);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.frustumCulled = false;
+    group.add(mesh);
+  });
+  return group;
+}
+
+function makeHypeVectorGlyphGeometry(char, metrics) {
+  if (typeof document === 'undefined' || !THREE?.Shape || !THREE?.ExtrudeGeometry) return null;
+  const sample = sampleHypeGlyphMask(char, metrics);
+  if (!sample) return null;
+  const loops = traceHypeGlyphBoundaryLoops(sample.mask, sample.width, sample.height);
+  const contours = loops
+    .map((loop) => mapHypeGlyphLoopToScene(loop, sample.width, sample.height, metrics, char))
+    .map((points) => simplifyHypeGlyphContour(smoothHypeGlyphContour(removeHypeDuplicatePoints(points)), clamp(metrics.height * 0.006, 0.18, 0.42)))
+    .filter((points) => points.length >= 4 && Math.abs(getHypePolygonSignedArea(points)) > 0.5);
+  const shapes = makeHypeGlyphShapes(contours);
+  if (!shapes.length) return null;
+  const bevelSize = clamp(metrics.height * 0.018, 0.48, 1);
+  const bevelThickness = clamp(metrics.depth * 0.12, 0.42, 0.8);
+  const geometry = new THREE.ExtrudeGeometry(shapes, {
+    depth: metrics.depth,
+    bevelEnabled: true,
+    bevelThickness,
+    bevelSize,
+    bevelSegments: 3,
+    curveSegments: 24,
+    steps: 1,
+  });
+  geometry.translate(0, 0, -metrics.depth / 2);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+function sampleHypeGlyphMask(char, metrics) {
+  const canvas = document.createElement('canvas');
+  const canvasWidth = 512;
+  const canvasHeight = 640;
+  canvas.width = canvasWidth;
+  canvas.height = canvasHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+  ctx.imageSmoothingEnabled = true;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  let fontSize = 540;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    ctx.font = getHypeSpinnerCanvasFont(metrics.fontFamily, fontSize);
+    const measured = ctx.measureText(char);
+    const measuredWidth = measured.width;
+    const measuredHeight = Math.abs(measured.actualBoundingBoxAscent || fontSize * 0.72)
+      + Math.abs(measured.actualBoundingBoxDescent || fontSize * 0.18);
+    if (measuredWidth <= canvasWidth * 0.82 && measuredHeight <= canvasHeight * 0.82) break;
+    fontSize *= 0.9;
+  }
+  ctx.font = getHypeSpinnerCanvasFont(metrics.fontFamily, fontSize);
+  ctx.fillStyle = '#000000';
+  ctx.fillText(char, canvasWidth / 2, canvasHeight / 2 + fontSize * 0.025);
+  const image = ctx.getImageData(0, 0, canvasWidth, canvasHeight).data;
+  let minX = canvasWidth;
+  let minY = canvasHeight;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < canvasHeight; y += 1) {
+    for (let x = 0; x < canvasWidth; x += 1) {
+      const alpha = image[(y * canvasWidth + x) * 4 + 3];
+      if (alpha <= 28) continue;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  if (maxX < minX || maxY < minY) return null;
+  const pad = 4;
+  minX = Math.max(0, minX - pad);
+  minY = Math.max(0, minY - pad);
+  maxX = Math.min(canvasWidth - 1, maxX + pad);
+  maxY = Math.min(canvasHeight - 1, maxY + pad);
+  const boundsWidth = maxX - minX + 1;
+  const boundsHeight = maxY - minY + 1;
+  const sampleHeight = 112;
+  const sampleWidth = Math.max(24, Math.round(sampleHeight * (getHypeBlockGlyphWidth(char, metrics) / metrics.height) * 1.08));
+  const mask = new Uint8Array(sampleWidth * sampleHeight);
+  for (let row = 0; row < sampleHeight; row += 1) {
+    for (let col = 0; col < sampleWidth; col += 1) {
+      const x0 = Math.floor(minX + (col / sampleWidth) * boundsWidth);
+      const x1 = Math.max(x0 + 1, Math.ceil(minX + ((col + 1) / sampleWidth) * boundsWidth));
+      const y0 = Math.floor(minY + (row / sampleHeight) * boundsHeight);
+      const y1 = Math.max(y0 + 1, Math.ceil(minY + ((row + 1) / sampleHeight) * boundsHeight));
+      let coverage = 0;
+      let pixels = 0;
+      let maxAlpha = 0;
+      for (let y = y0; y < y1; y += 1) {
+        for (let x = x0; x < x1; x += 1) {
+          const alpha = image[(y * canvasWidth + x) * 4 + 3];
+          maxAlpha = Math.max(maxAlpha, alpha);
+          coverage += alpha / 255;
+          pixels += 1;
+        }
+      }
+      coverage /= Math.max(1, pixels);
+      if (coverage > 0.16 || (maxAlpha > 190 && coverage > 0.07)) {
+        mask[row * sampleWidth + col] = 1;
+      }
+    }
+  }
+  return { mask, width: sampleWidth, height: sampleHeight };
+}
+
+function traceHypeGlyphBoundaryLoops(mask, width, height) {
+  const edgeStarts = new Map();
+  const addEdge = (x1, y1, x2, y2) => {
+    const key = `${x1},${y1}`;
+    const edge = { x1, y1, x2, y2, key, used: false };
+    if (!edgeStarts.has(key)) edgeStarts.set(key, []);
+    edgeStarts.get(key).push(edge);
+  };
+  const filled = (x, y) => x >= 0 && y >= 0 && x < width && y < height && mask[y * width + x];
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (!filled(x, y)) continue;
+      if (!filled(x, y - 1)) addEdge(x, y, x + 1, y);
+      if (!filled(x + 1, y)) addEdge(x + 1, y, x + 1, y + 1);
+      if (!filled(x, y + 1)) addEdge(x + 1, y + 1, x, y + 1);
+      if (!filled(x - 1, y)) addEdge(x, y + 1, x, y);
+    }
+  }
+  const loops = [];
+  edgeStarts.forEach((edges) => {
+    edges.forEach((startEdge) => {
+      if (startEdge.used) return;
+      const startKey = startEdge.key;
+      let edge = startEdge;
+      const loop = [];
+      let guard = 0;
+      while (edge && !edge.used && guard < width * height * 8) {
+        edge.used = true;
+        loop.push([edge.x1, edge.y1]);
+        const nextKey = `${edge.x2},${edge.y2}`;
+        if (nextKey === startKey) {
+          loop.push([edge.x2, edge.y2]);
+          break;
+        }
+        const nextEdges = edgeStarts.get(nextKey) || [];
+        edge = nextEdges.find((candidate) => !candidate.used) || null;
+        guard += 1;
+      }
+      if (loop.length >= 4) loops.push(loop);
+    });
+  });
+  return loops;
+}
+
+function mapHypeGlyphLoopToScene(loop, width, height, metrics, char) {
+  const glyphWidth = getHypeBlockGlyphWidth(char, metrics);
+  return loop.map(([x, y]) => new THREE.Vector2(
+    -glyphWidth / 2 + (x / width) * glyphWidth,
+    metrics.height / 2 - (y / height) * metrics.height,
+  ));
+}
+
+function makeHypeGlyphShapes(contours) {
+  const items = contours.map((points) => ({
+    points,
+    area: getHypePolygonSignedArea(points),
+    absArea: Math.abs(getHypePolygonSignedArea(points)),
+    center: getHypePolygonCentroid(points),
+  })).sort((a, b) => b.absArea - a.absArea);
+  const outers = [];
+  const holes = [];
+  items.forEach((item, index) => {
+    const containing = items.filter((candidate, candidateIndex) => (
+      candidateIndex !== index
+      && candidate.absArea > item.absArea
+      && isHypePointInPolygon(item.center, candidate.points)
+    )).length;
+    if (containing % 2 === 0) {
+      outers.push({ item, holes: [] });
+    } else {
+      holes.push(item);
+    }
+  });
+  holes.forEach((hole) => {
+    const owner = outers
+      .filter(({ item }) => item.absArea > hole.absArea && isHypePointInPolygon(hole.center, item.points))
+      .sort((a, b) => a.item.absArea - b.item.absArea)[0];
+    if (owner) owner.holes.push(hole);
+  });
+  return outers.map(({ item, holes: shapeHoles }) => {
+    const outer = orientHypeGlyphContour(item.points, true);
+    const shape = new THREE.Shape(outer);
+    shapeHoles.forEach((hole) => {
+      shape.holes.push(new THREE.Path(orientHypeGlyphContour(hole.points, false)));
+    });
+    return shape;
+  });
+}
+
+function orientHypeGlyphContour(points, clockwise) {
+  const copy = points.map((point) => point.clone());
+  const isClockwise = getHypePolygonSignedArea(copy) < 0;
+  if (isClockwise !== clockwise) copy.reverse();
+  return copy;
+}
+
+function removeHypeDuplicatePoints(points) {
+  const cleaned = [];
+  points.forEach((point) => {
+    const previous = cleaned[cleaned.length - 1];
+    if (previous && previous.distanceTo(point) < 0.0001) return;
+    cleaned.push(point);
+  });
+  if (cleaned.length > 1 && cleaned[0].distanceTo(cleaned[cleaned.length - 1]) < 0.0001) cleaned.pop();
+  return cleaned;
+}
+
+function smoothHypeGlyphContour(points) {
+  if (points.length < 8) return points;
+  const smoothed = [];
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    smoothed.push(new THREE.Vector2(
+      current.x * 0.82 + next.x * 0.18,
+      current.y * 0.82 + next.y * 0.18,
+    ));
+    smoothed.push(new THREE.Vector2(
+      current.x * 0.18 + next.x * 0.82,
+      current.y * 0.18 + next.y * 0.82,
+    ));
+  }
+  return smoothed;
+}
+
+function simplifyHypeGlyphContour(points, tolerance) {
+  if (points.length <= 12) return points;
+  const result = [];
+  const squaredTolerance = tolerance * tolerance;
+  for (let index = 0; index < points.length; index += 1) {
+    const previous = points[(index - 1 + points.length) % points.length];
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    const distance = getHypePointToSegmentDistanceSquared(current, previous, next);
+    if (distance > squaredTolerance) result.push(current);
+  }
+  return result.length >= 4 ? result : points;
+}
+
+function getHypePointToSegmentDistanceSquared(point, start, end) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  if (dx === 0 && dy === 0) return point.distanceToSquared(start);
+  const t = clamp(((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy), 0, 1);
+  const x = start.x + dx * t;
+  const y = start.y + dy * t;
+  const px = point.x - x;
+  const py = point.y - y;
+  return px * px + py * py;
+}
+
+function getHypePolygonSignedArea(points) {
+  let area = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    area += current.x * next.y - next.x * current.y;
+  }
+  return area / 2;
+}
+
+function getHypePolygonCentroid(points) {
+  let x = 0;
+  let y = 0;
+  points.forEach((point) => {
+    x += point.x;
+    y += point.y;
+  });
+  return new THREE.Vector2(x / Math.max(1, points.length), y / Math.max(1, points.length));
+}
+
+function isHypePointInPolygon(point, polygon) {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+    const a = polygon[i];
+    const b = polygon[j];
+    const intersects = ((a.y > point.y) !== (b.y > point.y))
+      && (point.x < ((b.x - a.x) * (point.y - a.y)) / ((b.y - a.y) || 1e-9) + a.x);
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function getHypeRasterBlockGlyphRectangles(char, metrics) {
+  if (typeof document === 'undefined') return [];
+  const canvas = document.createElement('canvas');
+  const canvasWidth = 224;
+  const canvasHeight = 272;
+  canvas.width = canvasWidth;
+  canvas.height = canvasHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return [];
+  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+  ctx.fillStyle = '#000000';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = getHypeSpinnerCanvasFont(metrics.fontFamily, 208);
+  ctx.fillText(char, canvasWidth / 2, canvasHeight / 2 + 4);
+  const image = ctx.getImageData(0, 0, canvasWidth, canvasHeight).data;
+  let minX = canvasWidth;
+  let minY = canvasHeight;
+  let maxX = -1;
+  let maxY = -1;
+  for (let y = 0; y < canvasHeight; y += 1) {
+    for (let x = 0; x < canvasWidth; x += 1) {
+      const alpha = image[(y * canvasWidth + x) * 4 + 3];
+      if (alpha <= 54) continue;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  if (maxX < minX || maxY < minY) return [];
+
+  const gridRows = 56;
+  const gridCols = Math.max(22, Math.round(gridRows * (getHypeBlockGlyphWidth(char, metrics) / metrics.height) * 1.08));
+  const boundsWidth = maxX - minX + 1;
+  const boundsHeight = maxY - minY + 1;
+  const rows = [];
+  for (let row = 0; row < gridRows; row += 1) {
+    const rowRuns = [];
+    let runStart = -1;
+    for (let col = 0; col < gridCols; col += 1) {
+      const x0 = Math.floor(minX + (col / gridCols) * boundsWidth);
+      const x1 = Math.ceil(minX + ((col + 1) / gridCols) * boundsWidth);
+      const y0 = Math.floor(minY + (row / gridRows) * boundsHeight);
+      const y1 = Math.ceil(minY + ((row + 1) / gridRows) * boundsHeight);
+      let filled = false;
+      for (let y = y0; y < y1 && !filled; y += 1) {
+        for (let x = x0; x < x1; x += 1) {
+          if (image[(y * canvasWidth + x) * 4 + 3] > 72) {
+            filled = true;
+            break;
+          }
+        }
+      }
+      if (filled && runStart < 0) runStart = col;
+      if ((!filled || col === gridCols - 1) && runStart >= 0) {
+        rowRuns.push([runStart, filled && col === gridCols - 1 ? col + 1 : col]);
+        runStart = -1;
+      }
+    }
+    rows.push(rowRuns);
+  }
+
+  const cellWidth = getHypeBlockGlyphWidth(char, metrics) / gridCols;
+  const cellHeight = metrics.height / gridRows;
+  const active = new Map();
+  const rectangles = [];
+  rows.forEach((rowRuns, row) => {
+    const nextActive = new Map();
+    rowRuns.forEach(([start, end]) => {
+      const key = `${start}:${end}`;
+      const rect = active.get(key) || { start, end, rowStart: row, rowEnd: row };
+      rect.rowEnd = row;
+      nextActive.set(key, rect);
+    });
+    active.forEach((rect, key) => {
+      if (!nextActive.has(key)) rectangles.push(rect);
+    });
+    active.clear();
+    nextActive.forEach((rect, key) => active.set(key, rect));
+  });
+  active.forEach((rect) => rectangles.push(rect));
+
+  const glyphWidth = getHypeBlockGlyphWidth(char, metrics);
+  return rectangles.map((rect) => {
+    const width = Math.max(cellWidth * 0.72, (rect.end - rect.start) * cellWidth + cellWidth * 0.03);
+    const height = Math.max(cellHeight * 0.82, (rect.rowEnd - rect.rowStart + 1) * cellHeight + cellHeight * 0.03);
+    return {
+      x: -glyphWidth / 2 + (rect.start + rect.end) * 0.5 * cellWidth,
+      y: metrics.height / 2 - (rect.rowStart + rect.rowEnd + 1) * 0.5 * cellHeight,
+      width,
+      height,
+    };
+  });
+}
+
+function getHypeSpinnerCanvasFont(fontFamily, fontSize = 104) {
+  const family = normalizeHypeSpinnerFontFamily(fontFamily);
+  return `400 ${fontSize}px ${getHypeSpinnerFontStack(family)}`;
+}
+
+function getHypeSpinnerFontStack(fontFamily) {
+  const family = normalizeHypeSpinnerFontFamily(fontFamily);
+  if (family === 'Market Pro') return `"${family}", "Marker Felt", "Comic Sans MS", cursive`;
+  return `"${family}", Impact, "Arial Black", Arial, sans-serif`;
+}
+
+function requestHypeSpinnerFont(fontFamily) {
+  const family = normalizeHypeSpinnerFontFamily(fontFamily);
+  if (typeof document === 'undefined' || !document.fonts?.load || hypeSpinnerRequestedFonts.has(family)) return;
+  hypeSpinnerRequestedFonts.add(family);
+  document.fonts.load(getHypeSpinnerCanvasFont(family)).then(() => {
+    if (state?.hype?.variant === 'spinner') scheduleHypeRender(0);
+  }).catch(() => {
+    // The fallback font still produces printable raised text if Google Fonts is unavailable.
+  });
+}
+
+function makeHypeSpinnerBase(dims, pendantMaterial, connectorMaterial, resources) {
+  const group = new THREE.Group();
+  group.name = 'fixedSpinnerBearingBase';
+  const spinner = syncHypeSpinnerConfig();
+  const baseGeometry = state.hypeThree?.spinnerStlGeometries?.base;
+  if (!baseGeometry) {
+    throw new Error('Spinner base STL geometry is required.');
+  }
+  const baseMaterial = makeHypeSilkMaterial(spinner.baseColor);
+  baseMaterial.roughness = 0.3;
+  baseMaterial.metalness = 0.2;
+  resources.push(baseMaterial);
+  const geometry = baseGeometry.clone();
+  resources.push(geometry);
+  const rearFill = makeHypeSpinnerDisc(dims.spinnerBaseRadius, dims.ringDepth * 0.92, baseMaterial, resources);
+  rearFill.name = 'recessedSpinnerBaseFillBehindStlDetails';
+  rearFill.position.z = -dims.ringDepth * 1.04;
+  rearFill.renderOrder = -1;
+  rearFill.frustumCulled = false;
+  group.add(rearFill);
+  const base = new THREE.Mesh(geometry, baseMaterial);
+  base.name = 'stlSpinnerBaseBearingAssembly';
+  const scale = getHypeSpinnerSceneScale();
+  base.scale.set(scale, scale, scale);
+  base.position.z = -dims.ringDepth * 0.74 + HYPE_SPINNER_BASE_FORWARD_DEPTH_OFFSET;
+  base.castShadow = true;
+  base.receiveShadow = true;
+  base.frustumCulled = false;
+  group.add(base);
+  return group;
+}
+
+function makeHypeSpinnerInnerOpeningPlate(dims, resources) {
+  const spinner = syncHypeSpinnerConfig();
+  const material = makeHypeSilkMaterial(spinner.baseColor);
+  material.roughness = 0.34;
+  material.metalness = 0.18;
+  resources.push(material);
+  const depth = clamp(dims.ringDepth * 0.16, 3.4, 5.2);
+  const plate = makeHypeSpinnerDisc(dims.innerPlateRadius, depth, material, resources);
+  plate.name = 'recessedBlackInnerFillBehindSpinnerBase';
+  plate.position.z = -dims.ringDepth * 1.18;
+  plate.renderOrder = -2;
+  plate.frustumCulled = false;
+  return plate;
+}
+
+function makeHypeSpinnerDisc(radius, depth, material, resources) {
+  const geometry = new THREE.CylinderBufferGeometry(radius, radius, depth, 96);
+  geometry.rotateX(Math.PI / 2);
+  geometry.computeVertexNormals();
+  resources.push(geometry);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+function makeHypeSpinnerCenterPendant(dims, material, resources) {
+  if (state.hype.logoDataUrl) {
+    const pendantSize = getHypeLogoPendantSize();
+    const openingDiameter = dims.innerRadius * 2;
+    const targetWidth = Math.max(54, openingDiameter * 1.28 - dims.clearance * 2);
+    const targetHeight = Math.max(54, openingDiameter * 1.16 - dims.clearance * 2);
+    const centerScale = clamp(
+      Math.min(targetWidth / pendantSize.width, targetHeight / pendantSize.height),
+      1.32,
+      2.65,
+    );
+    return makeHypeLogoPendantMesh(material, resources, {
+      name: 'fixedSpinnerLogoPendant',
+      pendantSize,
+      scale: centerScale,
+      skipHook: true,
+      logoYOffset: HYPE_SPINNER_FIXED_CENTER_LOGO_VERTICAL_OFFSET,
+    });
+  }
+  return makeHypeSpinnerPlaceholderPendant(dims, material, resources);
+}
+
+function makeHypeSpinnerPlaceholderPendant(dims, material, resources) {
+  const group = new THREE.Group();
+  group.name = 'fixedSpinnerPlaceholderPendant';
+  const width = dims.innerRadius * 1.86;
+  const height = dims.innerRadius * 1.2;
+  const geometry = makeFallbackHypePendantBodyGeometry(width, height, 11);
+  resources.push(geometry);
+  const body = new THREE.Mesh(geometry, material);
+  body.castShadow = true;
+  body.receiveShadow = true;
+  group.add(body);
+
+  const texture = makeHypeSpinnerCenterTextTexture(state.hype.text || 'MVP');
+  const faceGeometry = new THREE.PlaneBufferGeometry(width * 0.82, height * 0.56);
+  const faceMaterial = new THREE.MeshBasicMaterial({
+    map: texture,
+    transparent: true,
+    depthWrite: false,
+  });
+  resources.push(texture, faceGeometry, faceMaterial);
+  const face = new THREE.Mesh(faceGeometry, faceMaterial);
+  face.position.z = 6.2;
+  face.renderOrder = 7;
+  group.add(face);
+  return group;
+}
+
+function makeHypeSpinnerCenterTextTexture(text) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '900 112px Arial, sans-serif';
+  ctx.fillText(String(text || 'MVP').slice(0, 12).toUpperCase(), canvas.width / 2, canvas.height / 2);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.encoding = THREE.sRGBEncoding;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function updateHypeSpinnerAnimationState() {
+  if (!state.hypeThree) return;
+  if (
+    state.hype.variant !== 'spinner'
+    || !state.hypeThree.spinnerRingGroup
+  ) {
+    cancelHypeSpinnerSpin();
+    return;
+  }
+  if (state.hypeThree.spinnerSpinState?.isSpinning && !state.hypeThree.spinnerAnimationFrame) {
+    cancelHypeSpinnerSpin();
+    return;
+  }
+  applyHypeSpinnerStateToControls();
+}
+
+function startHypeSpinnerSpin() {
+  if (!state.hypeThree?.spinnerRingGroup || state.hype.variant !== 'spinner') {
+    applyHypeSpinnerStateToControls();
+    return;
+  }
+  const spinState = getHypeSpinnerSpinState();
+  if (spinState.isSpinning) return;
+  const direction = Math.random() > 0.5 ? 1 : -1;
+  Object.assign(spinState, {
+    isSpinning: true,
+    phase: 'accelerating',
+    elapsed: 0,
+    direction,
+    peakAngularVelocity: randomHypeSpinnerValue(22, 34),
+    accelerationDuration: randomHypeSpinnerValue(0.28, 0.44),
+    coastDuration: randomHypeSpinnerValue(0.42, 0.78),
+    decelerationDuration: randomHypeSpinnerValue(3.0, 4.5),
+    wobbleSeed: Math.random() * Math.PI * 2,
+  });
+  applyHypeSpinnerStateToControls();
+  startHypeSpinnerSpinLoop();
+}
+
+function startHypeSpinnerSpinLoop() {
+  if (!state.hypeThree || state.hypeThree.spinnerAnimationFrame) return;
+  state.hypeThree.spinnerLastFrameTime = performance.now();
+  const tick = (now) => {
+    if (!state.hypeThree?.spinnerRingGroup || state.hype.variant !== 'spinner') {
+      stopHypeSpinnerSpinLoop();
+      return;
+    }
+    const spinState = getHypeSpinnerSpinState();
+    if (!spinState.isSpinning) {
+      stopHypeSpinnerSpinLoop();
+      renderHypeThree();
+      return;
+    }
+    const deltaSeconds = Math.min(0.05, Math.max(0, (now - (state.hypeThree.spinnerLastFrameTime || now)) / 1000));
+    state.hypeThree.spinnerLastFrameTime = now;
+    spinState.elapsed += deltaSeconds;
+    const angularVelocity = getHypeSpinnerAngularVelocity(spinState);
+    if (angularVelocity <= 0) {
+      finishHypeSpinnerSpin();
+      renderHypeThree();
+      return;
+    }
+    state.hypeThree.spinnerRingGroup.rotation.z += spinState.direction * angularVelocity * deltaSeconds;
+    syncHypeSpinnerBaseRotation();
+    renderHypeThree();
+    state.hypeThree.spinnerAnimationFrame = window.requestAnimationFrame(tick);
+  };
+  state.hypeThree.spinnerAnimationFrame = window.requestAnimationFrame(tick);
+}
+
+function stopHypeSpinnerSpinLoop() {
+  if (!state.hypeThree?.spinnerAnimationFrame) return;
+  window.cancelAnimationFrame(state.hypeThree.spinnerAnimationFrame);
+  state.hypeThree.spinnerAnimationFrame = null;
+  state.hypeThree.spinnerLastFrameTime = 0;
+}
+
+function syncHypeSpinnerBaseRotation() {
+  if (!state.hypeThree?.spinnerRingGroup || !state.hypeThree?.spinnerBaseGroup) return;
+  state.hypeThree.spinnerBaseGroup.rotation.z = state.hypeThree.spinnerRingGroup.rotation.z;
+}
+
+function finishHypeSpinnerSpin() {
+  cancelHypeSpinnerSpin();
+}
+
+function cancelHypeSpinnerSpin(options = {}) {
+  const { updateControls = true } = options;
+  if (!state.hypeThree) return;
+  const spinState = getHypeSpinnerSpinState();
+  spinState.isSpinning = false;
+  spinState.phase = 'idle';
+  spinState.elapsed = 0;
+  stopHypeSpinnerSpinLoop();
+  if (updateControls) applyHypeSpinnerStateToControls();
+}
+
+function resetHypeSpinnerSpinState() {
+  if (!state.hypeThree) return;
+  state.hypeThree.spinnerSpinState = {
+    isSpinning: false,
+    phase: 'idle',
+    elapsed: 0,
+    direction: 1,
+    peakAngularVelocity: 0,
+    accelerationDuration: 0.35,
+    coastDuration: 0.6,
+    decelerationDuration: 3.5,
+    wobbleSeed: 0,
+  };
+  applyHypeSpinnerStateToControls();
+}
+
+function getHypeSpinnerSpinState() {
+  if (!state.hypeThree) return { isSpinning: false, phase: 'idle' };
+  if (!state.hypeThree.spinnerSpinState) resetHypeSpinnerSpinState();
+  return state.hypeThree.spinnerSpinState;
+}
+
+function getHypeSpinnerAngularVelocity(spinState) {
+  const accelerationDuration = Math.max(0.01, Number(spinState.accelerationDuration) || 0.35);
+  const coastDuration = Math.max(0, Number(spinState.coastDuration) || 0.6);
+  const decelerationDuration = Math.max(0.01, Number(spinState.decelerationDuration) || 3.5);
+  const peakAngularVelocity = Math.max(0, Number(spinState.peakAngularVelocity) || 0);
+  const elapsed = Math.max(0, Number(spinState.elapsed) || 0);
+  const decelerationStart = accelerationDuration + coastDuration;
+  const stopAt = decelerationStart + decelerationDuration;
+
+  if (elapsed < accelerationDuration) {
+    spinState.phase = 'accelerating';
+    const t = clamp(elapsed / accelerationDuration, 0, 1);
+    return peakAngularVelocity * (1 - Math.pow(1 - t, 3));
+  }
+  if (elapsed < decelerationStart) {
+    spinState.phase = 'coasting';
+    const t = clamp((elapsed - accelerationDuration) / Math.max(0.01, coastDuration), 0, 1);
+    return peakAngularVelocity * (0.96 + Math.sin(t * Math.PI * 2 + (spinState.wobbleSeed || 0)) * 0.035);
+  }
+  if (elapsed < stopAt) {
+    spinState.phase = 'decelerating';
+    const t = clamp((elapsed - decelerationStart) / decelerationDuration, 0, 1);
+    return peakAngularVelocity * Math.pow(1 - t, 2.15);
+  }
+  spinState.phase = 'idle';
+  spinState.isSpinning = false;
+  return 0;
+}
+
+function randomHypeSpinnerValue(min, max) {
+  return min + Math.random() * (max - min);
 }
 
 function buildHypeChainLoop({ linkCount, linkGeometry, materials }) {
@@ -528,6 +1917,70 @@ function makeHypeConnectorEntryLinks(linkGeometry, materials, startIndex = 0) {
     pivot.rotation.z = getHypeChainPathRotation(path, entry.u);
     const mesh = createChainLink(linkGeometry, secondaryMaterial, 1);
     mesh.name = entry.name;
+    pivot.add(mesh);
+    group.add(pivot);
+  });
+  return group;
+}
+
+function makeHypeSpinnerConnectorEntryLinks(linkGeometry, materials, startIndex = 0) {
+  const group = new THREE.Group();
+  group.name = 'spinnerConnectorThreadedEntryLinks';
+  const secondaryMaterial = materials[1] || materials[0];
+  const leftEntryMaterialIndex = materials.length >= 3 ? 2 : 1;
+  const path = makeHypeChainPath();
+  const linksOnPath = Math.max(16, startIndex || 0);
+  path.arcLengthDivisions = Math.max(480, linksOnPath * 24);
+  path.updateArcLengths();
+  const referenceStep = 1 / (linksOnPath - 1);
+  const upperLoopY = getHypeSpinnerPendantY()
+    + getHypeSpinnerConnectorPendantY()
+    + getHypeSpinnerConnectorTopOffsetY()
+    + 8
+    - getHypeSpinnerChainRigY();
+  const upperLoopZ = getHypeSpinnerPendantZ()
+    + getHypeSpinnerConnectorBackZ()
+    + HYPE_SPINNER_CONNECTOR_ENTRY_FORWARD_Z;
+  const upperLoopTargets = {
+    left: new THREE.Vector3(-getHypeSpinnerConnectorHoleX() * 1.2, upperLoopY, upperLoopZ),
+    right: new THREE.Vector3(getHypeSpinnerConnectorHoleX() * 1.2, upperLoopY, upperLoopZ),
+  };
+  const leftChainEnd = path.getPointAt(0);
+  const rightChainEnd = path.getPointAt(1);
+  [
+    {
+      name: 'spinnerLeftTransitionLink',
+      position: leftChainEnd.clone()
+        .lerp(upperLoopTargets.left, HYPE_SPINNER_CONNECTOR_ENTRY_BLEND)
+        .add(new THREE.Vector3(HYPE_SPINNER_CONNECTOR_ENTRY_CLEARANCE_INSET_X, HYPE_SPINNER_CONNECTOR_ENTRY_CLEARANCE_DROP_Y, 0)),
+      u: 0,
+      materialIndex: leftEntryMaterialIndex,
+      throughHole: false,
+    },
+    {
+      name: 'spinnerRightTransitionLink',
+      position: rightChainEnd.clone()
+        .lerp(upperLoopTargets.right, HYPE_SPINNER_CONNECTOR_ENTRY_BLEND)
+        .add(new THREE.Vector3(-HYPE_SPINNER_CONNECTOR_ENTRY_CLEARANCE_INSET_X, HYPE_SPINNER_CONNECTOR_ENTRY_CLEARANCE_DROP_Y, 0)),
+      u: 1,
+      materialIndex: 1,
+      throughHole: false,
+    },
+  ].forEach((entry) => {
+    const pivot = new THREE.Group();
+    pivot.name = `${entry.name}Pivot`;
+    pivot.position.copy(entry.position);
+    pivot.rotation.z = entry.throughHole
+      ? THREE.Math.degToRad(entry.side < 0 ? 14 : -14)
+      : getHypeChainPathRotation(path, entry.u);
+    const mesh = createChainLink(linkGeometry, materials[entry.materialIndex] || secondaryMaterial, 1);
+    mesh.name = entry.name;
+    if (entry.throughHole) {
+      mesh.rotation.z = Math.PI / 2;
+      mesh.rotation.y = THREE.Math.degToRad(entry.side < 0 ? 72 : -72);
+      mesh.position.z = 3;
+      mesh.renderOrder = 5;
+    }
     pivot.add(mesh);
     group.add(pivot);
   });
@@ -597,11 +2050,12 @@ function makeHypePendantMesh(material, resources) {
   return group;
 }
 
-function makeHypeLogoPendantMesh(material, resources) {
+function makeHypeLogoPendantMesh(material, resources, options = {}) {
   const group = new THREE.Group();
-  group.name = 'uploadedLogoPendant';
-  group.scale.set(2.25, 2.25, 2.25);
-  const pendantSize = getHypeLogoPendantSize();
+  group.name = options.name || 'uploadedLogoPendant';
+  const pendantScale = Number(options.scale) || 2.25;
+  group.scale.set(pendantScale, pendantScale, pendantScale);
+  const pendantSize = options.pendantSize || getHypeLogoPendantSize();
   const pendantDepth = 11;
   const texture = new THREE.TextureLoader().load(state.hype.logoDataUrl, () => {
     texture.needsUpdate = true;
@@ -640,6 +2094,8 @@ function makeHypeLogoPendantMesh(material, resources) {
     group,
     pendantSize,
     depth: pendantDepth,
+    skipHook: Boolean(options.skipHook),
+    logoYOffset: Number.isFinite(options.logoYOffset) ? Number(options.logoYOffset) : undefined,
   });
   return group;
 }
@@ -669,17 +2125,19 @@ function createHypeLogoPendantFromAlpha(dataUrl, options) {
     group,
     pendantSize,
     depth,
+    skipHook = false,
+    logoYOffset,
   } = options;
   const image = new Image();
   image.onload = () => {
-    if (!state.hypeThree?.group || group.parent !== state.hypeThree.group) return;
+    if (!isHypeObjectAttachedToCurrentModel(group)) return;
     const silhouette = makeAlphaSilhouettePendantShape(image, pendantSize.width, pendantSize.height);
-    const pendantOffsetX = -(Number(silhouette.hookAnchorX) || 0);
+    const pendantOffset = getHypeLogoPendantOffset(silhouette, { skipHook, logoYOffset });
     const bodyGeometry = makeAlphaSilhouettePendantGeometry(silhouette.shape, depth);
     resources.push(bodyGeometry);
     const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
     body.name = 'uploadedLogoPendantSolidBody';
-    body.position.set(pendantOffsetX, -10, 0);
+    body.position.set(pendantOffset.x, pendantOffset.y, 0);
     body.renderOrder = 1;
     body.castShadow = true;
     body.receiveShadow = true;
@@ -691,23 +2149,50 @@ function createHypeLogoPendantFromAlpha(dataUrl, options) {
     resources.push(faceGeometry);
     const face = new THREE.Mesh(faceGeometry, logoMaterial);
     face.name = 'uploadedLogoPendantFace';
-    face.position.set(pendantOffsetX, -10, depth / 2 + HYPE_LOGO_FRONT_OFFSET);
+    face.position.set(pendantOffset.x, pendantOffset.y, depth / 2 + HYPE_LOGO_FRONT_OFFSET);
     face.renderOrder = 3;
     face.castShadow = true;
     face.receiveShadow = true;
     face.frustumCulled = false;
     group.add(face);
 
-    const hook = makeHypePendantHookMesh(silhouette, bodyMaterial, resources, depth);
+    const hook = skipHook ? null : makeHypePendantHookMesh(silhouette, bodyMaterial, resources, depth);
     if (hook) {
       group.add(hook);
       alignHypeChainRigToPendantHook(hook);
     }
 
-    updateHypeCameraFocus(group);
+    updateHypeCameraFocus(state.hypeThree?.pendantGroup || group);
     renderHypeThree();
   };
   image.src = dataUrl;
+}
+
+function getHypeLogoPendantOffset(silhouette, options = {}) {
+  const { skipHook = false, logoYOffset } = options;
+  if (skipHook) {
+    const bounds = silhouette?.uvBounds || {};
+    const centerX = (Number(bounds.minX) || 0) + (Number(bounds.width) || 0) / 2;
+    const centerY = (Number(bounds.minY) || 0) + (Number(bounds.height) || 0) / 2;
+    return {
+      x: -centerX,
+      y: -centerY + (Number.isFinite(logoYOffset) ? logoYOffset : 0),
+    };
+  }
+  return {
+    x: -(Number(silhouette?.hookAnchorX) || 0),
+    y: Number.isFinite(logoYOffset) ? logoYOffset : -10,
+  };
+}
+
+function isHypeObjectAttachedToCurrentModel(object) {
+  if (!state.hypeThree?.group || !object) return false;
+  let cursor = object;
+  while (cursor) {
+    if (cursor === state.hypeThree.group) return true;
+    cursor = cursor.parent;
+  }
+  return false;
 }
 
 function makeHypePendantHookMesh(silhouette, bodyMaterial, resources, depth) {
@@ -1013,6 +2498,37 @@ function syncHypeDerivedColours() {
   state.hype.border = state.hype.primary;
   state.hype.chainLength = normalizeHypeChainLength(state.hype.chainLength);
   state.hype.linkCount = getDefaultHypeLinkCount(state.hype.chainLength);
+  syncHypeSpinnerConfig();
+}
+
+function syncHypeSpinnerConfig() {
+  state.hype.spinner = normalizeHypeSpinnerConfig(state.hype.spinner);
+  return state.hype.spinner;
+}
+
+function normalizeHypeSpinnerConfig(value = {}) {
+  const defaults = DEFAULT_HYPE_SPINNER_CONFIG;
+  return {
+    topText: sanitizeHypeSpinnerText(value.topText, defaults.topText),
+    bottomText: sanitizeHypeSpinnerText(value.bottomText, defaults.bottomText),
+    ringColor: normalizeHex(value.ringColor || defaults.ringColor),
+    textColor: normalizeHex(value.textColor || defaults.textColor),
+    baseColor: normalizeHex(value.baseColor || defaults.baseColor),
+    fontFamily: normalizeHypeSpinnerFontFamily(value.fontFamily || defaults.fontFamily),
+    ringDiameter: defaults.ringDiameter,
+    ringThickness: defaults.ringThickness,
+    ringClearance: defaults.ringClearance,
+  };
+}
+
+function sanitizeHypeSpinnerText(value, fallback) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim().slice(0, 18);
+  return text || fallback;
+}
+
+function normalizeHypeSpinnerFontFamily(value) {
+  const font = String(value || '').trim();
+  return HYPE_SPINNER_FONT_OPTIONS.includes(font) ? font : DEFAULT_HYPE_SPINNER_CONFIG.fontFamily;
 }
 
 function getHypePendantColours() {
@@ -1027,6 +2543,36 @@ function getHypePendantColourLabel(index) {
   return state.hype.pendantColourLabels?.[index] || String(index + 1);
 }
 
+function getHypePendantFrontEdgeColour(processed = state.processed) {
+  if (!processed?.alphaMask || !processed?.regionIndex || !processed?.colours?.length) return '';
+  const width = Number(processed.width) || 0;
+  const height = Number(processed.height) || 0;
+  if (width <= 0 || height <= 0) return '';
+  const counts = new Map();
+  const visible = (x, y) => x >= 0 && y >= 0 && x < width && y < height && processed.alphaMask[y * width + x];
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const index = y * width + x;
+      if (!processed.alphaMask[index]) continue;
+      if (
+        visible(x - 1, y)
+        && visible(x + 1, y)
+        && visible(x, y - 1)
+        && visible(x, y + 1)
+      ) {
+        continue;
+      }
+      const colourIndex = processed.regionIndex[index];
+      const region = processed.colours[colourIndex];
+      if (!region || region.isFloatingSupport) continue;
+      const hex = normalizeHex(getDisplayColour(colourIndex, region.hex));
+      counts.set(hex, (counts.get(hex) || 0) + 1);
+    }
+  }
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  return ranked.length ? normalizeHex(ranked[0][0]) : '';
+}
+
 function getHypePatternColours() {
   syncHypeDerivedColours();
   const colours = [state.hype.primary];
@@ -1037,20 +2583,77 @@ function getHypePatternColours() {
 
 function applyHypePendantColoursToChain() {
   const fallback = ['#d6001c', '#0057b8', '#ffc529'];
-  const ranked = getRankedPendantChainColours();
-  const colours = uniqueHexColours(ranked.map((item) => item.hex));
-  const chainColours = [0, 1, 2].map((index) => normalizeHex(colours[index] || fallback[index]));
+  const logoColours = getTopHypeLogoColours(3);
+  const ranked = logoColours.length ? logoColours : getRankedPendantChainColours().map((item) => item.hex);
+  const colours = uniqueHexColours(ranked);
+  const chainColours = [0, 1, 2].map((index) => normalizeHex(
+    colours[index] || colours[index % Math.max(1, colours.length)] || fallback[index],
+  ));
   state.hype.primary = chainColours[0];
-  if (getHypePatternLength() >= 2) state.hype.secondary = chainColours[1];
-  if (getHypePatternLength() >= 3) state.hype.tertiary = chainColours[2];
+  state.hype.secondary = chainColours[1];
+  state.hype.tertiary = chainColours[2];
   syncHypeDerivedColours();
   applyHypeStateToControls();
   renderHypeColourControls();
 }
 
+function applyHypeLogoColoursToSpinner() {
+  const colours = getTopHypeLogoColours(3);
+  if (!colours.length) return;
+  const spinner = syncHypeSpinnerConfig();
+  spinner.ringColor = normalizeHex(colours[0]);
+  spinner.textColor = normalizeHex(colours[1] || getReadableSpinnerTextColourForRing(colours[0]));
+  spinner.baseColor = normalizeHex(colours[2] || colours[0]);
+  state.hype.spinner = normalizeHypeSpinnerConfig(spinner);
+}
+
+function getTopHypeLogoColours(limit = 3) {
+  const processedColours = (state.processed?.colours || [])
+    .map((region, index) => ({
+      hex: normalizeHex(getDisplayColour(index, region.hex)),
+      count: Number(region.count) || 0,
+      index,
+      isFloatingSupport: Boolean(region.isFloatingSupport),
+    }))
+    .filter((item) => !item.isFloatingSupport);
+  const fallbackColours = (state.hype.pendantSourceColours || []).map((hex, index) => ({
+    hex: normalizeHex(hex),
+    count: Math.max(1, limit - index),
+    index,
+    isFloatingSupport: false,
+  }));
+  const source = processedColours.length ? processedColours : fallbackColours;
+  const merged = new Map();
+  source.forEach((item) => {
+    const existing = merged.get(item.hex);
+    if (existing) {
+      existing.count += item.count;
+      existing.index = Math.min(existing.index, item.index);
+    } else {
+      merged.set(item.hex, { ...item });
+    }
+  });
+  return [...merged.values()]
+    .sort((a, b) => (b.count - a.count) || (a.index - b.index))
+    .slice(0, limit)
+    .map((item) => normalizeHex(item.hex));
+}
+
+function getReadableSpinnerTextColourForRing(ringHex) {
+  const [r, g, b] = hexToRgb(normalizeHex(ringHex));
+  const luma = (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
+  return luma > 150 ? '#000000' : '#ffffff';
+}
+
 function applyHypeStateToControls() {
+  syncHypeSpinnerConfig();
   document.querySelectorAll('[data-hype-variant]').forEach((button) => {
     button.classList.toggle('active', button.dataset.hypeVariant === state.hype.variant);
+  });
+  document.querySelectorAll('[data-hype-variant-tab]').forEach((button) => {
+    const active = state.productType === 'hype' && button.dataset.hypeVariantTab === state.hype.variant;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
   renderHypeVariantAccess();
   if (els.hypePrimaryColour) els.hypePrimaryColour.value = normalizeHex(state.hype.primary);
@@ -1063,24 +2666,80 @@ function applyHypeStateToControls() {
   if (els.hypePatternLength) els.hypePatternLength.value = String(getHypePatternLength());
   if (els.hypeChainLength) els.hypeChainLength.value = state.hype.chainLength;
   if (els.hypeQuantity) els.hypeQuantity.value = String(state.hype.quantity);
+  applyHypeSpinnerStateToControls();
   renderHypeColourControls();
 }
 
 function renderHypeVariantAccess() {
   document.querySelectorAll('[data-hype-variant]').forEach((button) => {
-    const locked = button.dataset.hypeVariant === 'spinner' && !state.isAdmin;
-    button.classList.toggle('locked', locked);
-    button.setAttribute('aria-disabled', locked ? 'true' : 'false');
-    if (locked) {
-      button.setAttribute('aria-describedby', 'spinnerLockTooltip');
-      if (state.hype.variant === 'spinner') state.hype.variant = 'classic';
-    } else {
-      button.removeAttribute('aria-describedby');
-    }
+    button.classList.remove('locked');
+    button.setAttribute('aria-disabled', 'false');
+    button.removeAttribute('aria-describedby');
     const lock = button.querySelector('.spinner-lock');
-    if (lock) lock.hidden = !locked;
+    if (lock) lock.hidden = true;
     button.classList.toggle('active', button.dataset.hypeVariant === state.hype.variant);
   });
+}
+
+function applyHypeSpinnerStateToControls() {
+  const spinner = syncHypeSpinnerConfig();
+  const enabled = state.hype.variant === 'spinner';
+  const spinState = state.hypeThree?.spinnerSpinState;
+  const isSpinning = Boolean(spinState?.isSpinning);
+  const isReady = Boolean(enabled && state.hypeThree?.spinnerRingGroup);
+  const isLoading = Boolean(enabled && !isReady);
+  els.hypeSpinnerSection?.classList.toggle('hidden', !enabled);
+  if (els.hypeSpinnerTopText) els.hypeSpinnerTopText.value = spinner.topText;
+  if (els.hypeSpinnerBottomText) els.hypeSpinnerBottomText.value = spinner.bottomText;
+  if (els.hypeSpinnerFontFamily) els.hypeSpinnerFontFamily.value = spinner.fontFamily;
+  updateHypeSpinnerFontPicker(spinner.fontFamily);
+  if (els.hypeSpinnerRingColor) els.hypeSpinnerRingColor.value = spinner.ringColor;
+  if (els.hypeSpinnerTextColor) els.hypeSpinnerTextColor.value = spinner.textColor;
+  if (els.hypeSpinnerBaseColor) els.hypeSpinnerBaseColor.value = spinner.baseColor;
+  document.querySelectorAll('[data-hype-spinner-colour]').forEach((button) => {
+    const key = button.dataset.hypeSpinnerColour;
+    const hex = normalizeHex(spinner[key] || '#ffffff');
+    const label = key === 'textColor' ? 'Text' : key === 'baseColor' ? 'Base' : 'Ring';
+    const swatch = button.querySelector('i');
+    if (swatch) swatch.style.background = hex;
+    button.setAttribute('aria-label', `${label} colour ${hex}`);
+    button.title = `${label} colour ${hex}`;
+  });
+  if (els.hypeSpinnerRingDiameter) els.hypeSpinnerRingDiameter.value = String(spinner.ringDiameter);
+  if (els.hypeSpinnerRingThickness) els.hypeSpinnerRingThickness.value = String(spinner.ringThickness);
+  if (els.hypeSpinnerRingClearance) els.hypeSpinnerRingClearance.value = String(spinner.ringClearance);
+  if (els.hypeSpinnerSpinPreviewToggle) {
+    els.hypeSpinnerSpinPreviewToggle.classList.toggle('hidden', !enabled);
+    els.hypeSpinnerSpinPreviewToggle.classList.toggle('is-spinning', isSpinning);
+    els.hypeSpinnerSpinPreviewToggle.classList.toggle('is-loading', isLoading);
+    els.hypeSpinnerSpinPreviewToggle.disabled = !enabled || !isReady || isSpinning;
+    els.hypeSpinnerSpinPreviewToggle.setAttribute('aria-label', isLoading ? 'Spinner ring loading' : isSpinning ? 'Spinner ring is spinning' : 'Spin');
+    els.hypeSpinnerSpinPreviewToggle.title = isLoading ? 'Loading...' : isSpinning ? 'Spinning...' : 'Spin';
+    const label = els.hypeSpinnerSpinPreviewToggle.querySelector('.hype-spinner-spin-label');
+    if (label) label.textContent = 'SPIN';
+  }
+  if (els.hypeSpinnerStatus) {
+    els.hypeSpinnerStatus.textContent = isLoading ? 'Loading...' : isSpinning ? 'Spinning...' : 'Ready to spin';
+  }
+}
+
+function updateHypeSpinnerFontPicker(fontFamily = syncHypeSpinnerConfig().fontFamily) {
+  const font = normalizeHypeSpinnerFontFamily(fontFamily);
+  requestHypeSpinnerFont(font);
+  if (els.hypeSpinnerFontButtonText) {
+    els.hypeSpinnerFontButtonText.textContent = font;
+    els.hypeSpinnerFontButtonText.style.fontFamily = getHypeSpinnerFontStack(font);
+  }
+  els.hypeSpinnerFontMenu?.querySelectorAll('[data-hype-spinner-font]').forEach((button) => {
+    const selected = button.dataset.hypeSpinnerFont === font;
+    button.setAttribute('aria-selected', selected ? 'true' : 'false');
+  });
+}
+
+function setHypeSpinnerFontMenuOpen(open) {
+  if (!els.hypeSpinnerFontMenu || !els.hypeSpinnerFontButton) return;
+  els.hypeSpinnerFontMenu.classList.toggle('hidden', !open);
+  els.hypeSpinnerFontButton.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
 
 function setupHypeDrag() {
@@ -1190,8 +2849,14 @@ function completeHypeLogoImport() {
   state.hype.pendantColours = state.hype.pendantSourceColours.map((hex) => normalizeHex(hex));
   state.hype.pendantColourLabels = pendantColourLabels;
   state.hype.pendantRegionShapes = buildHypePendantRegionShapes(state.processed, pendantArtwork?.bounds);
-  state.hype.pendantCasing = normalizeHex(state.hype.pendantCasing || state.hype.pendant || '#202326');
+  state.hype.pendantCasing = normalizeHex(
+    getHypePendantFrontEdgeColour(state.processed)
+    || state.hype.pendantSourceColours[0]
+    || state.hype.pendant
+    || '#202326',
+  );
   applyHypePendantColoursToChain();
+  applyHypeLogoColoursToSpinner();
   restoreLedUploadState();
   state.hype.rotation = getDefaultHypePreviewRotation();
   state.previewZoom = getDefaultProductPreviewZoom();
@@ -1314,6 +2979,16 @@ function openHypeColourPopover(part, anchor) {
   setPopoverTab('preset');
 }
 
+function openHypeSpinnerColourPopover(part, anchor) {
+  const spinner = syncHypeSpinnerConfig();
+  state.selectedColourTarget = { type: 'hypeSpinner', part };
+  const hex = normalizeHex(spinner[part] || '#ffffff');
+  updatePopoverInputs(hex);
+  positionColourPopover(anchor);
+  renderUsedColourGrid();
+  setPopoverTab('used');
+}
+
 function openHypePendantColourPopover(index, anchor) {
   const colours = getHypePendantColours();
   state.selectedColourTarget = { type: 'hypePendant', index };
@@ -1356,8 +3031,9 @@ async function saveHypeChainProjectFile() {
   setStatus('Saving');
   els.saveProject.disabled = true;
   try {
+    cancelHypeSpinnerSpin();
     queueEmailMarketingSubscription(state.customerEmail);
-    const project = await buildHypeChainProject();
+    const project = await buildHypeChainProject({ forceNewId: true });
     state.projectId = project.id;
     if (isLocalTesting()) {
       if (state.isAdmin) downloadProjectPayload(project);
@@ -1429,7 +3105,7 @@ async function placeHypeChainOrder() {
   }
 }
 
-async function buildHypeChainProject() {
+async function buildHypeChainProject(options = {}) {
   syncHypeDerivedColours();
   let screenshotDataUrl = '';
   try {
@@ -1444,7 +3120,7 @@ async function buildHypeChainProject() {
   return {
     type: 'SignGuy.HypeChainStudio',
     version: PROJECT_FILE_VERSION,
-    id: state.projectId || makeProjectId(),
+    id: options.forceNewId ? makeProjectId() : (state.projectId || makeProjectId()),
     name: `${state.hype.variant === 'spinner' ? 'Spinner' : 'Classic'} Hype Chain`,
     customerEmail: state.customerEmail,
     savedAt: now,
@@ -1471,6 +3147,11 @@ async function buildHypeChainProject() {
         ...(getHypePatternLength() >= 3 ? [{ label: 'Tertiary chain', display: normalizeHex(state.hype.tertiary) }] : []),
         { label: 'Connector and attachment', display: normalizeHex(state.hype.primary) },
         { label: 'Pendant backing, sides, and hook', display: getHypePendantBodyColour() },
+        ...(state.hype.variant === 'spinner' ? [
+          { label: 'Spinner ring', display: syncHypeSpinnerConfig().ringColor },
+          { label: 'Spinner ring text', display: syncHypeSpinnerConfig().textColor },
+          { label: 'Spinner base', display: syncHypeSpinnerConfig().baseColor },
+        ] : []),
       ],
       details: {
         style: state.hype.variant === 'spinner' ? 'Spinner' : 'Classic',
@@ -1478,12 +3159,14 @@ async function buildHypeChainProject() {
         chainLength: state.hype.chainLength,
         linkCount: getHypeLinkCount(state.hype.chainLength, state.hype.linkCount),
         quantity: state.hype.quantity,
+        ...(state.hype.variant === 'spinner' ? { spinner: getSerializableHypeSpinnerConfig() } : {}),
       },
     },
   };
 }
 
 function getSerializableHypeConfig() {
+  const spinner = syncHypeSpinnerConfig();
   return {
     variant: state.hype.variant,
     patternLength: getHypePatternLength(),
@@ -1511,11 +3194,16 @@ function getSerializableHypeConfig() {
     borderThickness: Number(state.hype.borderThickness) || 7,
     connector: state.hype.connector || 'Medallion',
     ribbon: state.hype.ribbon || 'Bold',
+    spinner: { ...spinner },
     rotation: {
       x: Number(state.hype.rotation?.x) || 0,
       y: Number(state.hype.rotation?.y) || 0,
     },
   };
+}
+
+function getSerializableHypeSpinnerConfig() {
+  return { ...syncHypeSpinnerConfig() };
 }
 
 function restoreHypeChainProject(project, options = {}) {
@@ -1558,6 +3246,7 @@ function restoreHypeChainProject(project, options = {}) {
     chainLength: normalizeHypeChainLength(hype.chainLength),
     linkCount: getHypeLinkCount(hype.chainLength, hype.linkCount),
     quantity: clamp(Number(hype.quantity) || 1, 1, 99),
+    spinner: normalizeHypeSpinnerConfig(hype.spinner),
     rotation: {
       x: Number.isFinite(Number(hype.rotation?.x)) ? Number(hype.rotation.x) : getDefaultHypePreviewRotation().x,
       y: Number.isFinite(Number(hype.rotation?.y)) ? Number(hype.rotation.y) : getDefaultHypePreviewRotation().y,
@@ -1807,6 +3496,7 @@ function drawHypeChainCanvas(ctx, hype, width, height, logoImage = null) {
 
 function makeHypeEmailBody(context = 'Design submission') {
   const hype = state.hype;
+  const spinner = syncHypeSpinnerConfig();
   return [
     'Hype Chain request',
     '',
@@ -1821,6 +3511,17 @@ function makeHypeEmailBody(context = 'Design submission') {
     `Connector and attachment colour: ${normalizeHex(hype.primary)}`,
     `Pendant backing sides and hook colour: ${normalizeHex(hype.pendantCasing || hype.pendant)}`,
     `Pendant text: ${hype.text || 'None'}`,
+    ...(hype.variant === 'spinner' ? [
+      `Spinner top text: ${spinner.topText}`,
+      `Spinner bottom text: ${spinner.bottomText}`,
+      `Spinner ring font: ${spinner.fontFamily}`,
+      `Spinner ring colour: ${spinner.ringColor}`,
+      `Spinner text colour: ${spinner.textColor}`,
+      `Spinner base colour: ${spinner.baseColor}`,
+      `Spinner ring diameter: ${spinner.ringDiameter} mm`,
+      `Spinner ring thickness: ${spinner.ringThickness} mm`,
+      `Spinner ring clearance: ${spinner.ringClearance} mm`,
+    ] : []),
     `Chain length: ${hype.chainLength}`,
     `Quantity requested: ${hype.quantity || 1}`,
     `Render screenshots: current Hype Chain view and angled view`,
@@ -1830,6 +3531,7 @@ function makeHypeEmailBody(context = 'Design submission') {
 function makeHypeEmailHtml(context = 'Design submission') {
   const hype = state.hype;
   const patternLength = getHypePatternLength(hype.patternLength);
+  const spinner = syncHypeSpinnerConfig();
 
   const chainColours = [
     { label: 'Primary chain colour', hex: hype.primary },
@@ -1850,6 +3552,14 @@ function makeHypeEmailHtml(context = 'Design submission') {
       ['Customer email', state.customerEmail || 'Not provided'],
       ['Style', hype.variant === 'spinner' ? 'Spinner' : 'Classic'],
       ['Uploaded file', hype.logoFileName || 'No logo uploaded'],
+      ...(hype.variant === 'spinner' ? [
+        ['Top ring text', spinner.topText],
+        ['Bottom ring text', spinner.bottomText],
+        ['Ring font', spinner.fontFamily],
+        ['Ring diameter', `${spinner.ringDiameter} mm`],
+        ['Ring thickness', `${spinner.ringThickness} mm`],
+        ['Ring clearance', `${spinner.ringClearance} mm`],
+      ] : []),
       ['Pattern length', `${patternLength} link${patternLength === 1 ? '' : 's'}`],
       ['Chain length', hype.chainLength],
       ['Quantity requested', String(hype.quantity || 1)],
@@ -1869,6 +3579,14 @@ function makeHypeEmailHtml(context = 'Design submission') {
           ...pendantColours,
         ],
       },
+      ...(hype.variant === 'spinner' ? [{
+        title: 'Spinner colours',
+        colours: [
+          { label: 'Ring colour', hex: spinner.ringColor },
+          { label: 'Ring text colour', hex: spinner.textColor },
+          { label: 'Base colour', hex: spinner.baseColor },
+        ],
+      }] : []),
     ],
   });
 }

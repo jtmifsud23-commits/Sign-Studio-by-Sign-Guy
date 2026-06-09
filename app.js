@@ -14,6 +14,7 @@ const CONTACT_EMAIL = 'Hey@MySignGuy.ca';
 const SUBMISSION_SUBJECT = 'User submitted sign to print';
 const ORDER_SUBMISSION_SUBJECT = 'User placed a lightbox order';
 const HYPE_CHAIN_ORDER_SUBJECT = 'User placed a Hype Chain order';
+const BUG_REPORT_SUBJECT = 'Sign Studio bug report';
 const DEFAULT_LED_PROJECT_SRC = './assets/led/default-led-lightbox.SignGuy?v=20260527-02';
 const DEFAULT_LED_PROJECT_SCRIPT_SRC = './assets/led/default-led-lightbox-project.js?v=20260527-02';
 const DEFAULT_PREVIEW_DATA_URL = './assets/sign-guy-head.png';
@@ -58,6 +59,11 @@ const HYPE_CHAIN_STL_ASSETS = {
   connector: './assets/hype-chain/link-connector.stl',
   hook: './assets/hype-chain/Pendant%20Hook.stl?v=20260513-02',
 };
+const HYPE_SPINNER_STL_ASSETS = {
+  base: './assets/hype-chain/spinner/spinner-base.stl?v=20260602-01',
+  outerRing: './assets/hype-chain/spinner/outer-ring-sign-guy.stl?v=20260603-01',
+  connector: './assets/hype-chain/spinner/two-prong-chain-link-attachment.stl?v=20260602-01',
+};
 const DEFAULT_HYPE_CHAIN_PROJECT_SRC = './assets/hype-chain/default-hype-chain.SignGuy?v=20260513-02';
 const DEFAULT_PLAQUE_PROJECT_SRC = './assets/plaque/default-3d-plaque.SignGuy?v=20260525-03';
 const DEFAULT_HYPE_CHAIN_PROJECT_SCRIPT_SRC = './assets/hype-chain/default-hype-chain-project.js?v=20260513-01';
@@ -65,6 +71,10 @@ const DEFAULT_PLAQUE_PROJECT_SCRIPT_SRC = './assets/plaque/default-3d-plaque-pro
 const DEFAULT_PLAQUE_PROCESSED_CACHE_SCRIPT_SRC = './assets/plaque/default-3d-plaque-processed-cache.js?v=20260527-02';
 const HYPE_CHAIN_GEOMETRY_CACHE_SCRIPT_SRC = './assets/hype-chain/hype-chain-geometry-cache.js?v=20260527-01';
 const HYPE_CHAIN_STL_EMBEDDED_SCRIPT_SRC = './assets/hype-chain/hype-chain-stl-embedded.js?v=20260527-01';
+const HYPE_SPINNER_BASE_GEOMETRY_CACHE_SCRIPT_SRC = './assets/hype-chain/spinner/spinner-base-geometry-cache.js?v=20260605-01';
+const HYPE_SPINNER_BASE_STL_EMBEDDED_SCRIPT_SRC = './assets/hype-chain/spinner/spinner-base-embedded.js?v=20260602-01';
+const HYPE_SPINNER_OUTER_RING_STL_EMBEDDED_SCRIPT_SRC = './assets/hype-chain/spinner/outer-ring-sign-guy-embedded.js?v=20260603-01';
+const HYPE_SPINNER_CONNECTOR_STL_EMBEDDED_SCRIPT_SRC = './assets/hype-chain/spinner/two-prong-chain-link-attachment-embedded.js?v=20260602-01';
 const SVG_LOADER_SCRIPT_SRC = './assets/vendor/SVGLoader.js?v=20260518-01';
 const IDLE_PRODUCT_PREFETCH_DELAY_MS = 4500;
 const PROJECT_FILE_VERSION = 1;
@@ -116,6 +126,17 @@ const HYPE_HOOK_HOLE_CENTER_FROM_TOP = 0.3;
 const HYPE_HOOK_CHAIN_ALIGN_LIMIT = 46;
 const HYPE_SHORT_LOGO_CHAIN_DROP_MAX = 32;
 const HYPE_SHORT_LOGO_RATIO_THRESHOLD = 0.62;
+const DEFAULT_HYPE_SPINNER_CONFIG = Object.freeze({
+  topText: 'PLAYER OF',
+  bottomText: 'THE GAME',
+  ringColor: '#FFD700',
+  textColor: '#000000',
+  baseColor: '#111111',
+  fontFamily: 'Bebas Neue Bold',
+  ringDiameter: 150,
+  ringThickness: 14,
+  ringClearance: 1.2,
+});
 const DEFAULT_CROP_OUTER_MARGIN = 0.2;
 const CROP_EXTEND_LIMIT = 0.75;
 const FLOATING_SUPPORT_CLUSTER_ORIGINAL = -7777;
@@ -219,10 +240,13 @@ const state = {
   viewportUpdateFrame: null,
   dismissedPreviewAlert: '',
   loadingReady: false,
+  productSelectionMenuResolved: false,
+  productSelectionMenuOpen: false,
   requiresEmailGate: false,
   studioInitialized: false,
   studioInitializing: null,
   orderInProgress: false,
+  bugReportInProgress: false,
   onboardingDismissedFallback: false,
   onboardingPending: false,
   heicConverterPromise: null,
@@ -265,6 +289,7 @@ const state = {
     borderThickness: 7,
     connector: 'Medallion',
     ribbon: 'Bold',
+    spinner: { ...DEFAULT_HYPE_SPINNER_CONFIG },
   },
   plaque: {
     artwork: null,
@@ -334,6 +359,7 @@ const els = {
   mobileSheetClose: document.querySelector('#mobileSheetClose'),
   mobilePlaceOrder: document.querySelector('#mobilePlaceOrder'),
   mobileSaveProject: document.querySelector('#mobileSaveProject'),
+  mobileReportBug: document.querySelector('#mobileReportBug'),
   mobileCustomize: document.querySelector('#mobileCustomize'),
   backToVisualizer: document.querySelector('#backToVisualizer'),
   mobileProductSummary: document.querySelector('#mobileProductSummary'),
@@ -341,10 +367,27 @@ const els = {
   mobileCheckoutReason: document.querySelector('#mobileCheckoutReason'),
   mobileAdvancedSection: document.querySelector('#mobileAdvancedSection'),
   mobileAdvancedHeading: document.querySelector('#mobileAdvancedHeading'),
+  helpMenu: document.querySelector('#helpMenu'),
+  helpMenuButton: document.querySelector('#helpMenuButton'),
+  helpMenuPopover: document.querySelector('#helpMenuPopover'),
   showTipsButton: document.querySelector('#showTipsButton'),
+  reportBugButton: document.querySelector('#reportBugButton'),
+  bugReportOverlay: document.querySelector('#bugReportOverlay'),
+  bugReportForm: document.querySelector('#bugReportForm'),
+  bugReportClose: document.querySelector('#bugReportClose'),
+  bugReportCancel: document.querySelector('#bugReportCancel'),
+  bugReportEmail: document.querySelector('#bugReportEmail'),
+  bugReportMessage: document.querySelector('#bugReportMessage'),
+  bugReportIncludeScreenshot: document.querySelector('#bugReportIncludeScreenshot'),
+  bugReportContext: document.querySelector('#bugReportContext'),
+  bugReportStatus: document.querySelector('#bugReportStatus'),
+  bugReportSubmit: document.querySelector('#bugReportSubmit'),
   onboardingOverlay: document.querySelector('#onboardingOverlay'),
   onboardingDone: document.querySelector('#onboardingDone'),
   productTabs: [...document.querySelectorAll('[data-product-type]')],
+  productSelectionMenu: document.querySelector('#productSelectionMenu'),
+  productSelectionCards: [...document.querySelectorAll('[data-product-selection]')],
+  changeProductButton: document.querySelector('#changeProductButton'),
   ledStudioSections: [...document.querySelectorAll('.led-studio-section')],
   hypeChainControls: document.querySelector('#hypeChainControls'),
   plaqueStudio: document.querySelector('#plaqueStudio'),
@@ -443,6 +486,21 @@ const els = {
   hypeBorderColour: document.querySelector('#hypeBorderColour'),
   hypePendantText: document.querySelector('#hypePendantText'),
   hypeColourButtons: [...document.querySelectorAll('[data-hype-colour]')],
+  hypeSpinnerSection: document.querySelector('#hypeSpinnerSection'),
+  hypeSpinnerStatus: document.querySelector('#hypeSpinnerStatus'),
+  hypeSpinnerTopText: document.querySelector('#hypeSpinnerTopText'),
+  hypeSpinnerBottomText: document.querySelector('#hypeSpinnerBottomText'),
+  hypeSpinnerFontFamily: document.querySelector('#hypeSpinnerFontFamily'),
+  hypeSpinnerFontButton: document.querySelector('#hypeSpinnerFontButton'),
+  hypeSpinnerFontButtonText: document.querySelector('#hypeSpinnerFontButtonText'),
+  hypeSpinnerFontMenu: document.querySelector('#hypeSpinnerFontMenu'),
+  hypeSpinnerRingColor: document.querySelector('#hypeSpinnerRingColor'),
+  hypeSpinnerTextColor: document.querySelector('#hypeSpinnerTextColor'),
+  hypeSpinnerBaseColor: document.querySelector('#hypeSpinnerBaseColor'),
+  hypeSpinnerRingDiameter: document.querySelector('#hypeSpinnerRingDiameter'),
+  hypeSpinnerRingThickness: document.querySelector('#hypeSpinnerRingThickness'),
+  hypeSpinnerRingClearance: document.querySelector('#hypeSpinnerRingClearance'),
+  hypeSpinnerSpinPreviewToggle: document.querySelector('#hypeSpinnerSpinPreviewToggle'),
   hypePatternLength: document.querySelector('#hypePatternLength'),
   hypeChainLength: document.querySelector('#hypeChainLength'),
   hypeQuantity: document.querySelector('#hypeQuantity'),
@@ -594,7 +652,10 @@ async function initializeStudioApp() {
 async function initializeStudioAppOnce() {
   setupAdminMode();
   setupMobileControlSheet();
+  setupBugReport();
   setupOnboarding();
+  setupProductSelectionMenu();
+  applyInitialProductSelectionFromUrl();
   setupProductSwitcher();
   setupPreviewModeControls();
   setupHypeChainControls();
@@ -873,6 +934,7 @@ function renderAdminMode() {
   }
   renderProductAccess();
   renderHypeVariantAccess();
+  renderProductSelectionAccess();
   renderDiagnostics();
   renderProjectLog();
   updateStats();
@@ -883,11 +945,176 @@ function setupProductSwitcher() {
     button.addEventListener('click', () => {
       const productType = button.dataset.productType || 'led';
       if (!canAccessProduct(productType)) return;
+      const hypeVariant = button.dataset.hypeVariantTab;
+      if (productType === 'hype' && hypeVariant) {
+        if (!canAccessHypeVariant(hypeVariant)) return;
+        state.hype.variant = hypeVariant === 'spinner' ? 'spinner' : 'classic';
+        if (typeof applyHypeStateToControls === 'function') applyHypeStateToControls();
+      }
+      state.productSelectionMenuResolved = true;
+      hideProductSelectionMenu();
       selectProductType(productType);
     });
   });
   renderProductAccess();
   selectProductType(state.productType);
+}
+
+function setupProductSelectionMenu() {
+  renderProductSelectionAccess();
+  els.productSelectionCards.forEach((button) => {
+    button.addEventListener('click', () => selectProductSelection(button.dataset.productSelection));
+  });
+  els.changeProductButton?.addEventListener('click', () => {
+    showProductSelectionMenu({ focusFirst: true });
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !state.productSelectionMenuOpen || !state.productSelectionMenuResolved) return;
+    hideProductSelectionMenu();
+  });
+}
+
+function applyInitialProductSelectionFromUrl() {
+  const choice = readProductSelectionFromUrl();
+  if (!choice) return;
+  applyProductSelectionState(choice);
+  state.productSelectionMenuResolved = true;
+}
+
+function readProductSelectionFromUrl() {
+  let params;
+  try {
+    params = new URLSearchParams(window.location.search);
+  } catch {
+    return null;
+  }
+  const hash = String(window.location.hash || '').replace(/^#/, '');
+  const rawProduct = [
+    params.get('product'),
+    params.get('productType'),
+    params.get('type'),
+    params.get('studio'),
+    hash,
+  ].find(Boolean);
+  const rawVariant = [
+    params.get('variant'),
+    params.get('style'),
+    params.get('hypeVariant'),
+  ].find(Boolean);
+  return normalizeProductSelectionChoice(rawProduct, rawVariant);
+}
+
+function normalizeProductSelectionChoice(product, variant = '') {
+  const productText = String(product || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+  const variantText = String(variant || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+  const combined = `${productText}-${variantText}`;
+  if (!productText && !variantText) return null;
+  if (combined.includes('spinner')) return { key: 'spinner-hype', productType: 'hype', hypeVariant: 'spinner' };
+  if (combined.includes('classic') || combined.includes('hype-chain') || combined.includes('hype')) {
+    return { key: 'classic-hype', productType: 'hype', hypeVariant: 'classic' };
+  }
+  if (combined.includes('plaque') || combined.includes('wall-plaque') || combined.includes('3d')) {
+    return { key: 'plaque', productType: 'plaque' };
+  }
+  if (combined.includes('led') || combined.includes('lightbox') || combined.includes('sign')) {
+    return { key: 'led', productType: 'led' };
+  }
+  return null;
+}
+
+function getProductSelectionChoice(key) {
+  switch (key) {
+    case 'classic-hype':
+      return { key, productType: 'hype', hypeVariant: 'classic' };
+    case 'spinner-hype':
+      return { key, productType: 'hype', hypeVariant: 'spinner' };
+    case 'plaque':
+      return { key, productType: 'plaque' };
+    case 'led':
+    default:
+      return { key: 'led', productType: 'led' };
+  }
+}
+
+function canAccessHypeVariant(variant) {
+  const button = document.querySelector(`[data-hype-variant="${variant}"]`);
+  return !button || button.getAttribute('aria-disabled') !== 'true';
+}
+
+function canSelectProductChoice(choice) {
+  if (!choice || !canAccessProduct(choice.productType)) return false;
+  if (choice.productType === 'hype' && choice.hypeVariant) return canAccessHypeVariant(choice.hypeVariant);
+  return true;
+}
+
+function renderProductSelectionAccess() {
+  els.productSelectionCards.forEach((button) => {
+    const choice = getProductSelectionChoice(button.dataset.productSelection);
+    const locked = !canSelectProductChoice(choice);
+    const lock = button.querySelector('[data-product-selection-lock]');
+    button.disabled = locked;
+    button.classList.toggle('is-locked', locked);
+    if (lock) {
+      lock.hidden = !locked;
+      lock.textContent = choice.hypeVariant === 'spinner' && !state.isAdmin ? 'Admin only' : 'Coming soon';
+    }
+  });
+}
+
+function selectProductSelection(key) {
+  const choice = getProductSelectionChoice(key);
+  if (!canSelectProductChoice(choice)) return;
+  state.productSelectionMenuResolved = true;
+  hideProductSelectionMenu();
+  applyProductSelection(choice);
+}
+
+function applyProductSelectionState(choice) {
+  if (!choice) return;
+  if (choice.productType === 'hype' && choice.hypeVariant) {
+    state.hype.variant = choice.hypeVariant === 'spinner' ? 'spinner' : 'classic';
+  }
+  state.productType = canAccessProduct(choice.productType) ? choice.productType : 'led';
+}
+
+function applyProductSelection(choice) {
+  applyProductSelectionState(choice);
+  if (state.productType === 'hype' && typeof applyHypeStateToControls === 'function') {
+    applyHypeStateToControls();
+  }
+  selectProductType(state.productType);
+  renderProductSelectionAccess();
+}
+
+function maybeShowInitialProductSelectionMenu() {
+  if (!els.productSelectionMenu || !state.studioInitialized || state.productSelectionMenuResolved) return;
+  showProductSelectionMenu({ focusFirst: true });
+}
+
+function showProductSelectionMenu(options = {}) {
+  if (!els.productSelectionMenu) return;
+  renderProductSelectionAccess();
+  state.productSelectionMenuOpen = true;
+  els.productSelectionMenu.classList.remove('hidden');
+  els.productSelectionMenu.removeAttribute('hidden');
+  els.productSelectionMenu.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('product-selection-open');
+  els.appShell?.setAttribute('aria-hidden', 'true');
+  if (options.focusFirst) {
+    window.setTimeout(() => {
+      const firstCard = els.productSelectionCards.find((button) => !button.disabled);
+      firstCard?.focus({ preventScroll: true });
+    }, 40);
+  }
+}
+
+function hideProductSelectionMenu() {
+  if (!els.productSelectionMenu) return;
+  state.productSelectionMenuOpen = false;
+  els.productSelectionMenu.classList.add('hidden');
+  els.productSelectionMenu.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('product-selection-open');
+  els.appShell?.removeAttribute('aria-hidden');
 }
 
 function canAccessProduct(productType) {
@@ -897,7 +1124,9 @@ function canAccessProduct(productType) {
 function renderProductAccess() {
   els.productTabs.forEach((button) => {
     const productType = button.dataset.productType || 'led';
-    const locked = !canAccessProduct(productType);
+    const hypeVariant = button.dataset.hypeVariantTab;
+    const locked = !canAccessProduct(productType)
+      || (productType === 'hype' && hypeVariant && !canAccessHypeVariant(hypeVariant));
     button.setAttribute('aria-disabled', locked ? 'true' : 'false');
     button.classList.toggle('product-tab-locked', locked);
     const lock = button.querySelector('.product-lock');
@@ -933,7 +1162,9 @@ function selectProductType(productType, options = {}) {
   document.body.classList.toggle('product-plaque', next === 'plaque');
   if (els.plaqueVisualLayerTray && next !== 'plaque') els.plaqueVisualLayerTray.hidden = true;
   els.productTabs.forEach((button) => {
-    const active = button.dataset.productType === next;
+    const hypeVariant = button.dataset.hypeVariantTab;
+    const active = button.dataset.productType === next
+      && (!hypeVariant || (next === 'hype' && state.hype.variant === hypeVariant));
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', active ? 'true' : 'false');
   });
@@ -950,7 +1181,14 @@ function selectProductType(productType, options = {}) {
     updateProjectControls();
     initializeHypeChainPreview();
     if (!state.hype.logoDataUrl && !state.hypeDefaultProjectLoading) {
-      loadDefaultHypeChainProject();
+      const requestedHypeVariant = state.hype.variant === 'spinner' ? 'spinner' : 'classic';
+      loadDefaultHypeChainProject().then(() => {
+        if (requestedHypeVariant !== 'spinner' || state.hype.variant === 'spinner') return;
+        state.hype.variant = 'spinner';
+        applyHypeStateToControls();
+        renderPreviewTitle();
+        renderHypeChain();
+      });
     }
     renderHypeChain();
   } else if (next === 'led') {
@@ -1390,9 +1628,268 @@ function getMobilePlaceOrderDisabledReason() {
   return 'Finish required options';
 }
 
+function setupBugReport() {
+  els.helpMenuButton?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    toggleHelpMenu();
+  });
+  els.helpMenuPopover?.addEventListener('click', (event) => event.stopPropagation());
+  document.addEventListener('click', (event) => {
+    if (!els.helpMenu || els.helpMenu.contains(event.target)) return;
+    closeHelpMenu();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    if (isBugReportOpen()) {
+      closeBugReport();
+      return;
+    }
+    closeHelpMenu();
+  });
+  [els.reportBugButton, els.mobileReportBug].forEach((button) => {
+    button?.addEventListener('click', () => openBugReport());
+  });
+  els.bugReportClose?.addEventListener('click', closeBugReport);
+  els.bugReportCancel?.addEventListener('click', closeBugReport);
+  els.bugReportOverlay?.addEventListener('click', (event) => {
+    if (event.target === els.bugReportOverlay) closeBugReport();
+  });
+  els.bugReportForm?.addEventListener('submit', handleBugReportSubmit);
+}
+
+function toggleHelpMenu(forceOpen = null) {
+  if (!els.helpMenuPopover || !els.helpMenuButton) return;
+  const open = forceOpen === null ? els.helpMenuPopover.classList.contains('hidden') : Boolean(forceOpen);
+  els.helpMenuPopover.classList.toggle('hidden', !open);
+  els.helpMenuButton.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function closeHelpMenu() {
+  toggleHelpMenu(false);
+}
+
+function isBugReportOpen() {
+  return Boolean(els.bugReportOverlay && !els.bugReportOverlay.classList.contains('hidden'));
+}
+
+function openBugReport() {
+  closeHelpMenu();
+  closeOnboarding();
+  closeMobileControlSheet();
+  if (!els.bugReportOverlay || !els.bugReportForm) return;
+  els.bugReportOverlay.classList.remove('hidden');
+  els.bugReportOverlay.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('bug-report-open');
+  if (els.bugReportEmail) els.bugReportEmail.value = state.customerEmail || '';
+  if (els.bugReportMessage) els.bugReportMessage.value = '';
+  if (els.bugReportIncludeScreenshot) els.bugReportIncludeScreenshot.checked = true;
+  renderBugReportContext();
+  setBugReportStatus('');
+  window.setTimeout(() => els.bugReportMessage?.focus({ preventScroll: true }), 0);
+}
+
+function closeBugReport() {
+  if (state.bugReportInProgress) return;
+  els.bugReportOverlay?.classList.add('hidden');
+  els.bugReportOverlay?.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('bug-report-open');
+}
+
+function renderBugReportContext() {
+  if (!els.bugReportContext) return;
+  els.bugReportContext.textContent = getBugReportContextLines().join('\n');
+}
+
+async function handleBugReportSubmit(event) {
+  event.preventDefault();
+  if (!els.bugReportForm || state.bugReportInProgress) return;
+  const message = String(els.bugReportMessage?.value || '').trim();
+  const email = normalizeEmail(els.bugReportEmail?.value || state.customerEmail);
+  if (!message) {
+    setBugReportStatus('Tell us what went wrong first.', 'error');
+    els.bugReportMessage?.focus();
+    return;
+  }
+  if (email && !isValidEmail(email)) {
+    setBugReportStatus('Enter a valid email address, or leave it blank.', 'error');
+    els.bugReportEmail?.focus();
+    return;
+  }
+
+  state.bugReportInProgress = true;
+  setBugReportBusy(true);
+  setBugReportStatus('Sending bug report...');
+
+  const payload = makeBugReportPayload({ message, email });
+  const screenshot = els.bugReportIncludeScreenshot?.checked
+    ? await captureBugReportScreenshotSafely()
+    : null;
+
+  try {
+    const endpoint = getBugReportEndpoint();
+    if (!endpoint) throw new Error('Bug report endpoint is unavailable.');
+    await submitBugReportToEndpoint(endpoint, payload, screenshot);
+    setBugReportStatus('Bug report sent. Thank you for catching it.', 'success');
+    setStatus('Bug reported');
+    window.setTimeout(() => {
+      state.bugReportInProgress = false;
+      setBugReportBusy(false);
+      closeBugReport();
+    }, 1200);
+    return;
+  } catch (error) {
+    console.warn('Could not submit bug report automatically; opening email draft.', error);
+    openBugReportMailDraft(payload, screenshot);
+    setBugReportStatus('Automatic bug reporting is unavailable here, so a prefilled email draft was opened instead.', 'success');
+    setStatus('Bug draft');
+  } finally {
+    state.bugReportInProgress = false;
+    setBugReportBusy(false);
+  }
+}
+
+function setBugReportBusy(busy) {
+  if (els.bugReportSubmit) {
+    els.bugReportSubmit.disabled = busy;
+    els.bugReportSubmit.textContent = busy ? 'Sending...' : 'Send report';
+  }
+  if (els.bugReportCancel) els.bugReportCancel.disabled = busy;
+  if (els.bugReportClose) els.bugReportClose.disabled = busy;
+  if (els.bugReportMessage) els.bugReportMessage.disabled = busy;
+  if (els.bugReportEmail) els.bugReportEmail.disabled = busy;
+  if (els.bugReportIncludeScreenshot) els.bugReportIncludeScreenshot.disabled = busy;
+}
+
+function setBugReportStatus(text, type = '') {
+  if (!els.bugReportStatus) return;
+  els.bugReportStatus.textContent = text;
+  els.bugReportStatus.classList.toggle('is-error', type === 'error');
+  els.bugReportStatus.classList.toggle('is-success', type === 'success');
+}
+
+function makeBugReportPayload({ message, email }) {
+  const contextLines = getBugReportContextLines(email);
+  return {
+    subject: `${BUG_REPORT_SUBJECT} - ${getBugReportProductLabel()}`,
+    message,
+    email,
+    contextLines,
+    contextText: contextLines.join('\n'),
+  };
+}
+
+function getBugReportProductLabel() {
+  if (state.productType === 'hype') {
+    return state.hype.variant === 'spinner' ? 'Spinner Hype Chain' : 'Classic Hype Chain';
+  }
+  if (state.productType === 'plaque') return '3D Plaque';
+  return 'LED Sign';
+}
+
+function getBugReportContextLines(email = state.customerEmail) {
+  const lines = [
+    `Product: ${getBugReportProductLabel()}`,
+    `Project type: ${currentProjectType()}`,
+    `Build: ${getDisplayedBuildNumber()}`,
+    `Design name: ${getDesignName() || 'Untitled'}`,
+    `Customer email: ${email || state.customerEmail || 'Not provided'}`,
+    `URL: ${window.location.href}`,
+    `Time: ${new Date().toISOString()}`,
+    `Browser: ${navigator.userAgent}`,
+    `Viewport: ${window.innerWidth} x ${window.innerHeight}`,
+    `Preview mode: ${state.previewMode}`,
+    `Illuminated: ${state.illuminated ? 'Yes' : 'No'}`,
+  ];
+  if (state.productType === 'hype') {
+    lines.push(
+      `Hype style: ${state.hype.variant === 'spinner' ? 'Spinner' : 'Classic'}`,
+      `Chain length: ${state.hype.chainLength || 'adult'}`,
+      `Pattern length: ${state.hype.patternLength || 2}`,
+    );
+  } else if (state.productType === 'plaque') {
+    lines.push(
+      `Size: ${SIZE_PRESETS[state.size]?.label || state.size}`,
+      `Usage: ${(USAGE_PRESETS[getPlaqueUsageKey()] || USAGE_PRESETS.indoor).label}`,
+      `Plaque colours: ${state.processed?.colours?.length || 0}`,
+    );
+  } else {
+    lines.push(
+      `Size: ${SIZE_PRESETS[state.size]?.label || state.size}`,
+      `Usage: ${(USAGE_PRESETS[state.usage] || USAGE_PRESETS.indoor).label}`,
+      `Detected colours: ${state.processed?.colours?.length || 0}`,
+    );
+  }
+  return lines;
+}
+
+function getDisplayedBuildNumber() {
+  return document.querySelector('.menu-build-version')?.textContent?.replace(/^Build\s+/i, '').trim() || 'unknown';
+}
+
+function getBugReportEndpoint() {
+  if (window.SIGN_GUY_BUG_REPORT_ENDPOINT) return window.SIGN_GUY_BUG_REPORT_ENDPOINT;
+  if (!window.location.protocol.startsWith('http')) return '';
+  return new URL('/api/report-bug', window.location.href).href;
+}
+
+async function captureBugReportScreenshotSafely() {
+  try {
+    const blob = await captureVisualizerBlob();
+    return {
+      blob,
+      fileName: `${safeFileName(getDesignName() || getBugReportProductLabel())}-bug-screenshot.png`,
+    };
+  } catch (error) {
+    console.warn('Bug report screenshot unavailable.', error);
+    return null;
+  }
+}
+
+async function submitBugReportToEndpoint(endpoint, payload, screenshot) {
+  const form = new FormData();
+  form.append('subject', payload.subject);
+  form.append('message', payload.message);
+  form.append('context', payload.contextText);
+  form.append('customerEmail', payload.email || '');
+  form.append('product', getBugReportProductLabel());
+  form.append('build', getDisplayedBuildNumber());
+  form.append('url', window.location.href);
+  if (screenshot?.blob) {
+    form.append('screenshot', screenshot.blob, screenshot.fileName);
+  }
+  const response = await fetch(endpoint, { method: 'POST', body: form });
+  if (!response.ok) {
+    let detail = '';
+    try {
+      detail = await response.text();
+    } catch {
+      detail = '';
+    }
+    throw new Error(`Bug report endpoint returned ${response.status}${detail ? `: ${detail.slice(0, 160)}` : ''}`);
+  }
+}
+
+function openBugReportMailDraft(payload, screenshot) {
+  if (screenshot?.blob) downloadBlob(screenshot.blob, screenshot.fileName, 'image/png');
+  const body = [
+    'Bug report',
+    '',
+    payload.message,
+    '',
+    'Context',
+    payload.contextText,
+    '',
+    screenshot?.blob ? 'A screenshot was downloaded. Please attach it to this email before sending.' : 'No screenshot was captured.',
+  ].join('\n');
+  openMailDraft(payload.subject, body);
+}
+
 function setupOnboarding() {
   if (!els.onboardingOverlay) return;
-  els.showTipsButton?.addEventListener('click', () => openOnboarding({ manual: true }));
+  els.showTipsButton?.addEventListener('click', () => {
+    closeHelpMenu();
+    openOnboarding({ manual: true });
+  });
   els.onboardingDone?.addEventListener('click', dismissOnboarding);
   els.onboardingOverlay.addEventListener('click', (event) => {
     if (event.target === els.onboardingOverlay) dismissOnboarding();
@@ -3734,6 +4231,17 @@ function applySelectedColour(hex) {
     syncHypeDerivedColours();
     renderHypeColourControls();
     scheduleHypeRender(0);
+  } else if (state.selectedColourTarget.type === 'hypeSpinner') {
+    const spinner = typeof syncHypeSpinnerConfig === 'function'
+      ? syncHypeSpinnerConfig()
+      : { ...(state.hype.spinner || DEFAULT_HYPE_SPINNER_CONFIG) };
+    spinner[state.selectedColourTarget.part] = normalized;
+    state.hype.spinner = typeof normalizeHypeSpinnerConfig === 'function'
+      ? normalizeHypeSpinnerConfig(spinner)
+      : { ...spinner };
+    if (typeof applyHypeSpinnerStateToControls === 'function') applyHypeSpinnerStateToControls();
+    if (typeof renderHypeColourControls === 'function') renderHypeColourControls();
+    if (typeof scheduleHypeRender === 'function') scheduleHypeRender(0);
   } else if (state.selectedColourTarget.type === 'plaque') {
     const index = state.selectedColourTarget.index;
     const updatedLive = setPlaqueLayerColour(index, normalized);
@@ -3752,7 +4260,7 @@ function applySelectedColour(hex) {
     state.frontColoursCustomized = true;
   }
   updatePopoverInputs(normalized);
-  if (state.selectedColourTarget.type !== 'hype' && state.selectedColourTarget.type !== 'hypePendant' && state.selectedColourTarget.type !== 'plaque') schedulePreviewRender();
+  if (!['hype', 'hypePendant', 'hypeSpinner', 'plaque'].includes(state.selectedColourTarget.type)) schedulePreviewRender();
   if (state.wizardStep === 'details') renderDetailsStep();
   if (state.wizardStep === 'mapping') renderMappingStep();
   if (state.wizardStep === 'vector') renderVectorStep();
@@ -3784,9 +4292,10 @@ function applyIllumination() {
 }
 
 function getPreviewZoomLimits() {
-  return isMobilePreviewViewport()
+  const limits = isMobilePreviewViewport()
     ? { min: MOBILE_PREVIEW_ZOOM_MIN, max: MOBILE_PREVIEW_ZOOM_MAX }
     : { min: DESKTOP_PREVIEW_ZOOM_MIN, max: DESKTOP_PREVIEW_ZOOM_MAX };
+  return state.productType === 'hype' ? { ...limits, max: 5 } : limits;
 }
 
 function getDefaultProductPreviewZoom() {
@@ -3819,7 +4328,10 @@ function applyPreviewZoom(options = {}) {
   state.previewZoom = zoom;
   if (els.previewZoomReset) els.previewZoomReset.textContent = isMobilePreviewViewport() ? 'Reset View' : `${Math.round(zoom * 100)}%`;
   if (state.three?.camera) {
-    const cameraScale = state.productType === 'led' ? (getPreviewEnvironmentSettings().cameraScale || 1) : 1;
+    let cameraScale = state.productType === 'led' ? (getPreviewEnvironmentSettings().cameraScale || 1) : 1;
+    if (state.productType === 'plaque' && typeof getMobilePlaqueCameraDistanceScale === 'function') {
+      cameraScale *= getMobilePlaqueCameraDistanceScale();
+    }
     state.three.camera.position.z = (430 * cameraScale) / zoom;
     state.three.camera.lookAt(0, 0, 0);
     state.three.camera.updateProjectionMatrix();
@@ -6457,7 +6969,8 @@ function updateRangeFill(input) {
 function renderPreviewTitle() {
   if (state.productType === 'hype') {
     const hypeDesignName = state.designName.trim();
-    els.previewTitle.textContent = hypeDesignName && !/\b(led|lightbox)\b/i.test(hypeDesignName)
+    const generatedHypeName = /^(classic|spinner) hype chain$/i.test(hypeDesignName);
+    els.previewTitle.textContent = hypeDesignName && !generatedHypeName && !/\b(led|lightbox)\b/i.test(hypeDesignName)
       ? hypeDesignName
       : (state.hype.variant === 'spinner' ? 'Spinner Hype Chain' : 'Classic Hype Chain');
   } else if (state.productType === 'plaque') {
@@ -6727,6 +7240,10 @@ async function restoreSignGuyProject(project, options = {}) {
   validateSignGuyProject(project);
   const isExampleProject = options.isExampleProject === true;
   const isDefaultPreviewProject = options.asDefaultPreview === true;
+  if (!isExampleProject && !isDefaultPreviewProject) {
+    state.productSelectionMenuResolved = true;
+    hideProductSelectionMenu();
+  }
   if (project.type === 'SignGuy.HypeChainStudio') {
     restoreHypeChainProject(project, { isExampleProject });
     if (!isExampleProject) queueEmailMarketingSubscription(project.customerEmail);
@@ -7235,8 +7752,19 @@ function redirectToShopifyCheckout(project, uploadResult = {}) {
   setShopifyOrderField(params, 'Design name', project.name || getDesignName());
 
   if (project.type === 'SignGuy.HypeChainStudio') {
+    const spinner = state.hype.variant === 'spinner' && typeof syncHypeSpinnerConfig === 'function'
+      ? syncHypeSpinnerConfig()
+      : null;
     setShopifyOrderField(params, 'Product', 'Hype Chain');
     setShopifyOrderField(params, 'Style', state.hype.variant === 'spinner' ? 'Spinner' : 'Classic');
+    if (spinner) {
+      setShopifyOrderField(params, 'Spinner top text', spinner.topText);
+      setShopifyOrderField(params, 'Spinner bottom text', spinner.bottomText);
+      setShopifyOrderField(params, 'Spinner ring font', spinner.fontFamily);
+      setShopifyOrderField(params, 'Spinner ring colour', spinner.ringColor);
+      setShopifyOrderField(params, 'Spinner text colour', spinner.textColor);
+      setShopifyOrderField(params, 'Spinner base colour', spinner.baseColor);
+    }
     setShopifyOrderField(params, 'Pattern length', `${getHypePatternLength()} link${getHypePatternLength() === 1 ? '' : 's'}`);
     setShopifyOrderField(params, 'Primary chain colour', normalizeHex(state.hype.primary));
     if (getHypePatternLength() >= 2) setShopifyOrderField(params, 'Secondary chain colour', normalizeHex(state.hype.secondary));
@@ -7438,6 +7966,7 @@ function getProjectLogQuery() {
   return {
     email: normalizeEmail(state.customerEmail),
     projectType: currentProjectType(),
+    hypeVariant: state.productType === 'hype' ? (state.hype.variant === 'spinner' ? 'spinner' : 'classic') : '',
   };
 }
 
@@ -7453,11 +7982,11 @@ function getProjectCustomerTypeSavedAtRange(query = getProjectLogQuery()) {
 async function getProjectRecordCount(query = getProjectLogQuery()) {
   const db = await openProjectDb();
   const tx = db.transaction(PROJECT_STORE_NAME, 'readonly');
-  const count = await requestResult(
-    tx.objectStore(PROJECT_STORE_NAME)
-      .index(PROJECT_CUSTOMER_TYPE_INDEX)
-      .count(IDBKeyRange.only(getProjectCustomerTypeKey(query))),
-  );
+  const index = tx.objectStore(PROJECT_STORE_NAME).index(PROJECT_CUSTOMER_TYPE_INDEX);
+  const range = IDBKeyRange.only(getProjectCustomerTypeKey(query));
+  const count = query.hypeVariant
+    ? await requestCursorCount(index, range, (project) => projectMatchesProjectLogQuery(project, query))
+    : await requestResult(index.count(range));
   await transactionDone(tx);
   return count;
 }
@@ -7470,13 +7999,14 @@ async function getProjectRecords(options = {}) {
     tx.objectStore(PROJECT_STORE_NAME).index(PROJECT_CUSTOMER_TYPE_SAVED_AT_INDEX),
     getProjectCustomerTypeSavedAtRange(query),
     PROJECT_LOG_LIMIT,
+    query.hypeVariant ? (project) => projectMatchesProjectLogQuery(project, query) : null,
   );
   await transactionDone(tx);
   return records
     .map((project) => (options.includePreviews ? project : summarizeProjectRecord(project)));
 }
 
-function requestCursorRecords(index, range, limit = PROJECT_LOG_LIMIT) {
+function requestCursorRecords(index, range, limit = PROJECT_LOG_LIMIT, predicate = null) {
   return new Promise((resolve, reject) => {
     const records = [];
     const request = index.openCursor(range, 'prev');
@@ -7486,7 +8016,7 @@ function requestCursorRecords(index, range, limit = PROJECT_LOG_LIMIT) {
         resolve(records);
         return;
       }
-      records.push(cursor.value);
+      if (!predicate || predicate(cursor.value)) records.push(cursor.value);
       if (records.length >= limit) {
         resolve(records);
         return;
@@ -7495,6 +8025,40 @@ function requestCursorRecords(index, range, limit = PROJECT_LOG_LIMIT) {
     };
     request.onerror = () => reject(request.error || new Error('Database cursor failed.'));
   });
+}
+
+function requestCursorCount(index, range, predicate = null) {
+  return new Promise((resolve, reject) => {
+    let count = 0;
+    const request = index.openCursor(range, 'prev');
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        resolve(count);
+        return;
+      }
+      if (!predicate || predicate(cursor.value)) count += 1;
+      cursor.continue();
+    };
+    request.onerror = () => reject(request.error || new Error('Database cursor failed.'));
+  });
+}
+
+function projectMatchesProjectLogQuery(project, query = getProjectLogQuery()) {
+  if (!project) return false;
+  if (normalizeEmail(project.customerEmail) !== normalizeEmail(query.email)) return false;
+  if (project.type !== (query.projectType || currentProjectType())) return false;
+  if (query.hypeVariant) return getProjectHypeVariant(project) === query.hypeVariant;
+  return true;
+}
+
+function getProjectHypeVariant(project) {
+  if (project?.type !== 'SignGuy.HypeChainStudio') return '';
+  const explicitVariant = String(project.config?.hype?.variant || '').toLowerCase();
+  if (explicitVariant === 'spinner' || explicitVariant === 'classic') return explicitVariant;
+  const style = String(project.preview?.details?.style || project.name || '').toLowerCase();
+  if (style.includes('spinner')) return 'spinner';
+  return 'classic';
 }
 
 function summarizeProjectRecord(project) {
@@ -7545,10 +8109,9 @@ async function pruneProjectRecords() {
   const tx = db.transaction(PROJECT_STORE_NAME, 'readwrite');
   const store = tx.objectStore(PROJECT_STORE_NAME);
   const records = await requestResult(store.getAll());
-  const email = normalizeEmail(state.customerEmail);
-  const projectType = currentProjectType();
+  const query = getProjectLogQuery();
   records
-    .filter((project) => normalizeEmail(project.customerEmail) === email && project.type === projectType)
+    .filter((project) => projectMatchesProjectLogQuery(project, query))
     .sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedAt || '')))
     .slice(PROJECT_LOG_LIMIT)
     .forEach((project) => store.delete(project.id));
@@ -8248,6 +8811,7 @@ function hideAppLoading() {
   document.body.classList.remove('studio-loading');
   if (els.appLoading) els.appLoading.classList.add('hidden');
   resetMobileViewportAfterGate();
+  maybeShowInitialProductSelectionMenu();
 }
 
 function showLoadingStart() {

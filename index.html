@@ -6,7 +6,7 @@
     <title>MySignGuy.ca Sign Studio</title>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23151515'/%3E%3Cpath d='M7 21.5h18v3H7zM9.5 7.5h13v11h-13z' fill='%23ffc529'/%3E%3Cpath d='M12 10h8v6h-8z' fill='%23151515'/%3E%3C/svg%3E" />
-    <link rel="stylesheet" href="./styles.css?v=20260528-02" />
+    <link rel="stylesheet" href="./styles.css?v=20260605-04" />
   </head>
   <body class="studio-loading">
     <main class="app-shell">
@@ -140,14 +140,108 @@
               </div>
               <div class="segmented hype-variant-tabs" role="radiogroup" aria-label="Hype Chain style">
                 <button class="seg active" type="button" data-hype-variant="classic">Classic</button>
-                <button class="seg" type="button" data-hype-variant="spinner">
-                  <span class="spinner-lock" aria-hidden="true">🔒</span>
-                  <span>Spinner</span>
-                </button>
-                <span class="spinner-tooltip" id="spinnerLockTooltip" role="tooltip">Coming Soon</span>
+                <button class="seg" type="button" data-hype-variant="spinner">Spinner</button>
               </div>
             </div>
           </div>
+          <section class="hype-spinner-section hidden" id="hypeSpinnerSection" aria-label="Spinner Ring controls">
+            <div class="section-heading">
+              <h2>Spinner Ring</h2>
+              <output class="setting-pill" id="hypeSpinnerStatus">Ready to spin</output>
+            </div>
+            <div class="hype-spinner-grid">
+              <label class="hype-field hype-spinner-text-field">Top Text <input id="hypeSpinnerTopText" type="text" maxlength="18" value="PLAYER OF" /></label>
+              <label class="hype-field hype-spinner-text-field">Bottom Text <input id="hypeSpinnerBottomText" type="text" maxlength="18" value="THE GAME" /></label>
+              <div class="spinner-font-colour-row">
+                <div class="hype-field hype-spinner-font-field spinner-font-control">
+                  <span>Font</span>
+                  <select class="hidden" id="hypeSpinnerFontFamily" aria-hidden="true" tabindex="-1">
+                    <option>Adidas Half Block 2016</option>
+                    <option>Bebas Neue Bold</option>
+                    <option>Big Noodle Titling</option>
+                    <option>Bulletproof BB</option>
+                    <option>Bungee</option>
+                    <option>Cocogoose</option>
+                    <option>DIN Pro Black</option>
+                    <option>DIN Pro Cond Black</option>
+                    <option>Futura LT ExtraBold</option>
+                    <option>Limerick-Serial-Heavy</option>
+                    <option>Market Pro</option>
+                    <option>Modica Black</option>
+                    <option>Molot</option>
+                    <option>Montserrat Alternates Black</option>
+                    <option>Montserrat Black</option>
+                    <option>Norwester</option>
+                    <option>Poppins Black</option>
+                    <option>Raleway Black</option>
+                    <option>Roboto Black</option>
+                    <option>SF Pro Display Black</option>
+                    <option>Soccer League</option>
+                    <option>Source Serif Pro Black</option>
+                    <option>Spartan MB Black</option>
+                    <option>Stop MN</option>
+                    <option>Sullivan Fill</option>
+                  </select>
+                  <button class="hype-spinner-font-button" id="hypeSpinnerFontButton" type="button" aria-haspopup="listbox" aria-expanded="false">
+                    <span id="hypeSpinnerFontButtonText" style="font-family:'Bebas Neue Bold', Impact, sans-serif;">Bebas Neue Bold</span>
+                  </button>
+                  <div class="hype-spinner-font-menu hidden" id="hypeSpinnerFontMenu" role="listbox" aria-label="Spinner ring font">
+                    <button type="button" role="option" data-hype-spinner-font="Adidas Half Block 2016" style="font-family:'Adidas Half Block 2016', Impact, sans-serif;">Adidas Half Block 2016</button>
+                    <button type="button" role="option" data-hype-spinner-font="Bebas Neue Bold" style="font-family:'Bebas Neue Bold', Impact, sans-serif;">Bebas Neue Bold</button>
+                    <button type="button" role="option" data-hype-spinner-font="Big Noodle Titling" style="font-family:'Big Noodle Titling', Impact, sans-serif;">Big Noodle Titling</button>
+                    <button type="button" role="option" data-hype-spinner-font="Bulletproof BB" style="font-family:'Bulletproof BB', Impact, sans-serif;">Bulletproof BB</button>
+                    <button type="button" role="option" data-hype-spinner-font="Bungee" style="font-family:'Bungee', Impact, sans-serif;">Bungee</button>
+                    <button type="button" role="option" data-hype-spinner-font="Cocogoose" style="font-family:'Cocogoose', Impact, sans-serif;">Cocogoose</button>
+                    <button type="button" role="option" data-hype-spinner-font="DIN Pro Black" style="font-family:'DIN Pro Black', Impact, sans-serif;">DIN Pro Black</button>
+                    <button type="button" role="option" data-hype-spinner-font="DIN Pro Cond Black" style="font-family:'DIN Pro Cond Black', Impact, sans-serif;">DIN Pro Cond Black</button>
+                    <button type="button" role="option" data-hype-spinner-font="Futura LT ExtraBold" style="font-family:'Futura LT ExtraBold', Impact, sans-serif;">Futura LT ExtraBold</button>
+                    <button type="button" role="option" data-hype-spinner-font="Limerick-Serial-Heavy" style="font-family:'Limerick-Serial-Heavy', Impact, sans-serif;">Limerick-Serial-Heavy</button>
+                    <button type="button" role="option" data-hype-spinner-font="Market Pro" style="font-family:'Market Pro', 'Marker Felt', cursive;">Market Pro</button>
+                    <button type="button" role="option" data-hype-spinner-font="Modica Black" style="font-family:'Modica Black', Impact, sans-serif;">Modica Black</button>
+                    <button type="button" role="option" data-hype-spinner-font="Molot" style="font-family:'Molot', Impact, sans-serif;">Molot</button>
+                    <button type="button" role="option" data-hype-spinner-font="Montserrat Alternates Black" style="font-family:'Montserrat Alternates Black', Impact, sans-serif;">Montserrat Alternates Black</button>
+                    <button type="button" role="option" data-hype-spinner-font="Montserrat Black" style="font-family:'Montserrat Black', Impact, sans-serif;">Montserrat Black</button>
+                    <button type="button" role="option" data-hype-spinner-font="Norwester" style="font-family:'Norwester', Impact, sans-serif;">Norwester</button>
+                    <button type="button" role="option" data-hype-spinner-font="Poppins Black" style="font-family:'Poppins Black', Impact, sans-serif;">Poppins Black</button>
+                    <button type="button" role="option" data-hype-spinner-font="Raleway Black" style="font-family:'Raleway Black', Impact, sans-serif;">Raleway Black</button>
+                    <button type="button" role="option" data-hype-spinner-font="Roboto Black" style="font-family:'Roboto Black', Impact, sans-serif;">Roboto Black</button>
+                    <button type="button" role="option" data-hype-spinner-font="SF Pro Display Black" style="font-family:'SF Pro Display Black', Impact, sans-serif;">SF Pro Display Black</button>
+                    <button type="button" role="option" data-hype-spinner-font="Soccer League" style="font-family:'Soccer League', Impact, sans-serif;">Soccer League</button>
+                    <button type="button" role="option" data-hype-spinner-font="Source Serif Pro Black" style="font-family:'Source Serif Pro Black', Georgia, serif;">Source Serif Pro Black</button>
+                    <button type="button" role="option" data-hype-spinner-font="Spartan MB Black" style="font-family:'Spartan MB Black', Impact, sans-serif;">Spartan MB Black</button>
+                    <button type="button" role="option" data-hype-spinner-font="Stop MN" style="font-family:'Stop MN', Impact, sans-serif;">Stop MN</button>
+                    <button type="button" role="option" data-hype-spinner-font="Sullivan Fill" style="font-family:'Sullivan Fill', Impact, sans-serif;">Sullivan Fill</button>
+                  </div>
+                </div>
+                <div class="hype-spinner-colour-row">
+                  <div class="compact-colour-control spinner-compact-colour-control">
+                    <span>Ring</span>
+                    <button class="hype-colour-chip hype-spinner-colour-chip" type="button" data-hype-spinner-colour="ringColor" aria-label="Ring colour #FFD700">
+                      <i style="background:#FFD700"></i>
+                    </button>
+                    <input id="hypeSpinnerRingColor" type="hidden" value="#FFD700" />
+                  </div>
+                  <div class="compact-colour-control spinner-compact-colour-control">
+                    <span>Text</span>
+                    <button class="hype-colour-chip hype-spinner-colour-chip" type="button" data-hype-spinner-colour="textColor" aria-label="Text colour #000000">
+                      <i style="background:#000000"></i>
+                    </button>
+                    <input id="hypeSpinnerTextColor" type="hidden" value="#000000" />
+                  </div>
+                  <div class="compact-colour-control spinner-compact-colour-control">
+                    <span>Base</span>
+                    <button class="hype-colour-chip hype-spinner-colour-chip" type="button" data-hype-spinner-colour="baseColor" aria-label="Base colour #111111">
+                      <i style="background:#111111"></i>
+                    </button>
+                    <input id="hypeSpinnerBaseColor" type="hidden" value="#111111" />
+                  </div>
+                </div>
+              </div>
+              <label class="hype-field hype-spinner-range-field hidden" hidden>Ring Diameter <input id="hypeSpinnerRingDiameter" type="range" min="120" max="190" step="1" value="150" /></label>
+              <label class="hype-field hype-spinner-range-field hidden" hidden>Ring Thickness <input id="hypeSpinnerRingThickness" type="range" min="8" max="24" step="1" value="14" /></label>
+              <label class="hype-field hype-spinner-range-field hidden" hidden>Ring Clearance <input id="hypeSpinnerRingClearance" type="range" min="0.6" max="3" step="0.1" value="1.2" /></label>
+            </div>
+          </section>
           <div class="mobile-control-section-heading mobile-hype-colour-heading">
             <h3>Colours</h3>
             <p>Pick chain link and pendant colours.</p>
@@ -275,7 +369,7 @@
           <p id="projectNote"></p>
         </section>
         <button class="secondary-button back-to-visualizer-button" id="backToVisualizer" type="button">Back to Visualizer</button>
-        <p class="menu-build-version">Build 2.220</p>
+        <p class="menu-build-version">Build 3.0</p>
       </aside>
 
       <section class="preview-panel" aria-label="3D lightbox preview">
@@ -295,14 +389,21 @@
               </div>
               <nav class="visualizer-product-switcher" aria-label="Visualizer product type">
                 <button class="product-tab visualizer-product-tab active" type="button" data-product-type="led" aria-pressed="true">LED Sign</button>
-                <button class="product-tab visualizer-product-tab" type="button" data-product-type="hype" aria-disabled="false">Hype Chain</button>
+                <button class="product-tab visualizer-product-tab" type="button" data-product-type="hype" data-hype-variant-tab="classic" aria-disabled="false">Classic Hype Chain</button>
+                <button class="product-tab visualizer-product-tab" type="button" data-product-type="hype" data-hype-variant-tab="spinner" aria-disabled="false">Spinner Hype Chain</button>
                 <button class="product-tab visualizer-product-tab" type="button" data-product-type="plaque" aria-disabled="false">3D Plaque</button>
               </nav>
             </div>
             <div class="preview-stats">
               <span id="sessionEmailStat">No email</span>
               <span id="dimensionStat">Large 13&quot; - Indoor</span>
-              <button class="tips-button" id="showTipsButton" type="button">Show tips</button>
+              <div class="help-menu" id="helpMenu">
+                <button class="tips-button help-menu-button" id="helpMenuButton" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="helpMenuPopover">Help</button>
+                <div class="help-menu-popover hidden" id="helpMenuPopover" role="menu" aria-label="Help menu">
+                  <button id="showTipsButton" type="button" role="menuitem">Show tips</button>
+                  <button id="reportBugButton" type="button" role="menuitem">Report a bug</button>
+                </div>
+              </div>
               <button class="admin-login-button" id="adminLoginButton" type="button">Login</button>
             </div>
             <div class="preview-mode-controls" role="group" aria-label="Preview view mode">
@@ -356,6 +457,14 @@
           </div>
           <div class="hype-preview hidden" id="hypePreview" aria-label="Hype Chain preview">
             <div class="hype-preview-loading" id="hypePreviewLoading">Preparing Hype Chain preview</div>
+            <button class="hype-spinner-spin-button hidden" id="hypeSpinnerSpinPreviewToggle" type="button" aria-label="Spin" title="Spin">
+              <span class="hype-spinner-spin-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8"></path>
+                </svg>
+              </span>
+              <span class="hype-spinner-spin-label">Spin</span>
+            </button>
             <div class="hype-chain-render" id="hypeChainRender">
               <div class="hype-chain-oval" id="hypeChainOval"></div>
               <div class="hype-connector" id="hypeConnectorPreview"><span></span></div>
@@ -423,6 +532,13 @@
           <path d="M8 17h8"></path>
         </svg>
       </button>
+      <button class="mobile-command-button mobile-command-icon-button" id="mobileReportBug" type="button" aria-label="Report a bug">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 9v5"></path>
+          <path d="M12 17h.01"></path>
+          <path d="M10.3 4.2 2.8 17.6A2 2 0 0 0 4.5 20h15a2 2 0 0 0 1.7-2.4L13.7 4.2a2 2 0 0 0-3.4 0Z"></path>
+        </svg>
+      </button>
       <button class="mobile-command-button" id="mobileCustomize" type="button" aria-controls="mobileControlSheet" aria-expanded="false">Customize</button>
     </nav>
     <div class="admin-gate hidden" id="adminGate" role="dialog" aria-modal="true" aria-labelledby="adminGateTitle">
@@ -437,6 +553,39 @@
         <div class="admin-gate-actions">
           <button class="secondary-button" id="adminCancel" type="button">Cancel</button>
           <button class="primary-button" type="submit">Login</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="bug-report-overlay hidden" id="bugReportOverlay" aria-hidden="true">
+      <form class="bug-report-card" id="bugReportForm" role="dialog" aria-modal="true" aria-labelledby="bugReportTitle" novalidate>
+        <header class="bug-report-header">
+          <div>
+            <p class="eyebrow">Help</p>
+            <h2 id="bugReportTitle">Report a bug</h2>
+          </div>
+          <button class="icon-button" id="bugReportClose" type="button" aria-label="Close bug report">x</button>
+        </header>
+        <label class="email-gate-field">
+          <span>Email address</span>
+          <input id="bugReportEmail" type="email" name="bugReportEmail" autocomplete="email" placeholder="you@example.com" />
+        </label>
+        <label class="bug-report-field">
+          <span>What went wrong?</span>
+          <textarea id="bugReportMessage" name="bugReportMessage" rows="5" placeholder="Tell us what happened and what you expected instead." required></textarea>
+        </label>
+        <label class="bug-report-check">
+          <input id="bugReportIncludeScreenshot" type="checkbox" checked />
+          <span>Include a current visualizer screenshot when possible</span>
+        </label>
+        <div class="bug-report-context">
+          <span>Attached context</span>
+          <pre id="bugReportContext"></pre>
+        </div>
+        <p class="bug-report-status" id="bugReportStatus" role="status"></p>
+        <div class="bug-report-actions">
+          <button class="secondary-button" id="bugReportCancel" type="button">Cancel</button>
+          <button class="primary-button" id="bugReportSubmit" type="submit">Send report</button>
         </div>
       </form>
     </div>
@@ -501,6 +650,69 @@
       </div>
     </div>
 
+    <section class="product-selection-menu hidden" id="productSelectionMenu" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="productSelectionTitle" aria-describedby="productSelectionSubtitle">
+      <div class="product-selection-backdrop" aria-hidden="true"></div>
+      <div class="product-selection-inner">
+        <img class="product-selection-mascot" src="./assets/sign-guy-head-loading.png" alt="" width="108" height="108" decoding="async" />
+        <div class="product-selection-copy">
+          <h2 id="productSelectionTitle">
+            <span class="product-selection-title-intro">Welcome to</span>
+            <span class="product-selection-title-main">Sign Studio</span>
+          </h2>
+          <p class="product-selection-subheadline" id="productSelectionSubtitle">Choose your product below.</p>
+          <p class="product-selection-support">Custom LED signs, hype chains, and 3D plaques made&nbsp;for&nbsp;you.</p>
+        </div>
+        <div class="product-selection-grid" role="group" aria-label="Choose a product to customize">
+          <button class="product-selection-card" type="button" data-product-selection="led" aria-label="Customize LED Sign">
+            <span class="product-selection-art product-selection-art-led" aria-hidden="true">
+              <img class="product-selection-image" src="./assets/product-menu/led-lightbox-menu.png?v=20260604-02" alt="" width="1024" height="1024" loading="eager" decoding="async" />
+            </span>
+            <span class="product-selection-card-copy">
+              <strong>LED Sign</strong>
+              <span>Bright. Bold. Built to stand out.</span>
+            </span>
+            <span class="product-selection-chevron" aria-hidden="true"></span>
+          </button>
+          <button class="product-selection-card" type="button" data-product-selection="classic-hype" aria-label="Customize Classic Hype Chain">
+            <span class="product-selection-art product-selection-art-chain product-selection-art-classic" aria-hidden="true">
+              <img class="product-selection-image" src="./assets/product-menu/classic-hype-chain-menu.png?v=20260604-02" alt="" width="1024" height="1024" loading="lazy" decoding="async" />
+            </span>
+            <span class="product-selection-card-copy">
+              <strong>Classic Hype Chain</strong>
+              <span>Timeless style that never fades.</span>
+            </span>
+            <span class="product-selection-chevron" aria-hidden="true"></span>
+          </button>
+          <button class="product-selection-card" type="button" data-product-selection="spinner-hype" aria-label="Customize Spinner Hype Chain">
+            <span class="product-selection-art product-selection-art-chain product-selection-art-spinner" aria-hidden="true">
+              <img class="product-selection-image" src="./assets/product-menu/spinner-hype-chain-menu.gif" alt="" width="606" height="546" loading="lazy" decoding="async" />
+            </span>
+            <span class="product-selection-card-copy">
+              <strong>Spinner Hype Chain</strong>
+              <span>Spin it. Flex it. Make it your own.</span>
+            </span>
+            <span class="product-selection-lock" data-product-selection-lock hidden>Coming soon</span>
+            <span class="product-selection-chevron" aria-hidden="true"></span>
+          </button>
+          <button class="product-selection-card" type="button" data-product-selection="plaque" aria-label="Customize 3D Plaque">
+            <span class="product-selection-art product-selection-art-plaque" aria-hidden="true">
+              <img class="product-selection-image" src="./assets/product-menu/3d-plaque-menu.png?v=20260604-02" alt="" width="1024" height="1024" loading="lazy" decoding="async" />
+            </span>
+            <span class="product-selection-card-copy">
+              <strong>3D Plaque</strong>
+              <span>Raised, refined, and made to last.</span>
+            </span>
+            <span class="product-selection-chevron" aria-hidden="true"></span>
+          </button>
+        </div>
+        <p class="product-selection-helper">
+          <span aria-hidden="true">?</span>
+          <span>Not sure which one to choose?</span>
+          <a href="https://mysignguy.ca/pages/compare-products">Need help deciding? Compare products →</a>
+        </p>
+      </div>
+    </section>
+
     <div class="app-loading" id="appLoading" role="dialog" aria-modal="true" aria-labelledby="loadingTitle">
       <div class="app-loading-card" id="appLoadingCard">
         <img class="loading-logo" src="./assets/sign-guy-head-loading.png" alt="" aria-hidden="true" width="100" height="100" decoding="async" fetchpriority="high" />
@@ -518,11 +730,11 @@
     </div>
 
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script defer src="./assets/core/three-runtime.js?v=20260529-02"></script>
+    <script defer src="./assets/core/three-runtime.js?v=20260605-02"></script>
     <script defer src="./assets/led/led-product.js?v=20260529-01"></script>
-    <script defer src="./assets/hype-chain/hype-chain-product.js?v=20260529-01"></script>
-    <script defer src="./assets/plaque/plaque-product.js?v=20260601-10"></script>
-    <script defer src="./app.js?v=20260601-06"></script>
+    <script defer src="./assets/hype-chain/hype-chain-product.js?v=20260605-02"></script>
+    <script defer src="./assets/plaque/plaque-product.js?v=20260605-02"></script>
+    <script defer src="./app.js?v=20260605-03"></script>
     <script defer src="./submit-fix.js?v=20260510-22"></script>
     <script defer src="./used-colours.js?v=20260513-09"></script>
   </body>
