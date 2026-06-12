@@ -558,7 +558,10 @@ async function loadHypeSpinnerStlGeometries() {
   if (state.hypeThree.spinnerStlLoadPromise) return state.hypeThree.spinnerStlLoadPromise;
   els.hypePreview?.classList.add('loading');
   state.hypeThree.spinnerStlLoadPromise = Promise.all([
-    loadBundledHypeSpinnerBaseGeometryCache().then((cachedBase) => cachedBase || fetchStlGeometry(HYPE_SPINNER_STL_ASSETS.base, 'spinnerBase')),
+    loadBundledHypeSpinnerBaseGeometryCache().then((cachedBase) => {
+      if (!cachedBase) throw new Error('Spinner base geometry cache is unavailable.');
+      return cachedBase;
+    }),
     fetchStlGeometry(HYPE_SPINNER_STL_ASSETS.outerRing, 'spinnerOuterRing'),
     fetchStlGeometry(HYPE_SPINNER_STL_ASSETS.connector, 'spinnerConnector'),
   ]).then(([base, outerRing, connector]) => {
@@ -720,18 +723,6 @@ function decodeHypeBundledTypedArray(type, base64) {
 
 async function loadEmbeddedHypeStl(embeddedKey) {
   if (!embeddedKey) return '';
-  if (embeddedKey === 'spinnerBase') {
-    if (!window.SIGN_GUY_HYPE_SPINNER_BASE_STL_EMBEDDED) {
-      try {
-        await loadScriptOnce(HYPE_SPINNER_BASE_STL_EMBEDDED_SCRIPT_SRC);
-      } catch (error) {
-        console.warn('Could not load embedded Spinner base STL fallback.', error);
-      }
-    }
-    if (window.SIGN_GUY_HYPE_SPINNER_BASE_STL_EMBEDDED) {
-      return window.SIGN_GUY_HYPE_SPINNER_BASE_STL_EMBEDDED;
-    }
-  }
   if (embeddedKey === 'spinnerOuterRing') {
     if (!window.SIGN_GUY_HYPE_SPINNER_OUTER_RING_STL_EMBEDDED) {
       try {

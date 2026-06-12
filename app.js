@@ -60,7 +60,6 @@ const HYPE_CHAIN_STL_ASSETS = {
   hook: './assets/hype-chain/Pendant%20Hook.stl?v=20260513-02',
 };
 const HYPE_SPINNER_STL_ASSETS = {
-  base: './assets/hype-chain/spinner/spinner-base.stl?v=20260602-01',
   outerRing: './assets/hype-chain/spinner/outer-ring-sign-guy.stl?v=20260603-01',
   connector: './assets/hype-chain/spinner/two-prong-chain-link-attachment.stl?v=20260602-01',
 };
@@ -72,7 +71,6 @@ const DEFAULT_PLAQUE_PROCESSED_CACHE_SCRIPT_SRC = './assets/plaque/default-3d-pl
 const HYPE_CHAIN_GEOMETRY_CACHE_SCRIPT_SRC = './assets/hype-chain/hype-chain-geometry-cache.js?v=20260527-01';
 const HYPE_CHAIN_STL_EMBEDDED_SCRIPT_SRC = './assets/hype-chain/hype-chain-stl-embedded.js?v=20260527-01';
 const HYPE_SPINNER_BASE_GEOMETRY_CACHE_SCRIPT_SRC = './assets/hype-chain/spinner/spinner-base-geometry-cache.js?v=20260605-01';
-const HYPE_SPINNER_BASE_STL_EMBEDDED_SCRIPT_SRC = './assets/hype-chain/spinner/spinner-base-embedded.js?v=20260602-01';
 const HYPE_SPINNER_OUTER_RING_STL_EMBEDDED_SCRIPT_SRC = './assets/hype-chain/spinner/outer-ring-sign-guy-embedded.js?v=20260603-01';
 const HYPE_SPINNER_CONNECTOR_STL_EMBEDDED_SCRIPT_SRC = './assets/hype-chain/spinner/two-prong-chain-link-attachment-embedded.js?v=20260602-01';
 const SVG_LOADER_SCRIPT_SRC = './assets/vendor/SVGLoader.js?v=20260518-01';
