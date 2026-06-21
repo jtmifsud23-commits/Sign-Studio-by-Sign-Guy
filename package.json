@@ -2,15 +2,21 @@
   "name": "sign-studio-by-sign-guy",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "pnpm@11.5.3",
   "type": "module",
   "scripts": {
-    "build": "echo \"Static site ready\""
+    "build": "node scripts/build-blob-client.js",
+    "build:blob-client": "node scripts/build-blob-client.js"
   },
   "dependencies": {
+    "@vercel/blob": "^2.4.1",
     "formidable": "^3.5.4",
     "nodemailer": "^6.9.16"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1"
   }
 }

@@ -7810,36 +7810,71 @@ function downloadProjectPayload(project) {
 async function uploadProjectFolder(project, options = {}) {
   const endpoint = getProjectSaveEndpoint();
   if (!endpoint) throw new Error('Project save endpoint is unavailable.');
+  const blobUploadEndpoint = getPrivateBlobUploadEndpoint();
+  if (!blobUploadEndpoint || !window.SignStudioPrivateBlob?.upload) {
+    throw new Error('Private Blob upload client is unavailable.');
+  }
   queueEmailMarketingSubscription(project.customerEmail || state.customerEmail);
   const uploadProject = options.sendOrderEmail ? await makeCompactOrderProject(project) : project;
   const projectName = `${projectFileBaseName(uploadProject)}.SignGuy`;
   const logoFile = await makeProjectUploadLogoFile(uploadProject, { compact: Boolean(options.sendOrderEmail) });
   const rawScreenshots = options.screenshots || await captureSubmissionScreenshots();
   const screenshots = options.sendOrderEmail ? await compactSubmissionScreenshots(rawScreenshots) : rawScreenshots;
-  const form = new FormData();
-  form.append('customerEmail', uploadProject.customerEmail || state.customerEmail);
-  form.append('projectName', projectName);
+  const orderId = makeBlobUploadId(uploadProject.id);
+  const assets = [
+    {
+      kind: 'projectFile',
+      file: new File(
+        [JSON.stringify(uploadProject, null, 2)],
+        projectName,
+        { type: 'application/x-signguy+json' },
+      ),
+    },
+    {
+      kind: 'logo',
+      file: logoFile,
+    },
+  ];
+
   if (options.sendOrderEmail) {
-    form.append('sendOrderEmail', 'true');
-    form.append('subject', options.subject || ORDER_SUBMISSION_SUBJECT);
-    form.append('message', options.message || makeEmailBody('Shopify checkout order started'));
-    if (options.messageHtml) {
-      form.append('messageHtml', options.messageHtml);
-    }
     const logoPreview = await makeEmailLogoPreviewFile(uploadProject);
     if (logoPreview) {
-      form.append('logoPreview', logoPreview, logoPreview.name);
+      assets.push({ kind: 'logoPreview', file: logoPreview });
     }
   }
-  form.append('projectFile', new Blob([JSON.stringify(uploadProject, null, 2)], { type: 'application/x-signguy+json' }), projectName);
-  form.append('logo', logoFile, logoFile.name || uploadProject.source.fileName || 'uploaded-logo');
+
   screenshots.forEach((shot, idx) => {
-    form.append(`renderScreenshot${idx + 1}`, shot.file, shot.file.name);
-    form.append(`renderScreenshot${idx + 1}Label`, shot.label);
+    assets.push({
+      kind: `renderScreenshot${idx + 1}`,
+      file: shot.file,
+      label: shot.label,
+    });
   });
+
+  const files = [];
+  for (let index = 0; index < assets.length; index += 1) {
+    const asset = assets[index];
+    setStatus(`Uploading ${index + 1} of ${assets.length}`);
+    files.push(await uploadPrivateBlobAsset({
+      orderId,
+      asset,
+      endpoint: blobUploadEndpoint,
+    }));
+  }
+
   const response = await fetch(endpoint, {
     method: 'POST',
-    body: form,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      orderId,
+      customerEmail: uploadProject.customerEmail || state.customerEmail,
+      projectName,
+      sendOrderEmail: Boolean(options.sendOrderEmail),
+      subject: options.subject || ORDER_SUBMISSION_SUBJECT,
+      message: options.message || makeEmailBody('Shopify checkout order started'),
+      messageHtml: options.messageHtml || '',
+      files,
+    }),
   });
   if (!response.ok) {
     let detail = '';
@@ -7857,11 +7892,64 @@ async function uploadProjectFolder(project, options = {}) {
   }
 }
 
+async function uploadPrivateBlobAsset({ orderId, asset, endpoint }) {
+  const file = asset.file;
+  if (!(file instanceof Blob)) throw new Error(`Could not prepare ${asset.kind} for upload.`);
+  const filename = makeBlobFileName(file.name || `${asset.kind}.bin`);
+  const pathname = `orders/${orderId}/${asset.kind}-${filename}`;
+
+  try {
+    const uploaded = await window.SignStudioPrivateBlob.upload(pathname, file, {
+      access: 'private',
+      handleUploadUrl: endpoint,
+      contentType: file.type || 'application/octet-stream',
+      clientPayload: JSON.stringify({ orderId, kind: asset.kind }),
+    });
+    return {
+      kind: asset.kind,
+      pathname: uploaded.pathname,
+      url: uploaded.url,
+      filename,
+      contentType: uploaded.contentType || file.type || 'application/octet-stream',
+      size: file.size,
+      label: asset.label || '',
+    };
+  } catch (error) {
+    throw new Error(`Private Blob upload failed for ${filename}: ${error?.message || 'Unknown upload error'}`);
+  }
+}
+
+function makeBlobUploadId(projectId) {
+  const projectPart = String(projectId || 'signguy')
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 48) || 'signguy';
+  const uniquePart = (window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`)
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-');
+  return `${projectPart}-${uniquePart}`.slice(0, 96);
+}
+
+function makeBlobFileName(value) {
+  return String(value || 'file.bin')
+    .replace(/[^a-z0-9._-]+/gi, '-')
+    .replace(/^-|-$/g, '')
+    .slice(-180) || 'file.bin';
+}
+
 function getProjectSaveEndpoint() {
   if (window.SIGN_GUY_PROJECT_SAVE_ENDPOINT) return window.SIGN_GUY_PROJECT_SAVE_ENDPOINT;
   if (isLocalTesting()) return '';
   if (!window.location.protocol.startsWith('http')) return '';
   return new URL('/api/save-project', window.location.href).href;
+}
+
+function getPrivateBlobUploadEndpoint() {
+  if (window.SIGN_GUY_BLOB_UPLOAD_ENDPOINT) return window.SIGN_GUY_BLOB_UPLOAD_ENDPOINT;
+  if (isLocalTesting()) return '';
+  if (!window.location.protocol.startsWith('http')) return '';
+  return new URL('/api/blob-upload', window.location.href).href;
 }
 
 function isLocalTesting() {
@@ -8122,6 +8210,9 @@ function getShopifyVariantId() {
 }
 
 function describeOrderError(error) {
+  if (error?.message?.includes('Private Blob upload')) {
+    return 'Could not securely upload the design files. Please try placing the order again.';
+  }
   if (error?.message?.includes('Project save endpoint is unavailable')) {
     return isLocalTesting()
       ? 'Could not prepare the local checkout test. Try saving the design first, then place the order again.'
