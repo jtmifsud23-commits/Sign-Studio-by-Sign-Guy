@@ -15,6 +15,8 @@ const SUBMISSION_SUBJECT = 'User submitted sign to print';
 const ORDER_SUBMISSION_SUBJECT = 'User placed a lightbox order';
 const HYPE_CHAIN_ORDER_SUBJECT = 'User placed a Hype Chain order';
 const BUG_REPORT_SUBJECT = 'Sign Studio bug report';
+const DIAGNOSTIC_REPORT_LIMIT = 30;
+const DIAGNOSTIC_LIST_LIMIT = 80;
 const DEFAULT_LED_PROJECT_SRC = './assets/led/default-led-lightbox.SignGuy?v=20260527-02';
 const DEFAULT_LED_PROJECT_SCRIPT_SRC = './assets/led/default-led-lightbox-project.js?v=20260527-02';
 const DEFAULT_PREVIEW_DATA_URL = './assets/sign-guy-head.png';
@@ -245,6 +247,7 @@ const state = {
   studioInitializing: null,
   orderInProgress: false,
   bugReportInProgress: false,
+  diagnosticsFilter: 'all',
   onboardingDismissedFallback: false,
   onboardingPending: false,
   heicConverterPromise: null,
@@ -358,6 +361,7 @@ const els = {
   mobilePlaceOrder: document.querySelector('#mobilePlaceOrder'),
   mobileSaveProject: document.querySelector('#mobileSaveProject'),
   mobileReportBug: document.querySelector('#mobileReportBug'),
+  mobileDiagnostics: document.querySelector('#mobileDiagnostics'),
   mobileCustomize: document.querySelector('#mobileCustomize'),
   backToVisualizer: document.querySelector('#backToVisualizer'),
   mobileProductSummary: document.querySelector('#mobileProductSummary'),
@@ -370,6 +374,22 @@ const els = {
   helpMenuPopover: document.querySelector('#helpMenuPopover'),
   showTipsButton: document.querySelector('#showTipsButton'),
   reportBugButton: document.querySelector('#reportBugButton'),
+  diagnosticsButton: document.querySelector('#diagnosticsButton'),
+  diagnosticsMenuBadge: document.querySelector('#diagnosticsMenuBadge'),
+  diagnosticsMobileBadge: document.querySelector('#diagnosticsMobileBadge'),
+  diagnosticsOverlay: document.querySelector('#diagnosticsOverlay'),
+  diagnosticsClose: document.querySelector('#diagnosticsClose'),
+  diagnosticsSessionId: document.querySelector('#diagnosticsSessionId'),
+  diagnosticsBuild: document.querySelector('#diagnosticsBuild'),
+  diagnosticsProduct: document.querySelector('#diagnosticsProduct'),
+  diagnosticsFilterButtons: [...document.querySelectorAll('[data-diagnostics-filter]')],
+  diagnosticsEmpty: document.querySelector('#diagnosticsEmpty'),
+  diagnosticsList: document.querySelector('#diagnosticsList'),
+  diagnosticsStatus: document.querySelector('#diagnosticsStatus'),
+  diagnosticsClear: document.querySelector('#diagnosticsClear'),
+  diagnosticsCopy: document.querySelector('#diagnosticsCopy'),
+  diagnosticsDownload: document.querySelector('#diagnosticsDownload'),
+  diagnosticsReportBug: document.querySelector('#diagnosticsReportBug'),
   bugReportOverlay: document.querySelector('#bugReportOverlay'),
   bugReportForm: document.querySelector('#bugReportForm'),
   bugReportClose: document.querySelector('#bugReportClose'),
@@ -650,6 +670,7 @@ async function initializeStudioApp() {
 async function initializeStudioAppOnce() {
   setupAdminMode();
   setupMobileControlSheet();
+  setupDiagnosticsConsole();
   setupBugReport();
   setupOnboarding();
   setupProductSelectionMenu();
@@ -933,7 +954,7 @@ function renderAdminMode() {
   renderProductAccess();
   renderHypeVariantAccess();
   renderProductSelectionAccess();
-  renderDiagnostics();
+  renderArtworkDiagnostics();
   renderProjectLog();
   updateStats();
 }
@@ -1626,6 +1647,251 @@ function getMobilePlaceOrderDisabledReason() {
   return 'Finish required options';
 }
 
+function setupDiagnosticsConsole() {
+  const diagnostics = getSignStudioDiagnostics();
+  diagnostics.onChange(() => renderDiagnosticsConsole());
+  [els.diagnosticsButton, els.mobileDiagnostics].forEach((button) => {
+    button?.addEventListener('click', () => openDiagnosticsConsole());
+  });
+  els.diagnosticsClose?.addEventListener('click', closeDiagnosticsConsole);
+  els.diagnosticsOverlay?.addEventListener('click', (event) => {
+    if (event.target === els.diagnosticsOverlay) closeDiagnosticsConsole();
+  });
+  els.diagnosticsFilterButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      state.diagnosticsFilter = button.dataset.diagnosticsFilter || 'all';
+      renderDiagnosticsConsole();
+    });
+  });
+  els.diagnosticsClear?.addEventListener('click', () => {
+    diagnostics.clear();
+    setDiagnosticsStatus('Diagnostics cleared.');
+  });
+  els.diagnosticsCopy?.addEventListener('click', () => copyDiagnosticsReport());
+  els.diagnosticsDownload?.addEventListener('click', () => downloadDiagnosticsReport());
+  els.diagnosticsReportBug?.addEventListener('click', () => {
+    closeDiagnosticsConsole();
+    openBugReport();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && isDiagnosticsConsoleOpen()) closeDiagnosticsConsole();
+  });
+  if (new URLSearchParams(window.location.search).get('debug') === '1') {
+    window.setTimeout(openDiagnosticsConsole, 0);
+  }
+  renderDiagnosticsConsole();
+}
+
+function getSignStudioDiagnostics() {
+  if (window.SignStudioDiagnostics) return window.SignStudioDiagnostics;
+  const entries = [];
+  const subscribers = new Set();
+  window.SignStudioDiagnostics = {
+    entries,
+    sessionId: `SS-${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+    add(entry) {
+      entries.push({
+        id: `diag-${Date.now().toString(36)}`,
+        timestamp: new Date().toISOString(),
+        level: entry?.level || 'info',
+        source: entry?.source || 'app',
+        message: String(entry?.message || 'Diagnostic event'),
+        detail: entry?.detail ? String(entry.detail) : '',
+      });
+      subscribers.forEach((callback) => callback(entries));
+    },
+    clear() {
+      entries.splice(0, entries.length);
+      subscribers.forEach((callback) => callback(entries));
+    },
+    onChange(callback) {
+      subscribers.add(callback);
+      callback(entries);
+      return () => subscribers.delete(callback);
+    },
+  };
+  return window.SignStudioDiagnostics;
+}
+
+function isDiagnosticsConsoleOpen() {
+  return Boolean(els.diagnosticsOverlay && !els.diagnosticsOverlay.classList.contains('hidden'));
+}
+
+function openDiagnosticsConsole() {
+  closeHelpMenu();
+  closeOnboarding();
+  closeBugReport();
+  closeMobileControlSheet();
+  if (!els.diagnosticsOverlay) return;
+  els.diagnosticsOverlay.classList.remove('hidden');
+  els.diagnosticsOverlay.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('diagnostics-open');
+  renderDiagnosticsConsole();
+  window.setTimeout(() => els.diagnosticsClose?.focus({ preventScroll: true }), 0);
+}
+
+function closeDiagnosticsConsole() {
+  els.diagnosticsOverlay?.classList.add('hidden');
+  els.diagnosticsOverlay?.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('diagnostics-open');
+}
+
+function renderDiagnosticsConsole() {
+  const diagnostics = getSignStudioDiagnostics();
+  const entries = diagnostics.entries || [];
+  const counts = getDiagnosticCounts(entries);
+  const issueCount = counts.error + counts.warn + counts.network;
+  renderDiagnosticsBadge(els.diagnosticsMenuBadge, issueCount);
+  renderDiagnosticsBadge(els.diagnosticsMobileBadge, issueCount);
+  if (els.diagnosticsSessionId) els.diagnosticsSessionId.textContent = `Session ${diagnostics.sessionId || 'unknown'}`;
+  if (els.diagnosticsBuild) els.diagnosticsBuild.textContent = `Build ${getDisplayedBuildNumber()}`;
+  if (els.diagnosticsProduct) els.diagnosticsProduct.textContent = getBugReportProductLabel();
+  els.diagnosticsFilterButtons.forEach((button) => {
+    const filter = button.dataset.diagnosticsFilter || 'all';
+    const active = filter === state.diagnosticsFilter;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    button.textContent = getDiagnosticFilterLabel(filter, counts);
+  });
+  const filtered = filterDiagnosticEntries(entries, state.diagnosticsFilter)
+    .slice(-DIAGNOSTIC_LIST_LIMIT)
+    .reverse();
+  if (els.diagnosticsEmpty) {
+    els.diagnosticsEmpty.hidden = filtered.length > 0;
+    els.diagnosticsEmpty.textContent = entries.length
+      ? 'No diagnostics match this filter.'
+      : 'No diagnostics captured yet.';
+  }
+  if (els.diagnosticsList) {
+    els.diagnosticsList.innerHTML = filtered.map((entry) => renderDiagnosticEntry(entry)).join('');
+  }
+  const updatedAt = entries.length ? formatDiagnosticsTime(entries[entries.length - 1].timestamp) : '';
+  setDiagnosticsStatus(entries.length
+    ? `${entries.length} event${entries.length === 1 ? '' : 's'} captured${updatedAt ? ` - last ${updatedAt}` : ''}.`
+    : 'Waiting for events.');
+}
+
+function renderDiagnosticsBadge(element, count) {
+  if (!element) return;
+  element.hidden = count <= 0;
+  element.textContent = count > 99 ? '99+' : String(count);
+}
+
+function getDiagnosticCounts(entries) {
+  return entries.reduce((counts, entry) => {
+    const level = normalizeDiagnosticLevel(entry.level);
+    counts.all += 1;
+    counts[level] = (counts[level] || 0) + 1;
+    return counts;
+  }, { all: 0, error: 0, warn: 0, network: 0, info: 0 });
+}
+
+function getDiagnosticFilterLabel(filter, counts) {
+  if (filter === 'error') return `Errors ${counts.error || 0}`;
+  if (filter === 'warn') return `Warnings ${counts.warn || 0}`;
+  if (filter === 'network') return `Network ${counts.network || 0}`;
+  return `All ${counts.all || 0}`;
+}
+
+function filterDiagnosticEntries(entries, filter) {
+  if (filter === 'all') return entries;
+  return entries.filter((entry) => normalizeDiagnosticLevel(entry.level) === filter);
+}
+
+function renderDiagnosticEntry(entry) {
+  const level = normalizeDiagnosticLevel(entry.level);
+  const detail = String(entry.detail || '').trim();
+  return `
+    <li class="diagnostics-item ${level}">
+      <div class="diagnostics-item-top">
+        <span class="diagnostics-level">${escapeHtml(level)}</span>
+        <time datetime="${escapeHtml(entry.timestamp || '')}">${escapeHtml(formatDiagnosticsTime(entry.timestamp))}</time>
+        <span>${escapeHtml(entry.source || 'app')}</span>
+      </div>
+      <p>${escapeHtml(entry.message || 'Diagnostic event')}</p>
+      ${detail ? `<details><summary>Details</summary><pre>${escapeHtml(detail)}</pre></details>` : ''}
+    </li>
+  `;
+}
+
+function normalizeDiagnosticLevel(level) {
+  if (level === 'warning') return 'warn';
+  if (level === 'network') return 'network';
+  if (level === 'error' || level === 'warn' || level === 'info') return level;
+  return 'info';
+}
+
+function formatDiagnosticsTime(value) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function setDiagnosticsStatus(text) {
+  if (els.diagnosticsStatus) els.diagnosticsStatus.textContent = text;
+}
+
+async function copyDiagnosticsReport() {
+  const report = makeDiagnosticsReportText();
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable.');
+    await navigator.clipboard.writeText(report);
+  } catch {
+    copyTextWithFallback(report);
+  }
+  setDiagnosticsStatus('Diagnostics report copied.');
+}
+
+function copyTextWithFallback(text) {
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand('copy');
+  textarea.remove();
+}
+
+function downloadDiagnosticsReport() {
+  const report = makeDiagnosticsReportText();
+  const filename = `${safeFileName(getDesignName() || getBugReportProductLabel())}-diagnostics.txt`;
+  downloadBlob(new Blob([report], { type: 'text/plain' }), filename, 'text/plain');
+  setDiagnosticsStatus('Diagnostics report downloaded.');
+}
+
+function makeDiagnosticsReportText(limit = DIAGNOSTIC_REPORT_LIMIT) {
+  const diagnostics = getSignStudioDiagnostics();
+  const entries = (diagnostics.entries || []).slice(-limit).reverse();
+  const lines = [
+    'Sign Studio diagnostics report',
+    '',
+    ...getBugReportContextLines(state.customerEmail, { includeDiagnostics: false }),
+    `Diagnostics session: ${diagnostics.sessionId || 'unknown'}`,
+    `Captured events: ${(diagnostics.entries || []).length}`,
+    '',
+    'Recent events',
+  ];
+  if (!entries.length) {
+    lines.push('No diagnostic events captured.');
+    return lines.join('\n');
+  }
+  entries.forEach((entry, index) => {
+    lines.push(`${index + 1}. [${normalizeDiagnosticLevel(entry.level).toUpperCase()}] ${entry.timestamp || ''} ${entry.source || 'app'} - ${entry.message || 'Diagnostic event'}`);
+    if (entry.detail) lines.push(`   ${String(entry.detail).replace(/\s+/g, ' ').slice(0, 1200)}`);
+  });
+  return lines.join('\n');
+}
+
+function getDiagnosticsReportLines(limit = 12) {
+  const diagnostics = getSignStudioDiagnostics();
+  return (diagnostics.entries || [])
+    .slice(-limit)
+    .reverse()
+    .map((entry) => `[${normalizeDiagnosticLevel(entry.level).toUpperCase()}] ${formatDiagnosticsTime(entry.timestamp)} ${entry.source || 'app'}: ${entry.message || 'Diagnostic event'}`);
+}
+
 function setupBugReport() {
   els.helpMenuButton?.addEventListener('click', (event) => {
     event.stopPropagation();
@@ -1784,7 +2050,7 @@ function getBugReportProductLabel() {
   return 'LED Sign';
 }
 
-function getBugReportContextLines(email = state.customerEmail) {
+function getBugReportContextLines(email = state.customerEmail, options = {}) {
   const lines = [
     `Product: ${getBugReportProductLabel()}`,
     `Project type: ${currentProjectType()}`,
@@ -1816,6 +2082,12 @@ function getBugReportContextLines(email = state.customerEmail) {
       `Usage: ${(USAGE_PRESETS[state.usage] || USAGE_PRESETS.indoor).label}`,
       `Detected colours: ${state.processed?.colours?.length || 0}`,
     );
+  }
+  if (options.includeDiagnostics !== false) {
+    const diagnosticLines = getDiagnosticsReportLines(12);
+    if (diagnosticLines.length) {
+      lines.push('', 'Recent diagnostics:', ...diagnosticLines);
+    }
   }
   return lines;
 }
@@ -3269,7 +3541,7 @@ async function reprocess(options = {}) {
     }
     syncColorOverrides(previousColourSnapshot);
     renderPreview();
-    renderDiagnostics();
+    renderArtworkDiagnostics();
     if (els.submitDesign) els.submitDesign.disabled = state.isDefaultPreview || !state.uploadedFile;
     updateProjectControls();
     setStatus('Ready');
@@ -6805,7 +7077,7 @@ function renderEmptyPreview() {
   updateProjectControls();
 }
 
-function renderDiagnostics() {
+function renderArtworkDiagnostics() {
   if (!state.processed) {
     renderPreviewAlert([]);
     return;
@@ -6867,6 +7139,7 @@ function updateStats() {
     : (state.productType === 'plaque' ? `${preset.label} - ${activeUsage.label} Wall Plaque` : `${preset.label} - ${usage.label}`);
   if (els.depthStat) els.depthStat.textContent = `${preset.depth} mm depth`;
   syncMobileCommandBar();
+  renderDiagnosticsConsole();
 }
 
 function applyShellColours() {
@@ -8806,6 +9079,7 @@ async function finishAppLoading() {
 }
 
 function hideAppLoading() {
+  window.SignStudioBootWatchdog?.ready();
   document.body.classList.remove('studio-loading');
   if (els.appLoading) els.appLoading.classList.add('hidden');
   resetMobileViewportAfterGate();
@@ -8814,6 +9088,7 @@ function hideAppLoading() {
 
 function showLoadingStart() {
   if (!els.loadingStartButton) return;
+  window.SignStudioBootWatchdog?.ready();
   els.appLoadingCard?.classList.add('ready-to-start');
   els.loadingStartButton.disabled = false;
   els.loadingStartButton.textContent = 'START';

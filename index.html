@@ -4,9 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MySignGuy.ca Sign Studio</title>
-    <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23151515'/%3E%3Cpath d='M7 21.5h18v3H7zM9.5 7.5h13v11h-13z' fill='%23ffc529'/%3E%3Cpath d='M12 10h8v6h-8z' fill='%23151515'/%3E%3C/svg%3E" />
-    <link rel="stylesheet" href="./styles.css?v=20260612-reskin-01" />
+    <link rel="stylesheet" href="./styles.css?v=20260621-loading-01" />
   </head>
   <body class="studio-loading">
     <main class="app-shell">
@@ -406,6 +405,10 @@
                 <div class="help-menu-popover hidden" id="helpMenuPopover" role="menu" aria-label="Help menu">
                   <button id="showTipsButton" type="button" role="menuitem">Show tips</button>
                   <button id="reportBugButton" type="button" role="menuitem">Report a bug</button>
+                  <button class="diagnostics-menu-item" id="diagnosticsButton" type="button" role="menuitem">
+                    <span>Diagnostics</span>
+                    <span class="diagnostics-menu-badge" id="diagnosticsMenuBadge" hidden>0</span>
+                  </button>
                 </div>
               </div>
               <button class="admin-login-button" id="adminLoginButton" type="button">Login</button>
@@ -536,6 +539,14 @@
           <path d="M8 17h8"></path>
         </svg>
       </button>
+      <button class="mobile-command-button mobile-command-icon-button diagnostic-mobile-button" id="mobileDiagnostics" type="button" aria-label="Open diagnostics">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m8 9 3 3-3 3"></path>
+          <path d="M13 15h3"></path>
+          <path d="M4 5h16v14H4z"></path>
+        </svg>
+        <span class="diagnostics-mobile-badge" id="diagnosticsMobileBadge" hidden>0</span>
+      </button>
       <button class="mobile-command-button mobile-command-icon-button" id="mobileReportBug" type="button" aria-label="Report a bug">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M12 9v5"></path>
@@ -592,6 +603,40 @@
           <button class="primary-button" id="bugReportSubmit" type="submit">Send report</button>
         </div>
       </form>
+    </div>
+
+    <div class="diagnostics-overlay hidden" id="diagnosticsOverlay" aria-hidden="true">
+      <section class="diagnostics-console" role="dialog" aria-modal="true" aria-labelledby="diagnosticsTitle">
+        <header class="diagnostics-console-header">
+          <div>
+            <p class="eyebrow">Diagnostics</p>
+            <h2 id="diagnosticsTitle">In-app error console</h2>
+          </div>
+          <button class="icon-button" id="diagnosticsClose" type="button" aria-label="Close diagnostics">x</button>
+        </header>
+        <div class="diagnostics-console-meta" aria-live="polite">
+          <span id="diagnosticsSessionId">Session pending</span>
+          <span id="diagnosticsBuild">Build pending</span>
+          <span id="diagnosticsProduct">Product pending</span>
+        </div>
+        <div class="diagnostics-filter-row" role="group" aria-label="Filter diagnostics">
+          <button class="active" type="button" data-diagnostics-filter="all" aria-pressed="true">All</button>
+          <button type="button" data-diagnostics-filter="error" aria-pressed="false">Errors</button>
+          <button type="button" data-diagnostics-filter="warn" aria-pressed="false">Warnings</button>
+          <button type="button" data-diagnostics-filter="network" aria-pressed="false">Network</button>
+        </div>
+        <p class="diagnostics-empty" id="diagnosticsEmpty">No diagnostics captured yet.</p>
+        <ol class="diagnostics-list" id="diagnosticsList" aria-live="polite"></ol>
+        <footer class="diagnostics-console-footer">
+          <p class="diagnostics-status" id="diagnosticsStatus">Waiting for events.</p>
+          <div class="diagnostics-actions">
+            <button class="secondary-button" id="diagnosticsClear" type="button">Clear</button>
+            <button class="secondary-button" id="diagnosticsCopy" type="button">Copy report</button>
+            <button class="secondary-button" id="diagnosticsDownload" type="button">Download</button>
+            <button class="primary-button" id="diagnosticsReportBug" type="button">Report bug</button>
+          </div>
+        </footer>
+      </section>
     </div>
 
     <div class="wizard hidden" id="wizard" aria-hidden="true">
@@ -730,15 +775,197 @@
           <p class="email-gate-error" id="emailGateError" role="alert"></p>
           <button class="primary-button loading-start-button" id="loadingStartButton" type="submit" disabled>Loading...</button>
         </form>
+        <div class="loading-boot-recovery" id="loadingBootRecovery" hidden>
+          <p id="loadingBootStatus" role="status">Studio files are taking longer than expected to load.</p>
+          <button class="secondary-button loading-retry-button" id="loadingRetryButton" type="button">Retry loading</button>
+        </div>
       </div>
     </div>
 
-    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+      (() => {
+        if (window.SignStudioDiagnostics) return;
+        const entries = [];
+        const subscribers = new Set();
+        const sessionId = `SS-${Math.random().toString(36).slice(2, 7).toUpperCase()}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+        const MAX_ENTRIES = 200;
+        const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+        const DATA_URL_PATTERN = /data:[^,\s]+,[A-Za-z0-9+/=_-]{120,}/g;
+        const originalConsole = {
+          warn: console.warn.bind(console),
+          error: console.error.bind(console),
+        };
+
+        function sanitizeText(value) {
+          return String(value || '')
+            .replace(EMAIL_PATTERN, '[email]')
+            .replace(DATA_URL_PATTERN, '[data-url]')
+            .slice(0, 4000);
+        }
+
+        function serializeValue(value) {
+          if (value instanceof Error) {
+            return sanitizeText(value.stack || value.message || String(value));
+          }
+          if (typeof value === 'string') return sanitizeText(value);
+          try {
+            return sanitizeText(JSON.stringify(value, (_, item) => {
+              if (item instanceof Error) return item.stack || item.message || String(item);
+              if (typeof item === 'function') return `[Function ${item.name || 'anonymous'}]`;
+              return item;
+            }));
+          } catch {
+            return sanitizeText(String(value));
+          }
+        }
+
+        function notify() {
+          subscribers.forEach((callback) => {
+            try {
+              callback(entries);
+            } catch {
+              // Diagnostics listeners should never affect the studio.
+            }
+          });
+        }
+
+        function add(entry) {
+          const normalized = {
+            id: `diag-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+            timestamp: new Date().toISOString(),
+            level: entry.level || 'info',
+            source: entry.source || 'app',
+            message: sanitizeText(entry.message || 'Diagnostic event'),
+            detail: entry.detail === undefined ? '' : serializeValue(entry.detail),
+          };
+          entries.push(normalized);
+          if (entries.length > MAX_ENTRIES) entries.splice(0, entries.length - MAX_ENTRIES);
+          notify();
+          return normalized;
+        }
+
+        window.SignStudioDiagnostics = {
+          entries,
+          sessionId,
+          add,
+          clear() {
+            entries.splice(0, entries.length);
+            notify();
+          },
+          onChange(callback) {
+            if (typeof callback !== 'function') return () => {};
+            subscribers.add(callback);
+            callback(entries);
+            return () => subscribers.delete(callback);
+          },
+        };
+
+        ['warn', 'error'].forEach((level) => {
+          console[level] = (...args) => {
+            add({
+              level: level === 'warn' ? 'warn' : 'error',
+              source: 'console',
+              message: args.map(serializeValue).join(' '),
+            });
+            originalConsole[level](...args);
+          };
+        });
+
+        if (typeof window.fetch === 'function' && !window.fetch.__signStudioDiagnosticsWrapped) {
+          const nativeFetch = window.fetch.bind(window);
+          const wrappedFetch = async (...args) => {
+            const startedAt = performance.now();
+            const request = args[0];
+            const options = args[1] || {};
+            const url = typeof request === 'string' ? request : request?.url || 'unknown';
+            const method = String(options.method || request?.method || 'GET').toUpperCase();
+            try {
+              const response = await nativeFetch(...args);
+              if (!response.ok) {
+                add({
+                  level: response.status >= 500 ? 'error' : 'network',
+                  source: 'fetch',
+                  message: `${method} ${url} returned ${response.status}`,
+                  detail: {
+                    status: response.status,
+                    statusText: response.statusText,
+                    durationMs: Math.round(performance.now() - startedAt),
+                  },
+                });
+              }
+              return response;
+            } catch (error) {
+              add({
+                level: 'error',
+                source: 'fetch',
+                message: `${method} ${url} failed`,
+                detail: error,
+              });
+              throw error;
+            }
+          };
+          wrappedFetch.__signStudioDiagnosticsWrapped = true;
+          window.fetch = wrappedFetch;
+        }
+
+        window.addEventListener('error', (event) => {
+          const target = event.target;
+          if (target && target !== window) {
+            const resource = target.currentSrc || target.src || target.href || target.tagName || 'resource';
+            add({
+              level: 'error',
+              source: 'asset',
+              message: `Resource failed to load: ${resource}`,
+            });
+            return;
+          }
+          add({
+            level: 'error',
+            source: 'runtime',
+            message: event.message || 'Unhandled JavaScript error',
+            detail: {
+              file: event.filename,
+              line: event.lineno,
+              column: event.colno,
+              stack: event.error?.stack || '',
+            },
+          });
+        }, true);
+
+        window.addEventListener('unhandledrejection', (event) => {
+          add({
+            level: 'error',
+            source: 'promise',
+            message: 'Unhandled promise rejection',
+            detail: event.reason,
+          });
+        });
+      })();
+    </script>
+    <script>
+      (() => {
+        const recovery = document.querySelector('#loadingBootRecovery');
+        const retryButton = document.querySelector('#loadingRetryButton');
+        const timeoutId = window.setTimeout(() => {
+          if (!document.body.classList.contains('studio-loading')) return;
+          if (recovery) recovery.hidden = false;
+        }, 15000);
+
+        retryButton?.addEventListener('click', () => window.location.reload());
+        window.SignStudioBootWatchdog = {
+          ready() {
+            window.clearTimeout(timeoutId);
+            if (recovery) recovery.hidden = true;
+          },
+        };
+      })();
+    </script>
+    <script defer src="./assets/vendor/three-r128.min.js?v=20260621-01"></script>
     <script defer src="./assets/core/three-runtime.js?v=20260605-02"></script>
     <script defer src="./assets/led/led-product.js?v=20260529-01"></script>
     <script defer src="./assets/hype-chain/hype-chain-product.js?v=20260612-01"></script>
     <script defer src="./assets/plaque/plaque-product.js?v=20260605-02"></script>
-    <script defer src="./app.js?v=20260612-01"></script>
+    <script defer src="./app.js?v=20260621-loading-01"></script>
     <script defer src="./submit-fix.js?v=20260510-22"></script>
     <script defer src="./used-colours.js?v=20260513-09"></script>
   </body>
