@@ -360,8 +360,6 @@ const els = {
   mobileSheetClose: document.querySelector('#mobileSheetClose'),
   mobilePlaceOrder: document.querySelector('#mobilePlaceOrder'),
   mobileSaveProject: document.querySelector('#mobileSaveProject'),
-  mobileReportBug: document.querySelector('#mobileReportBug'),
-  mobileDiagnostics: document.querySelector('#mobileDiagnostics'),
   mobileCustomize: document.querySelector('#mobileCustomize'),
   backToVisualizer: document.querySelector('#backToVisualizer'),
   mobileProductSummary: document.querySelector('#mobileProductSummary'),
@@ -376,7 +374,6 @@ const els = {
   reportBugButton: document.querySelector('#reportBugButton'),
   diagnosticsButton: document.querySelector('#diagnosticsButton'),
   diagnosticsMenuBadge: document.querySelector('#diagnosticsMenuBadge'),
-  diagnosticsMobileBadge: document.querySelector('#diagnosticsMobileBadge'),
   diagnosticsOverlay: document.querySelector('#diagnosticsOverlay'),
   diagnosticsClose: document.querySelector('#diagnosticsClose'),
   diagnosticsSessionId: document.querySelector('#diagnosticsSessionId'),
@@ -1650,9 +1647,7 @@ function getMobilePlaceOrderDisabledReason() {
 function setupDiagnosticsConsole() {
   const diagnostics = getSignStudioDiagnostics();
   diagnostics.onChange(() => renderDiagnosticsConsole());
-  [els.diagnosticsButton, els.mobileDiagnostics].forEach((button) => {
-    button?.addEventListener('click', () => openDiagnosticsConsole());
-  });
+  els.diagnosticsButton?.addEventListener('click', () => openDiagnosticsConsole());
   els.diagnosticsClose?.addEventListener('click', closeDiagnosticsConsole);
   els.diagnosticsOverlay?.addEventListener('click', (event) => {
     if (event.target === els.diagnosticsOverlay) closeDiagnosticsConsole();
@@ -1742,7 +1737,6 @@ function renderDiagnosticsConsole() {
   const counts = getDiagnosticCounts(entries);
   const issueCount = counts.error + counts.warn + counts.network;
   renderDiagnosticsBadge(els.diagnosticsMenuBadge, issueCount);
-  renderDiagnosticsBadge(els.diagnosticsMobileBadge, issueCount);
   if (els.diagnosticsSessionId) els.diagnosticsSessionId.textContent = `Session ${diagnostics.sessionId || 'unknown'}`;
   if (els.diagnosticsBuild) els.diagnosticsBuild.textContent = `Build ${getDisplayedBuildNumber()}`;
   if (els.diagnosticsProduct) els.diagnosticsProduct.textContent = getBugReportProductLabel();
@@ -1910,9 +1904,7 @@ function setupBugReport() {
     }
     closeHelpMenu();
   });
-  [els.reportBugButton, els.mobileReportBug].forEach((button) => {
-    button?.addEventListener('click', () => openBugReport());
-  });
+  els.reportBugButton?.addEventListener('click', () => openBugReport());
   els.bugReportClose?.addEventListener('click', closeBugReport);
   els.bugReportCancel?.addEventListener('click', closeBugReport);
   els.bugReportOverlay?.addEventListener('click', (event) => {

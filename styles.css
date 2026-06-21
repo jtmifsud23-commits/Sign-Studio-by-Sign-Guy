@@ -4273,6 +4273,25 @@ body.product-hype .stage.preview-mode-wall::before {
   display: inline-grid;
 }
 
+.visualizer-report-menu {
+  position: absolute;
+  top: 88px;
+  right: 18px;
+  z-index: 7;
+}
+
+.visualizer-report-button {
+  min-height: 32px;
+  border-color: rgba(255, 216, 0, 0.28);
+  padding: 6px 9px;
+  background: rgba(18, 20, 20, 0.58);
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  backdrop-filter: blur(10px);
+}
+
 .help-menu-button {
   min-width: 72px;
 }
@@ -4328,8 +4347,7 @@ body.product-hype .stage.preview-mode-wall::before {
   gap: 12px;
 }
 
-.diagnostics-menu-badge,
-.diagnostics-mobile-badge {
+.diagnostics-menu-badge {
   display: inline-grid;
   min-width: 20px;
   height: 20px;
@@ -4342,20 +4360,8 @@ body.product-hype .stage.preview-mode-wall::before {
   line-height: 1;
 }
 
-.diagnostics-menu-badge[hidden],
-.diagnostics-mobile-badge[hidden] {
+.diagnostics-menu-badge[hidden] {
   display: none;
-}
-
-.diagnostic-mobile-button {
-  position: relative;
-}
-
-.diagnostics-mobile-badge {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  border: 1px solid rgba(0, 0, 0, 0.5);
 }
 
 .onboarding-overlay {
@@ -5735,7 +5741,7 @@ button.detail-row {
     left: 10px;
     z-index: 55;
     display: grid;
-    grid-template-columns: minmax(0, 1.14fr) 52px 52px 52px minmax(96px, 1.08fr);
+    grid-template-columns: minmax(0, 1fr) 52px minmax(104px, 1fr);
     gap: 7px;
     padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
     border: 1px solid rgba(255, 255, 255, 0.14);
@@ -5876,7 +5882,19 @@ button.detail-row {
 
   #mobileCustomize {
     min-height: 52px;
+    border-color: rgba(255, 216, 0, 0.78);
+    background: var(--green);
+    color: #111;
+    box-shadow: 0 0 24px rgba(255, 216, 0, 0.24);
     font-size: 14px !important;
+  }
+
+  #mobileCustomize:hover,
+  #mobileCustomize:focus-visible {
+    border-color: var(--green);
+    outline: none;
+    background: #ffea36;
+    color: #050505;
   }
 
   .mobile-command-bar button:disabled {
@@ -7038,7 +7056,7 @@ button.detail-row {
   .mobile-command-bar {
     right: 8px;
     left: 8px;
-    grid-template-columns: minmax(0, 1.08fr) 46px 46px 46px minmax(84px, 1.04fr);
+    grid-template-columns: minmax(0, 1fr) 46px minmax(94px, 1fr);
     gap: 6px;
     padding: 9px 8px calc(9px + env(safe-area-inset-bottom));
   }
@@ -7283,6 +7301,21 @@ button.detail-row {
   #sessionEmailStat,
   #dimensionStat {
     display: none !important;
+  }
+
+  .visualizer-report-menu {
+    top: 118px;
+    right: 14px;
+  }
+
+  .visualizer-report-button {
+    min-height: 30px;
+    padding: 5px 8px;
+    font-size: 10px !important;
+  }
+
+  .visualizer-report-menu .help-menu-popover button {
+    font-size: 13px !important;
   }
 
   .preview-panel,

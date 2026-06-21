@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MySignGuy.ca Sign Studio</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23151515'/%3E%3Cpath d='M7 21.5h18v3H7zM9.5 7.5h13v11h-13z' fill='%23ffc529'/%3E%3Cpath d='M12 10h8v6h-8z' fill='%23151515'/%3E%3C/svg%3E" />
-    <link rel="stylesheet" href="./styles.css?v=20260621-loading-01" />
+    <link rel="stylesheet" href="./styles.css?v=20260621-report-menu-01" />
   </head>
   <body class="studio-loading">
     <main class="app-shell">
@@ -400,17 +400,6 @@
             <div class="preview-stats">
               <span id="sessionEmailStat">No email</span>
               <span id="dimensionStat">Large 13&quot; - Indoor</span>
-              <div class="help-menu" id="helpMenu">
-                <button class="tips-button help-menu-button" id="helpMenuButton" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="helpMenuPopover">Help</button>
-                <div class="help-menu-popover hidden" id="helpMenuPopover" role="menu" aria-label="Help menu">
-                  <button id="showTipsButton" type="button" role="menuitem">Show tips</button>
-                  <button id="reportBugButton" type="button" role="menuitem">Report a bug</button>
-                  <button class="diagnostics-menu-item" id="diagnosticsButton" type="button" role="menuitem">
-                    <span>Diagnostics</span>
-                    <span class="diagnostics-menu-badge" id="diagnosticsMenuBadge" hidden>0</span>
-                  </button>
-                </div>
-              </div>
               <button class="admin-login-button" id="adminLoginButton" type="button">Login</button>
             </div>
             <div class="preview-mode-controls" role="group" aria-label="Preview view mode">
@@ -420,6 +409,17 @@
             </div>
           </div>
           <div class="preview-alert" id="previewAlert" hidden></div>
+          <div class="help-menu visualizer-report-menu" id="helpMenu">
+            <button class="tips-button help-menu-button visualizer-report-button" id="helpMenuButton" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="helpMenuPopover">Report a bug</button>
+            <div class="help-menu-popover hidden" id="helpMenuPopover" role="menu" aria-label="Report a bug menu">
+              <button id="reportBugButton" type="button" role="menuitem">Report a bug</button>
+              <button class="diagnostics-menu-item" id="diagnosticsButton" type="button" role="menuitem">
+                <span>Error console</span>
+                <span class="diagnostics-menu-badge" id="diagnosticsMenuBadge" hidden>0</span>
+              </button>
+              <button id="showTipsButton" type="button" role="menuitem">Show tips</button>
+            </div>
+          </div>
           <label class="visualizer-light-toggle" aria-label="Illuminated preview">
             <input id="illuminateToggle" type="checkbox" checked />
             <span class="light-switch" aria-hidden="true">
@@ -537,21 +537,6 @@
           <path d="M5 3h12l2 2v16H5z"></path>
           <path d="M8 3v6h8V3"></path>
           <path d="M8 17h8"></path>
-        </svg>
-      </button>
-      <button class="mobile-command-button mobile-command-icon-button diagnostic-mobile-button" id="mobileDiagnostics" type="button" aria-label="Open diagnostics">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="m8 9 3 3-3 3"></path>
-          <path d="M13 15h3"></path>
-          <path d="M4 5h16v14H4z"></path>
-        </svg>
-        <span class="diagnostics-mobile-badge" id="diagnosticsMobileBadge" hidden>0</span>
-      </button>
-      <button class="mobile-command-button mobile-command-icon-button" id="mobileReportBug" type="button" aria-label="Report a bug">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 9v5"></path>
-          <path d="M12 17h.01"></path>
-          <path d="M10.3 4.2 2.8 17.6A2 2 0 0 0 4.5 20h15a2 2 0 0 0 1.7-2.4L13.7 4.2a2 2 0 0 0-3.4 0Z"></path>
         </svg>
       </button>
       <button class="mobile-command-button" id="mobileCustomize" type="button" aria-controls="mobileControlSheet" aria-expanded="false">Customize</button>
@@ -965,7 +950,7 @@
     <script defer src="./assets/led/led-product.js?v=20260529-01"></script>
     <script defer src="./assets/hype-chain/hype-chain-product.js?v=20260612-01"></script>
     <script defer src="./assets/plaque/plaque-product.js?v=20260605-02"></script>
-    <script defer src="./app.js?v=20260621-loading-01"></script>
+    <script defer src="./app.js?v=20260621-report-menu-01"></script>
     <script defer src="./submit-fix.js?v=20260510-22"></script>
     <script defer src="./used-colours.js?v=20260513-09"></script>
   </body>
