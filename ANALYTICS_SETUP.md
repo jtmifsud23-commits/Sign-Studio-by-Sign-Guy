@@ -8,7 +8,7 @@ The app loads the Sign Studio Google Tag Manager Web container `GTM-MDH5QLKP`. I
 - The Google tag is restricted to `sign-studio-by-sign-guy.vercel.app`, preventing duplicate page views on the main My Sign Guy site.
 - The six Sign Studio custom events are routed to GA4 property **My Sign Guy** (`G-1L08WWTLD5`).
 - `generate_lead` is registered and marked as a GA4 key event.
-- Google has temporarily paused both GTM tags after its automated malware scanner flagged them. Search Console reports no security issues for `mysignguy.ca`. Do not manually unpause the tags; request review and allow Google's automatic rescan to clear the hold.
+- Google's automatic rescan cleared an initial false-positive malware warning. The live container now delivers both tags without the malware-disabled flag, and Search Console reports no security issues for `mysignguy.ca`.
 
 ## 1. Create or choose the GA4 property
 
@@ -106,9 +106,9 @@ The analytics guard strips email addresses and blocks customer emails, file name
 
 `generate_lead` is marked as a GA4 key event. Shopify should own the downstream `begin_checkout` and `purchase` events; configure it with the same GA4 property if full storefront-to-purchase reporting is required.
 
-## Google security hold
+## Google security scan
 
-Google's malware scanner currently pauses the built-in Google and GA4 Event tags, so events will not reach GA4 until Google clears the flag. Search Console's **Security issues** report shows **No issues detected** for `mysignguy.ca`. Google's guidance is to avoid manually overriding the pause; publish a clean version, allow the automatic rescan, and submit feedback/review if the false positive remains.
+Google's malware scanner initially flagged the built-in Google and GA4 Event tags. Search Console's **Security issues** report showed **No issues detected** for `mysignguy.ca`, so the warning was not manually overridden. After Version 4 was published, Google's automatic rescan cleared the flag. The production container response now includes both tags, and the Sign Studio page loads the GA4 Google tag for `G-1L08WWTLD5`.
 
 ## Official references
 
