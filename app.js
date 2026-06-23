@@ -56,6 +56,32 @@ const SHOPIFY_HYPE_CHAIN_VARIANTS = {
   classic: window.SIGN_GUY_HYPE_CHAIN_CLASSIC_VARIANT_ID || '43897670271116',
   spinner: window.SIGN_GUY_HYPE_CHAIN_SPINNER_VARIANT_ID || '46117827117196',
 };
+
+function trackSignStudioEvent(eventName, parameters = {}) {
+  return window.SignStudioAnalytics?.track?.(eventName, parameters) || false;
+}
+
+function getAnalyticsProductItem(project = null) {
+  const productType = project?.type === 'SignGuy.HypeChainStudio'
+    ? 'hype'
+    : (project?.type === 'SignGuy.WallPlaqueStudio' ? 'plaque' : state.productType);
+  const itemName = productType === 'hype'
+    ? 'Hype Chain'
+    : (productType === 'plaque' ? '3D Wall Plaque' : 'LED Sign');
+  const itemVariant = productType === 'hype'
+    ? (state.hype.variant === 'spinner' ? 'Spinner' : 'Classic')
+    : `${SIZE_PRESETS[state.size]?.label || state.size} - ${productType === 'plaque'
+      ? (USAGE_PRESETS[getPlaqueUsageKey()]?.label || 'Indoor')
+      : (USAGE_PRESETS[state.usage]?.label || 'Indoor')}`;
+
+  return {
+    item_id: getShopifyVariantId() || `${productType}_custom`,
+    item_name: itemName,
+    item_category: 'Sign Studio',
+    item_variant: itemVariant,
+    quantity: 1,
+  };
+}
 const HYPE_CHAIN_STL_ASSETS = {
   link: './assets/hype-chain/chain-link.stl',
   connector: './assets/hype-chain/link-connector.stl',
@@ -811,6 +837,7 @@ function setupEmailGate() {
     }
     state.customerEmail = normalizeEmail(email);
     localStorage.setItem(EMAIL_STORAGE_KEY, state.customerEmail);
+    trackSignStudioEvent('sign_up', { method: 'email_gate' });
     queueEmailMarketingSubscription(state.customerEmail);
     renderSessionEmail();
     if (!state.studioInitialized) {
@@ -1083,6 +1110,13 @@ function selectProductSelection(key) {
   state.productSelectionMenuResolved = true;
   hideProductSelectionMenu();
   applyProductSelection(choice);
+  trackSignStudioEvent('select_item', {
+    ecommerce: {
+      item_list_id: 'sign_studio_products',
+      item_list_name: 'Sign Studio products',
+      items: [getAnalyticsProductItem()],
+    },
+  });
 }
 
 function applyProductSelectionState(choice) {
@@ -2914,6 +2948,10 @@ async function handleFiles(fileList, options = {}) {
     await reprocess();
     if (els.submitNote) els.submitNote.textContent = '';
     openWizard('edit');
+    trackSignStudioEvent('artwork_upload', {
+      product_type: target === 'hype' ? 'hype_chain' : 'led_sign',
+      file_type: validation.kind,
+    });
     if (target === 'led') state.ledUploadSnapshot = null;
   } catch (error) {
     restoreLedUploadState();
@@ -7300,6 +7338,10 @@ async function saveProjectFile() {
         : ''
       : `${project.name} saved to the ${state.customerEmail} server folder.`;
     setStatus('Saved');
+    trackSignStudioEvent('save_design', {
+      product_type: state.productType,
+      save_destination: localSave ? 'local' : 'server',
+    });
   } catch (error) {
     console.error(error);
     els.projectNote.textContent = isLocalTesting()
@@ -8137,6 +8179,12 @@ function redirectToShopifyCheckout(project, uploadResult = {}) {
   }
   setShopifyOrderField(params, 'SignGuy file', projectName);
 
+  trackSignStudioEvent('add_to_cart', {
+    ecommerce: {
+      currency: 'CAD',
+      items: [getAnalyticsProductItem(project)],
+    },
+  });
   navigateToCheckoutUrl(`${SHOPIFY_CHECKOUT_BASE_URL}/add?${params.toString()}`);
 }
 
@@ -8501,6 +8549,10 @@ async function submitDesignRequest() {
       await submitDesignToEndpoint({ endpoint, subject, body, screenshots });
       setStatus('Submitted');
       els.submitNote.textContent = `Submitted to ${CONTACT_EMAIL} with the logo and ${screenshots.length} visualizer screenshots.`;
+      trackSignStudioEvent('generate_lead', {
+        lead_source: 'design_submission',
+        product_type: state.productType,
+      });
       return;
     }
 

@@ -18,6 +18,10 @@ async function submitDesignRequest() {
       await submitDesignToEndpoint({ endpoint, subject, body, screenshots });
       setStatus('Submitted');
       els.submitNote.textContent = `Submitted to ${CONTACT_EMAIL} with the logo and ${screenshots.length} visualizer screenshots.`;
+      trackSignStudioEvent('generate_lead', {
+        lead_source: 'design_submission',
+        product_type: state.productType,
+      });
       return;
     }
 

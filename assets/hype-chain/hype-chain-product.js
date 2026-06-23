@@ -3039,6 +3039,10 @@ async function saveHypeChainProjectFile() {
     }
     els.projectNote.textContent = isLocalTesting() && !state.isAdmin ? '' : `${project.name} saved.`;
     setStatus('Saved');
+    trackSignStudioEvent('save_design', {
+      product_type: 'hype',
+      save_destination: isLocalTesting() ? 'local' : 'server',
+    });
   } catch (error) {
     console.error(error);
     els.projectNote.textContent = 'Could not save this Hype Chain design.';

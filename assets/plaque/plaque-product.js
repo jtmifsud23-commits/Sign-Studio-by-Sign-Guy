@@ -354,6 +354,10 @@ async function handlePlaqueFiles(fileList) {
     await waitFrame();
     if (els.submitNote) els.submitNote.textContent = '';
     openWizard('edit');
+    trackSignStudioEvent('artwork_upload', {
+      product_type: 'plaque',
+      file_type: validation.kind,
+    });
   } catch (error) {
     error.plaqueUploadStage = error.plaqueUploadStage || plaqueUploadStage;
     console.warn(`3D Plaque upload failed while ${plaqueUploadStage}.`, error);
