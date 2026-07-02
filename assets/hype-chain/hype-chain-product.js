@@ -12,6 +12,9 @@ const HYPE_SPINNER_CONNECTOR_ENTRY_CLEARANCE_DROP_Y = -11;
 const HYPE_SPINNER_BASE_FORWARD_DEPTH_OFFSET = 20;
 const HYPE_SPINNER_FIXED_CENTER_LOGO_FORWARD_DEPTH_OFFSET = 20;
 const HYPE_SPINNER_FIXED_CENTER_LOGO_VERTICAL_OFFSET = 0;
+const HYPE_UPLOADED_HOOK_FUSE_RELIEF = 2.8;
+const HYPE_WIDE_LOGO_HOOK_FUSE_RELIEF = 1.8;
+const HYPE_DEFAULT_EXAMPLE_HOOK_FUSE_EXTRA = 2.4;
 const HYPE_PENDANT_FRAME_PADDING = 1.24;
 const HYPE_PENDANT_BOTTOM_SAFE_PADDING = 0.18;
 const HYPE_PENDANT_FIT_RELAX_ZOOM = 2.4;
@@ -2208,7 +2211,7 @@ function makeHypePendantHookMesh(silhouette, bodyMaterial, resources, depth) {
   const xyScale = desiredWidth / Math.max(size.x, 0.001);
   const zScale = (depth * 0.5) / Math.max(size.z, 0.001);
   const hookHeight = size.y * xyScale;
-  const fuseOverlap = clamp(hookHeight * 0.18, 6, 9);
+  const fuseOverlap = getHypePendantHookFuseOverlap(silhouette, hookHeight);
   const hookAnchorY = Number.isFinite(silhouette.hookAnchorY)
     ? silhouette.hookAnchorY
     : (Number.isFinite(silhouette.centerTopY) ? silhouette.centerTopY : silhouette.topY);
@@ -2239,10 +2242,23 @@ function makeHypePendantHookMesh(silhouette, bodyMaterial, resources, depth) {
     width: Number(desiredWidth.toFixed(2)),
     height: Number(hookHeight.toFixed(2)),
     fuseOverlap: Number(fuseOverlap.toFixed(2)),
+    exampleProject: Boolean(state.hype.isExampleProject),
     shortLogoChainDrop: Number(hookGroup.userData.shortLogoChainDrop.toFixed(2)),
     zOffset: Number(hookGroup.position.z.toFixed(2)),
   });
   return hookGroup;
+}
+
+function getHypePendantHookFuseOverlap(silhouette, hookHeight) {
+  const baseOverlap = clamp(hookHeight * 0.18, 6, 9);
+  const bounds = silhouette?.uvBounds || {};
+  const width = Math.max(1, Number(bounds.width) || 1);
+  const height = Math.max(1, Number(bounds.height) || 1);
+  const ratio = height / width;
+  const wideLogoRelief = clamp((0.95 - ratio) / 0.35, 0, 1) * HYPE_WIDE_LOGO_HOOK_FUSE_RELIEF;
+  const exampleDrop = state.hype.isExampleProject ? HYPE_DEFAULT_EXAMPLE_HOOK_FUSE_EXTRA : 0;
+  const uploadedLift = state.hype.isExampleProject ? 0 : HYPE_UPLOADED_HOOK_FUSE_RELIEF + wideLogoRelief;
+  return clamp(baseOverlap + exampleDrop - uploadedLift, 3.4, 12);
 }
 
 function alignHypeChainRigToPendantHook(hookGroup) {
