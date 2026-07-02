@@ -2087,16 +2087,6 @@ function buildPlaqueReliefBufferGeometryFromBuckets(buckets) {
 }
 
 function getUploadedRasterReliefSource(processed) {
-  const map = processed?.plaqueLabelledMap;
-  if (map?.regionIndex && map?.alphaMask && map.width && map.height && map.regions?.length) {
-    return {
-      width: map.width,
-      height: map.height,
-      regionIndex: map.regionIndex,
-      alphaMask: map.alphaMask,
-      regions: map.regions,
-    };
-  }
   if (!processed?.regionIndex || !processed?.alphaMask || !processed.width || !processed.height) return null;
   return {
     width: processed.width,
