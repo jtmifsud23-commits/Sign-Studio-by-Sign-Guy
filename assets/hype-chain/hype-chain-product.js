@@ -2208,7 +2208,7 @@ function makeHypePendantHookMesh(silhouette, bodyMaterial, resources, depth) {
   const xyScale = desiredWidth / Math.max(size.x, 0.001);
   const zScale = (depth * 0.5) / Math.max(size.z, 0.001);
   const hookHeight = size.y * xyScale;
-  const fuseOverlap = Math.min(30, hookHeight * 0.66);
+  const fuseOverlap = clamp(hookHeight * 0.18, 6, 9);
   const hookAnchorY = Number.isFinite(silhouette.hookAnchorY)
     ? silhouette.hookAnchorY
     : (Number.isFinite(silhouette.centerTopY) ? silhouette.centerTopY : silhouette.topY);
@@ -2225,7 +2225,7 @@ function makeHypePendantHookMesh(silhouette, bodyMaterial, resources, depth) {
   const hook = new THREE.Mesh(geometry, hookMaterial);
   hook.name = 'uploadedLogoPendantHook';
   hook.scale.set(xyScale, xyScale, zScale);
-  hook.position.set(0, bodyTopY + hookHeight / 2 - fuseOverlap - 4, 0);
+  hook.position.set(0, bodyTopY + hookHeight / 2 - fuseOverlap, 0);
   hook.renderOrder = 4;
   hook.castShadow = true;
   hook.receiveShadow = true;
@@ -2238,6 +2238,7 @@ function makeHypePendantHookMesh(silhouette, bodyMaterial, resources, depth) {
     extraDrop: Number(extraDrop.toFixed(2)),
     width: Number(desiredWidth.toFixed(2)),
     height: Number(hookHeight.toFixed(2)),
+    fuseOverlap: Number(fuseOverlap.toFixed(2)),
     shortLogoChainDrop: Number(hookGroup.userData.shortLogoChainDrop.toFixed(2)),
     zOffset: Number(hookGroup.position.z.toFixed(2)),
   });

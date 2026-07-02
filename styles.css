@@ -4985,6 +4985,7 @@ body.colour-popover-open .mobile-command-bar {
 }
 
 .wizard-header h2 {
+  color: #fff;
   font-size: 21px;
 }
 
@@ -5108,6 +5109,7 @@ body.colour-popover-open .mobile-command-bar {
   border-left: 1px solid var(--line);
   padding: 18px 16px;
   background: #fff;
+  color: #171717;
 }
 
 .wizard-side h3 {
