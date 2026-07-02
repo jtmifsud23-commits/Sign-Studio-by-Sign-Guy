@@ -3,6 +3,7 @@ import { handleUploadPresigned } from '@vercel/blob/client';
 
 const TEN_MINUTES_MS = 10 * 60 * 1000;
 const MB = 1024 * 1024;
+const UNUSED_WEBHOOK_PUBLIC_KEY = 'sign-studio-presigned-upload-without-callbacks';
 const UPLOAD_RULES = Object.freeze({
   projectFile: {
     allowedContentTypes: ['application/x-signguy+json', 'application/json', 'application/octet-stream'],
@@ -36,9 +37,14 @@ export default async function handler(request) {
 
   try {
     const body = await request.json();
+    if (body?.type !== 'blob.generate-presigned-url') {
+      throw new Error('Unsupported private Blob upload event.');
+    }
     const response = await handleUploadPresigned({
       body,
       request,
+      // The SDK requires this even when no upload-completed callback is configured.
+      webhookPublicKey: process.env.BLOB_WEBHOOK_PUBLIC_KEY || UNUSED_WEBHOOK_PUBLIC_KEY,
       getSignedToken: async (pathname, clientPayload) => {
         const upload = validateUploadRequest(pathname, clientPayload);
         const validUntil = Date.now() + TEN_MINUTES_MS;
