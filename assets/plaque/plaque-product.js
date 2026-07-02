@@ -1876,6 +1876,283 @@ function buildRasterPlaqueSolid(group, processed, bounds, baseThickness) {
   buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness);
 }
 
+function buildUploadedRasterReliefPlaque(group, processed, bounds, baseThickness) {
+  const relief = makeUploadedRasterReliefGeometry(processed, bounds, baseThickness);
+  if (!relief) return false;
+  const mesh = new THREE.Mesh(relief.geometry, relief.materials);
+  mesh.name = 'plaqueUploadedRasterUnifiedRelief';
+  mesh.castShadow = true;
+  mesh.receiveShadow = false;
+  mesh.userData = {
+    uploadedRasterAnchored: true,
+    plaqueReliefMesh: true,
+    layerByMaterialIndex: relief.layerByMaterialIndex,
+    depth: relief.maxDepth,
+    zBase: relief.zBase,
+  };
+  group.add(mesh);
+  group.userData.plaqueMeshes.push(mesh);
+  group.userData.frontArtworkObjects = group.userData.frontArtworkObjects || [];
+  group.userData.frontArtworkObjects.push(mesh);
+  group.userData.topology = relief.topology;
+  group.userData.solidMode = 'uploaded-raster-unified-relief';
+  state.three.resources.push(relief.geometry, ...relief.materials);
+  if (state.plaque.topologyDebug) addPlaqueTopologyDebug(group, relief.topology, bounds);
+  return true;
+}
+
+function makeUploadedRasterReliefGeometry(processed, bounds, baseThickness) {
+  const source = getUploadedRasterReliefSource(processed);
+  if (!source || !bounds?.width || !bounds?.height) return null;
+  const raisedRegions = getPlaqueRaisedRasterRenderRegions(processed);
+  if (!raisedRegions.length) return null;
+  const field = prepareUploadedRasterReliefField(source, getUploadedRasterReliefFieldMaxSide(source));
+  if (!field?.width || !field?.height) return null;
+  const zBase = baseThickness + 0.012;
+  const materials = [];
+  const layerByMaterialIndex = [];
+  const regionLayer = new Map();
+  const regionHeights = new Map();
+  const regionCapMaterial = new Map();
+  const regionSideMaterial = new Map();
+  let maxDepth = 0;
+  raisedRegions.forEach((region, layerIndex) => {
+    const sourceIndex = Number(region.sourceIndex);
+    if (!Number.isFinite(sourceIndex)) return;
+    const depth = clamp(Number(state.plaque.layerDepths[layerIndex]) || getDefaultPlaqueLayerDepth(layerIndex, region), PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
+    const hex = getPlaqueLayerDisplayHex({ type: 'raster', hex: region.hex }, layerIndex);
+    const [capMaterial, sideMaterial] = makePlaqueExtrudeMaterials(hex, { roughness: 0.86 });
+    sideMaterial.side = THREE.DoubleSide;
+    const capMaterialIndex = materials.length;
+    materials.push(capMaterial);
+    layerByMaterialIndex[capMaterialIndex] = layerIndex;
+    const sideMaterialIndex = materials.length;
+    materials.push(sideMaterial);
+    layerByMaterialIndex[sideMaterialIndex] = layerIndex;
+    regionLayer.set(sourceIndex, layerIndex);
+    regionHeights.set(sourceIndex, zBase + depth);
+    regionCapMaterial.set(sourceIndex, capMaterialIndex);
+    regionSideMaterial.set(sourceIndex, sideMaterialIndex);
+    maxDepth = Math.max(maxDepth, depth);
+  });
+  if (!regionLayer.size) {
+    materials.forEach((material) => material.dispose?.());
+    return null;
+  }
+  const buckets = new Map();
+  const topology = {
+    topFaces: 0,
+    sideFaces: 0,
+    bottomFaces: 0,
+    solidCells: 0,
+    openEdges: 0,
+    shells: 1,
+    pipeline: 'uploaded-raster-unified-heightfield',
+  };
+  const getBucket = (materialIndex) => {
+    if (!buckets.has(materialIndex)) buckets.set(materialIndex, []);
+    return buckets.get(materialIndex);
+  };
+  const xAt = (x) => bounds.minX + (x / field.width) * bounds.width;
+  const yAt = (y) => bounds.maxY - (y / field.height) * bounds.height;
+  const cellAt = (x, y) => {
+    if (x < 0 || y < 0 || x >= field.width || y >= field.height) return -1;
+    return field.cells[y * field.width + x];
+  };
+  const heightForRegion = (region) => (regionHeights.has(region) ? regionHeights.get(region) : zBase);
+  const layerForRegion = (region) => (regionLayer.has(region) ? regionLayer.get(region) : -1);
+  const pushQuad = (materialIndex, a, b, c, d) => {
+    const bucket = getBucket(materialIndex);
+    bucket.push(
+      a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2],
+      a[0], a[1], a[2], c[0], c[1], c[2], d[0], d[1], d[2],
+    );
+  };
+  for (let y = 0; y < field.height; y += 1) {
+    let x = 0;
+    while (x < field.width) {
+      const region = cellAt(x, y);
+      const materialIndex = regionCapMaterial.get(region);
+      if (!Number.isFinite(materialIndex)) {
+        x += 1;
+        continue;
+      }
+      let endX = x + 1;
+      while (endX < field.width && cellAt(endX, y) === region) endX += 1;
+      const z = heightForRegion(region);
+      pushQuad(
+        materialIndex,
+        [xAt(x), yAt(y + 1), z],
+        [xAt(endX), yAt(y + 1), z],
+        [xAt(endX), yAt(y), z],
+        [xAt(x), yAt(y), z],
+      );
+      topology.topFaces += 2;
+      topology.solidCells += endX - x;
+      x = endX;
+    }
+  }
+  const makeWall = (regionA, regionB) => {
+    const heightA = heightForRegion(regionA);
+    const heightB = heightForRegion(regionB);
+    if (Math.abs(heightA - heightB) < 0.001) return null;
+    const highRegion = heightA > heightB ? regionA : regionB;
+    const layerIndex = layerForRegion(highRegion);
+    if (layerIndex < 0) return null;
+    return {
+      materialIndex: regionSideMaterial.get(highRegion),
+      zTop: Math.max(heightA, heightB),
+      zBottom: Math.min(heightA, heightB),
+    };
+  };
+  const sameWall = (a, b) => Boolean(a && b
+    && a.materialIndex === b.materialIndex
+    && Math.abs(a.zTop - b.zTop) < 0.001
+    && Math.abs(a.zBottom - b.zBottom) < 0.001);
+  for (let edgeX = 0; edgeX <= field.width; edgeX += 1) {
+    let y = 0;
+    while (y < field.height) {
+      const wall = makeWall(cellAt(edgeX - 1, y), cellAt(edgeX, y));
+      if (!wall) {
+        y += 1;
+        continue;
+      }
+      let endY = y + 1;
+      while (endY < field.height && sameWall(wall, makeWall(cellAt(edgeX - 1, endY), cellAt(edgeX, endY)))) endY += 1;
+      const x = xAt(edgeX);
+      pushQuad(
+        wall.materialIndex,
+        [x, yAt(endY), wall.zBottom],
+        [x, yAt(endY), wall.zTop],
+        [x, yAt(y), wall.zTop],
+        [x, yAt(y), wall.zBottom],
+      );
+      topology.sideFaces += 2;
+      if (edgeX === 0 || edgeX === field.width) topology.openEdges += endY - y;
+      y = endY;
+    }
+  }
+  for (let edgeY = 0; edgeY <= field.height; edgeY += 1) {
+    let x = 0;
+    while (x < field.width) {
+      const wall = makeWall(cellAt(x, edgeY - 1), cellAt(x, edgeY));
+      if (!wall) {
+        x += 1;
+        continue;
+      }
+      let endX = x + 1;
+      while (endX < field.width && sameWall(wall, makeWall(cellAt(endX, edgeY - 1), cellAt(endX, edgeY)))) endX += 1;
+      const y = yAt(edgeY);
+      pushQuad(
+        wall.materialIndex,
+        [xAt(x), y, wall.zBottom],
+        [xAt(endX), y, wall.zBottom],
+        [xAt(endX), y, wall.zTop],
+        [xAt(x), y, wall.zTop],
+      );
+      topology.sideFaces += 2;
+      if (edgeY === 0 || edgeY === field.height) topology.openEdges += endX - x;
+      x = endX;
+    }
+  }
+  const geometry = buildPlaqueReliefBufferGeometryFromBuckets(buckets);
+  if (!geometry) {
+    materials.forEach((material) => material.dispose?.());
+    return null;
+  }
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return { geometry, materials, layerByMaterialIndex, topology, zBase, maxDepth };
+}
+
+function buildPlaqueReliefBufferGeometryFromBuckets(buckets) {
+  const sortedBuckets = [...buckets.entries()].sort((a, b) => a[0] - b[0]);
+  const positionLength = sortedBuckets.reduce((sum, [, positions]) => sum + positions.length, 0);
+  if (!positionLength) return null;
+  const geometry = new THREE.BufferGeometry();
+  const positions = new Float32Array(positionLength);
+  let offset = 0;
+  let vertexOffset = 0;
+  sortedBuckets.forEach(([materialIndex, bucket]) => {
+    if (!bucket.length) return;
+    positions.set(bucket, offset);
+    offset += bucket.length;
+    const vertexCount = bucket.length / 3;
+    geometry.addGroup(vertexOffset, vertexCount, materialIndex);
+    vertexOffset += vertexCount;
+  });
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  return geometry;
+}
+
+function getUploadedRasterReliefSource(processed) {
+  const map = processed?.plaqueLabelledMap;
+  if (map?.regionIndex && map?.alphaMask && map.width && map.height && map.regions?.length) {
+    return {
+      width: map.width,
+      height: map.height,
+      regionIndex: map.regionIndex,
+      alphaMask: map.alphaMask,
+      regions: map.regions,
+    };
+  }
+  if (!processed?.regionIndex || !processed?.alphaMask || !processed.width || !processed.height) return null;
+  return {
+    width: processed.width,
+    height: processed.height,
+    regionIndex: processed.regionIndex,
+    alphaMask: processed.alphaMask,
+    regions: processed.colours || [],
+  };
+}
+
+function getUploadedRasterReliefFieldMaxSide(source) {
+  const side = Math.max(source?.width || 0, source?.height || 0);
+  if (side >= 1700) return 620;
+  if (side >= 1000) return 680;
+  return 720;
+}
+
+function prepareUploadedRasterReliefField(source, maxSide = 680) {
+  const scale = Math.min(1, maxSide / Math.max(source.width, source.height));
+  const width = Math.max(12, Math.round(source.width * scale));
+  const height = Math.max(12, Math.round(source.height * scale));
+  const cells = new Int16Array(width * height);
+  cells.fill(-1);
+  const samples = [
+    [0.5, 0.5],
+    [0.25, 0.25],
+    [0.75, 0.25],
+    [0.25, 0.75],
+    [0.75, 0.75],
+  ];
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const counts = new Map();
+      samples.forEach(([offsetX, offsetY]) => {
+        const sx = clamp(Math.floor(((x + offsetX) / width) * source.width), 0, source.width - 1);
+        const sy = clamp(Math.floor(((y + offsetY) / height) * source.height), 0, source.height - 1);
+        const sourceIndex = sy * source.width + sx;
+        if (!source.alphaMask[sourceIndex]) return;
+        const region = source.regionIndex[sourceIndex];
+        if (!Number.isFinite(region) || region < 0) return;
+        counts.set(region, (counts.get(region) || 0) + 1);
+      });
+      let bestRegion = -1;
+      let bestCount = 0;
+      counts.forEach((count, region) => {
+        if (count > bestCount) {
+          bestCount = count;
+          bestRegion = region;
+        }
+      });
+      if (bestRegion >= 0) cells[y * width + x] = bestRegion;
+    }
+  }
+  return { width, height, cells };
+}
+
 function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
   const resources = state.three.resources;
   const previewQuality = getPlaqueRasterPreviewQuality(processed);
@@ -1909,8 +2186,9 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
   backingGroup.add(baseMesh);
   group.add(backingGroup);
   resources.push(baseGeometry, baseMaterial);
-  const renderRegions = getPlaqueRaisedRasterRenderRegions(processed);
   const isUploadedRasterPlaque = shouldUseUploadedRasterPlaqueHierarchy();
+  if (isUploadedRasterPlaque && buildUploadedRasterReliefPlaque(group, processed, bounds, baseThickness)) return;
+  const renderRegions = getPlaqueRaisedRasterRenderRegions(processed);
   const topology = {
     topFaces: 0,
     sideFaces: 0,
@@ -5001,6 +5279,18 @@ function getUploadedRasterPlaqueHierarchy(processed, regions) {
 function getUploadedRasterBackingRegionIndex(infos) {
   if (!infos?.length) return -1;
   const hasLogoColour = infos.some((info) => !info.isNearWhite && info.chroma >= 42 && info.share >= 0.035);
+  const lightBody = infos
+    .filter((info) => (
+      info.isNearWhite
+      && hasLogoColour
+      && (info.share >= 0.18 || (info.isEdge && info.share >= 0.08))
+    ))
+    .sort((a, b) => {
+      const aScore = a.share * 5 + (a.isEdge ? 1.2 : 0) - a.chroma / 255;
+      const bScore = b.share * 5 + (b.isEdge ? 1.2 : 0) - b.chroma / 255;
+      return bScore - aScore;
+    })[0];
+  if (lightBody) return lightBody.index;
   const backing = infos
     .filter((info) => (
       info.isNearWhite
@@ -5009,7 +5299,11 @@ function getUploadedRasterBackingRegionIndex(infos) {
       && info.share >= 0.5
     ))
     .sort((a, b) => b.share - a.share)[0];
-  return backing ? backing.index : -1;
+  if (backing) return backing.index;
+  const edgeBody = infos
+    .filter((info) => info.isEdge && info.share >= 0.16)
+    .sort((a, b) => b.share - a.share)[0];
+  return edgeBody ? edgeBody.index : -1;
 }
 
 function getUploadedRasterBodyRegionInfo(candidates, edgeIndex) {
