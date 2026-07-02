@@ -1719,8 +1719,8 @@ function buildFastRaisedRasterPlaquePreview(group, processed, bounds, baseThickn
     ? makeRasterPlaqueExactArtworkSurface(processed, bounds, maxLayerDepth)
     : null;
   if (exactArtwork) {
-    exactArtwork.position.z = baseThickness + maxLayerDepth + 0.035;
-    exactArtwork.renderOrder = 220;
+    exactArtwork.position.z = getRasterPlaqueArtworkSurfaceZ(baseThickness);
+    exactArtwork.renderOrder = 9;
     group.add(exactArtwork);
     group.userData.frontArtworkObjects.push(exactArtwork);
     resources.push(exactArtwork.geometry, exactArtwork.material.map, exactArtwork.material);
@@ -2025,8 +2025,8 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
     ? makeRasterPlaqueExactArtworkSurface(processed, bounds, maxLayerDepth)
     : null;
   if (exactArtwork) {
-    exactArtwork.position.z = baseThickness + maxLayerDepth + 0.035;
-    exactArtwork.renderOrder = 220;
+    exactArtwork.position.z = getRasterPlaqueArtworkSurfaceZ(baseThickness);
+    exactArtwork.renderOrder = 9;
     group.add(exactArtwork);
     group.userData.frontArtworkObjects = group.userData.frontArtworkObjects || [];
     group.userData.frontArtworkObjects.push(exactArtwork);
@@ -2045,6 +2045,10 @@ function shouldRenderRasterPlaqueArtworkSurface(processed) {
     && state.artwork?.type !== 'svg'
     && state.plaque.hideTopTexture !== true
   );
+}
+
+function getRasterPlaqueArtworkSurfaceZ(baseThickness) {
+  return (Number(baseThickness) || PLAQUE_DEFAULT_BASE_THICKNESS) + 0.035;
 }
 
 function preparePlaqueSolidField(processed, maxSide = 380) {
@@ -5056,10 +5060,7 @@ function updatePlaqueTextureFallbackDepth() {
   const overlay = group.getObjectByName?.('plaqueExactArtworkSurface');
   if (!overlay) return;
   const baseThickness = Number(group.userData?.plaqueBaseThickness) || 0;
-  const maxDepth = (group.userData?.plaqueMeshes || []).reduce((max, layerGroup) => {
-    return Math.max(max, Number(layerGroup?.userData?.depth) || 0);
-  }, 0);
-  overlay.position.z = baseThickness + maxDepth + 0.035;
+  overlay.position.z = getRasterPlaqueArtworkSurfaceZ(baseThickness);
 }
 
 function getPlaqueLayerDepthForIndex(index) {
