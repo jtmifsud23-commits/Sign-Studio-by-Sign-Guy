@@ -1935,6 +1935,7 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
       index,
       material,
       zBase: rasterLayerZBase,
+      openBack: isUploadedRasterPlaque,
       uploadedRasterAnchored: isUploadedRasterPlaque,
       cacheOwner: region.sourceRegion || region,
       ...previewQuality,
@@ -2066,7 +2067,8 @@ function getUploadedRasterPlaqueDefaultBackingHex(processed) {
       isNearWhite: isNearWhiteHex(hex),
     };
   });
-  const backingIndex = getUploadedRasterBackingRegionIndex(infos);
+  const hasBackingOverride = Boolean(state.plaque.backingColourOverride);
+  const backingIndex = hasBackingOverride ? -1 : getUploadedRasterBackingRegionIndex(infos);
   if (backingIndex >= 0 && regions[backingIndex]) return normalizeHex(regions[backingIndex].hex);
   const whiteRegion = infos
     .filter((info) => info.isNearWhite && info.share >= 0.035)
@@ -3381,6 +3383,7 @@ function buildRasterPlaqueContourGroup(mask, width, height, bounds, options) {
       sideNormalBucketSize: options.preserveTextCorners ? 0.34 : 0.56,
       sideNormalBucketRadius: options.preserveTextCorners ? 1 : 2,
       sideNormalAngleDotMin: options.preserveTextCorners ? 0.72 : 0.42,
+      openBack: Boolean(options.openBack),
     });
     const mesh = new THREE.Mesh(geometry, options.material);
     mesh.name = `plaqueLayer${options.index}Shape${shapeIndex}`;
@@ -3417,8 +3420,9 @@ function makeCachedPlaqueExtrudeGeometry(shape, options = {}) {
     template.computeVertexNormals();
     templateMap.set(templateKey, template);
   }
-  const geometry = template.clone();
+  let geometry = template.clone();
   setPlaqueGeometryDepth(geometry, 0, 1, depth, zBase);
+  if (options.openBack) geometry = removePlaqueRearCapFaces(geometry, zBase);
   geometry.computeVertexNormals();
   const sideNormalOptions = {
     sideNormalBucketSize: Number(options.sideNormalBucketSize) || 0.56,
@@ -3428,6 +3432,61 @@ function makeCachedPlaqueExtrudeGeometry(shape, options = {}) {
   smoothPlaqueBackingSideNormals(geometry, depth, zBase, zBase + depth, sideNormalOptions);
   geometry.userData.plaqueSideNormalOptions = sideNormalOptions;
   return geometry;
+}
+
+function removePlaqueRearCapFaces(geometry, zBase, tolerance = 0.002) {
+  if (!geometry?.attributes?.position) return geometry;
+  const source = geometry.index ? geometry.toNonIndexed() : geometry.clone();
+  const position = source.attributes.position;
+  const uv = source.attributes.uv;
+  const materialIndices = new Int16Array(position.count);
+  if (Array.isArray(source.groups) && source.groups.length) {
+    source.groups.forEach((group) => {
+      const start = Math.max(0, Number(group.start) || 0);
+      const end = Math.min(position.count, start + (Number(group.count) || 0));
+      const materialIndex = Number(group.materialIndex) || 0;
+      for (let vertex = start; vertex < end; vertex += 1) materialIndices[vertex] = materialIndex;
+    });
+  }
+  const buckets = new Map();
+  const getBucket = (materialIndex) => {
+    if (!buckets.has(materialIndex)) buckets.set(materialIndex, { positions: [], uvs: [] });
+    return buckets.get(materialIndex);
+  };
+  const isRearVertex = (vertex) => Math.abs(position.getZ(vertex) - zBase) <= tolerance;
+  for (let vertex = 0; vertex + 2 < position.count; vertex += 3) {
+    if (isRearVertex(vertex) && isRearVertex(vertex + 1) && isRearVertex(vertex + 2)) continue;
+    const bucket = getBucket(materialIndices[vertex] || 0);
+    for (let point = vertex; point < vertex + 3; point += 1) {
+      bucket.positions.push(position.getX(point), position.getY(point), position.getZ(point));
+      if (uv) bucket.uvs.push(uv.getX(point), uv.getY(point));
+    }
+  }
+  const sortedBuckets = [...buckets.entries()].sort((a, b) => a[0] - b[0]);
+  const positions = [];
+  const uvs = [];
+  let vertexOffset = 0;
+  const next = new THREE.BufferGeometry();
+  sortedBuckets.forEach(([materialIndex, bucket]) => {
+    if (!bucket.positions.length) return;
+    positions.push(...bucket.positions);
+    if (uv) uvs.push(...bucket.uvs);
+    const vertexCount = bucket.positions.length / 3;
+    next.addGroup(vertexOffset, vertexCount, materialIndex);
+    vertexOffset += vertexCount;
+  });
+  source.dispose?.();
+  if (!positions.length) {
+    next.dispose?.();
+    return geometry;
+  }
+  geometry.dispose?.();
+  next.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  if (uv && uvs.length) next.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  next.computeVertexNormals();
+  next.computeBoundingBox();
+  next.computeBoundingSphere();
+  return next;
 }
 
 function makePlaqueExtrudeTemplateKey(options = {}) {
@@ -4892,7 +4951,14 @@ function getUploadedRasterPlaqueHierarchy(processed, regions) {
       isNearBlack: isNearBlackHex(hex),
     };
   });
-  const candidates = infos.filter((info) => info.count > 0);
+  const hasBackingOverride = Boolean(state.plaque.backingColourOverride);
+  const backingIndex = hasBackingOverride ? -1 : getUploadedRasterBackingRegionIndex(infos);
+  const backingHex = normalizeHex(getPlaqueBackingHex(processed));
+  const candidates = infos.filter((info) => {
+    if (info.count <= 0) return false;
+    if (backingIndex >= 0) return info.index !== backingIndex;
+    return normalizeHex(info.hex) !== backingHex;
+  });
   if (!candidates.length) return [];
   const bodyInfo = getUploadedRasterBodyRegionInfo(candidates, edgeIndex);
   const roleRank = {
