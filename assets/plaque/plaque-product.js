@@ -347,7 +347,7 @@ async function handlePlaqueFiles(fileList) {
       activatePlaqueArtworkState();
       syncColorOverrides();
       renderPreview();
-      renderDiagnostics();
+      renderPlaqueDiagnostics();
       updateProjectControls();
       setStatus('Ready');
     }
@@ -925,7 +925,7 @@ async function reprocessPlaqueArtwork(options = {}) {
     if (uploadCacheContext?.key) {
       queueUploadedPlaqueProcessedCacheWrite(uploadCacheContext, state.plaque.processed);
     }
-    renderDiagnostics();
+    renderPlaqueDiagnostics();
     if (els.submitDesign) els.submitDesign.disabled = true;
     updateProjectControls();
     setStatus('Ready');
