@@ -816,20 +816,25 @@ function buildHypeThreeModel() {
   chainRig.add(connectorEntryLinks);
 
   if (!isSpinner) {
+    const isUploadedLogoPendant = Boolean(state.hype.logoDataUrl);
     const connector = new THREE.Mesh(connectorGeometry, connectorMaterial);
     connector.name = 'stlFusedThreeWayChainConnector';
     connector.position.set(0, -106, 0);
     connector.castShadow = true;
     connector.receiveShadow = true;
+    connector.visible = !isUploadedLogoPendant;
+    connector.userData.uploadedLogoAlignmentProxy = isUploadedLogoPendant;
     chainRig.add(connector);
 
     const attachmentLink = new THREE.Mesh(linkGeometry, attachmentMaterial);
     attachmentLink.name = 'pendantAttachmentLink';
-    attachmentLink.position.set(0, state.hype.logoDataUrl ? -140 : -137, state.hype.logoDataUrl ? -2 : 4);
+    attachmentLink.position.set(0, isUploadedLogoPendant ? -140 : -137, isUploadedLogoPendant ? -2 : 4);
     attachmentLink.rotation.z = Math.PI / 2;
     attachmentLink.rotation.y = THREE.Math.degToRad(68);
     attachmentLink.castShadow = true;
     attachmentLink.receiveShadow = true;
+    attachmentLink.visible = !isUploadedLogoPendant;
+    attachmentLink.userData.uploadedLogoAlignmentProxy = isUploadedLogoPendant;
     chainRig.add(attachmentLink);
   }
   group.add(chainRig);
