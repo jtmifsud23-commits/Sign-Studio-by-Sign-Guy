@@ -3463,26 +3463,35 @@ function removePlaqueRearCapFaces(geometry, zBase, tolerance = 0.002) {
     }
   }
   const sortedBuckets = [...buckets.entries()].sort((a, b) => a[0] - b[0]);
-  const positions = [];
-  const uvs = [];
+  const positionLength = sortedBuckets.reduce((sum, [, bucket]) => sum + bucket.positions.length, 0);
+  const uvLength = uv ? sortedBuckets.reduce((sum, [, bucket]) => sum + bucket.uvs.length, 0) : 0;
   let vertexOffset = 0;
   const next = new THREE.BufferGeometry();
+  if (!positionLength) {
+    source.dispose?.();
+    next.dispose?.();
+    return geometry;
+  }
+  const positions = new Float32Array(positionLength);
+  const uvs = uv && uvLength ? new Float32Array(uvLength) : null;
+  let positionOffset = 0;
+  let uvOffset = 0;
   sortedBuckets.forEach(([materialIndex, bucket]) => {
     if (!bucket.positions.length) return;
-    positions.push(...bucket.positions);
-    if (uv) uvs.push(...bucket.uvs);
+    positions.set(bucket.positions, positionOffset);
+    positionOffset += bucket.positions.length;
+    if (uvs) {
+      uvs.set(bucket.uvs, uvOffset);
+      uvOffset += bucket.uvs.length;
+    }
     const vertexCount = bucket.positions.length / 3;
     next.addGroup(vertexOffset, vertexCount, materialIndex);
     vertexOffset += vertexCount;
   });
   source.dispose?.();
-  if (!positions.length) {
-    next.dispose?.();
-    return geometry;
-  }
   geometry.dispose?.();
   next.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  if (uv && uvs.length) next.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  if (uvs) next.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   next.computeVertexNormals();
   next.computeBoundingBox();
   next.computeBoundingSphere();
@@ -4921,10 +4930,13 @@ function getPlaqueRaisedRasterRenderRegions(processed) {
 }
 
 function shouldUseUploadedRasterPlaqueHierarchy() {
+  const hasUploadedFile = Boolean(state.uploadedFile || state.plaque.uploadedFile);
   return Boolean(
     state.productType === 'plaque'
     && state.artwork?.type !== 'svg'
     && !state.isDefaultPreview
+    && !state.plaque.isExampleProject
+    && hasUploadedFile
   );
 }
 
