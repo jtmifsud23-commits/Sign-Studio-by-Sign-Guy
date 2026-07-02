@@ -15,13 +15,14 @@ const TO_EMAIL = 'Hey@MySignGuy.ca';
 const ORDER_SUBJECT = 'User placed a lightbox order';
 const FILE_KINDS = ['projectFile', 'logoPreview', 'logo', 'renderScreenshot1', 'renderScreenshot2'];
 
-export default async function handler(request) {
-  if (request.method !== 'POST') {
-    return Response.json({ error: 'Method not allowed' }, { status: 405, headers: { Allow: 'POST' } });
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
   }
-
   try {
-    const payload = await request.json();
+    const payload = await readJsonBody(req);
     const submission = validateSubmission(payload);
     let emailSent = false;
 
@@ -30,7 +31,7 @@ export default async function handler(request) {
       emailSent = true;
     }
 
-    return Response.json({
+    res.status(200).json({
       ok: true,
       folder: `orders/${submission.orderId}`,
       files: submission.files.map((file) => file.filename),
@@ -38,8 +39,33 @@ export default async function handler(request) {
     });
   } catch (error) {
     console.error('Could not finalize private Blob submission.', error);
-    return Response.json({ error: 'Could not save project files or send the order email.' }, { status: 500 });
+    res.status(500).json({
+      error: 'Could not save project files or send the order email.',
+      detail: error?.message || 'Unknown save error.',
+    });
   }
+}
+
+function readJsonBody(req) {
+  if (req.body && typeof req.body === 'object') return Promise.resolve(req.body);
+  if (typeof req.json === 'function') return req.json();
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', (chunk) => {
+      body += chunk;
+      if (body.length > 1024 * 1024) {
+        reject(new Error('Request body is too large.'));
+      }
+    });
+    req.on('end', () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch (error) {
+        reject(error);
+      }
+    });
+    req.on('error', reject);
+  });
 }
 
 function validateSubmission(payload) {

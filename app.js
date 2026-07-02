@@ -7346,7 +7346,7 @@ async function saveProjectFile() {
     console.error(error);
     els.projectNote.textContent = isLocalTesting()
       ? 'Could not download this .SignGuy file.'
-      : 'Could not save this project folder on the server.';
+      : formatSaveFailureMessage(error, 'Could not save this project folder on the server.');
     setStatus('Save failed');
   } finally {
     updateProjectControls();
@@ -7925,7 +7925,7 @@ async function uploadProjectFolder(project, options = {}) {
     } catch {
       detail = '';
     }
-    throw new Error(`Project save endpoint returned ${response.status}${detail ? `: ${detail.slice(0, 160)}` : ''}`);
+    throw new Error(`Project save endpoint returned ${response.status}${detail ? `: ${extractServerErrorDetail(detail).slice(0, 220)}` : ''}`);
   }
   try {
     return await response.json();
@@ -7959,6 +7959,38 @@ async function uploadPrivateBlobAsset({ orderId, asset, endpoint }) {
   } catch (error) {
     throw new Error(`Private Blob upload failed for ${filename}: ${error?.message || 'Unknown upload error'}`);
   }
+}
+
+function extractServerErrorDetail(detail) {
+  const text = String(detail || '').trim();
+  if (!text) return '';
+  try {
+    const payload = JSON.parse(text);
+    return String(payload.detail || payload.error || text).trim();
+  } catch {
+    return text.replace(/\s+/g, ' ').trim();
+  }
+}
+
+function formatSaveFailureMessage(error, fallback) {
+  const message = String(error?.message || '').trim();
+  if (!message) return fallback;
+  if (/No blob credentials|BLOB_READ_WRITE_TOKEN|VERCEL_OIDC_TOKEN|BLOB_STORE_ID/i.test(message)) {
+    return `${fallback} Blob storage is not configured on the server.`;
+  }
+  if (/FUNCTION_INVOCATION_FAILED|server error has occurred/i.test(message)) {
+    return `${fallback} The save API crashed on the server.`;
+  }
+  if (/Private Blob upload failed/i.test(message)) {
+    return `${fallback} ${message.replace(/^Private Blob upload failed for\s+/i, 'Upload failed for ')}`;
+  }
+  if (/Project save endpoint returned/i.test(message)) {
+    return `${fallback} ${message}`;
+  }
+  if (/Failed to fetch/i.test(message)) {
+    return `${fallback} Could not reach the save server.`;
+  }
+  return `${fallback} ${message}`;
 }
 
 function makeBlobUploadId(projectId) {

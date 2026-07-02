@@ -7610,7 +7610,9 @@ output,
 .project-section,
 .hype-spinner-section,
 .hype-style-panel,
+.plaque-upload-section,
 .plaque-options-section,
+.plaque-layer-section,
 .plaque-layer-controls,
 .plate-card,
 .hype-colour-row,
@@ -7832,6 +7834,20 @@ output,
   box-shadow:
     0 0 0 2px rgba(0, 0, 0, 0.38),
     0 6px 14px rgba(0, 0, 0, 0.28);
+}
+
+.plaque-upload-section .upload-helper-text,
+.plaque-layer-section .plate-empty {
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.plaque-layer-section .plate-empty {
+  min-height: 46px;
+  margin: 0;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.035);
 }
 
 .hype-spinner-font-menu,

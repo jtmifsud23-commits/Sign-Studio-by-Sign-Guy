@@ -1,5 +1,5 @@
 import { issueSignedToken } from '@vercel/blob';
-import { handleUploadPresigned } from '@vercel/blob/client';
+import { handleUpload, handleUploadPresigned } from '@vercel/blob/client';
 
 const TEN_MINUTES_MS = 10 * 60 * 1000;
 const MB = 1024 * 1024;
@@ -27,29 +27,46 @@ const UPLOAD_RULES = Object.freeze({
   },
 });
 
-export default async function handler(request) {
-  if (request.method !== 'POST') {
-    return Response.json({ error: 'Method not allowed' }, { status: 405, headers: { Allow: 'POST' } });
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST');
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
   }
-  if (!isSameOriginRequest(request)) {
-    return Response.json({ error: 'Cross-origin uploads are not allowed.' }, { status: 403 });
-  }
-
   try {
-    const body = await request.json();
+    if (!isSameOriginRequest(req)) {
+      res.status(403).json({ error: 'Cross-origin uploads are not allowed.' });
+      return;
+    }
+
+    const body = await readJsonBody(req);
+    if (body?.type === 'blob.generate-client-token') {
+      const response = await handleUpload({
+        body,
+        request: req,
+        onBeforeGenerateToken: async (pathname, clientPayload) => {
+          const upload = validateUploadRequest(pathname, clientPayload);
+          return makeUploadTokenOptions(upload);
+        },
+      });
+
+      res.status(200).json(response);
+      return;
+    }
+
     if (body?.type !== 'blob.generate-presigned-url') {
       throw new Error('Unsupported private Blob upload event.');
     }
     const response = await handleUploadPresigned({
       body,
-      request,
+      request: req,
       // The SDK requires this even when no upload-completed callback is configured.
       webhookPublicKey: process.env.BLOB_WEBHOOK_PUBLIC_KEY || UNUSED_WEBHOOK_PUBLIC_KEY,
       getSignedToken: async (pathname, clientPayload) => {
         const upload = validateUploadRequest(pathname, clientPayload);
         const validUntil = Date.now() + TEN_MINUTES_MS;
         const token = await issueSignedToken({
-          pathname,
+          pathname: '*',
           operations: ['put'],
           allowedContentTypes: upload.rule.allowedContentTypes,
           maximumSizeInBytes: upload.rule.maximumSizeInBytes,
@@ -71,11 +88,24 @@ export default async function handler(request) {
       },
     });
 
-    return Response.json(response);
+    res.status(200).json(response);
   } catch (error) {
     console.error('Could not authorize private Blob upload.', error);
-    return Response.json({ error: error?.message || 'Could not authorize upload.' }, { status: 400 });
+    res.status(400).json({ error: error?.message || 'Could not authorize upload.' });
   }
+}
+
+function makeUploadTokenOptions(upload) {
+  const validUntil = Date.now() + TEN_MINUTES_MS;
+  return {
+    allowedContentTypes: upload.rule.allowedContentTypes,
+    maximumSizeInBytes: upload.rule.maximumSizeInBytes,
+    validUntil,
+    addRandomSuffix: true,
+    allowOverwrite: false,
+    cacheControlMaxAge: 60 * 60,
+    tokenPayload: JSON.stringify({ orderId: upload.orderId, kind: upload.kind }),
+  };
 }
 
 function validateUploadRequest(pathname, clientPayload) {
@@ -100,13 +130,40 @@ function validateUploadRequest(pathname, clientPayload) {
 }
 
 function isSameOriginRequest(request) {
-  const origin = request.headers.get('origin');
+  const origin = getHeader(request, 'origin');
   if (!origin) return true;
-  const forwardedHost = request.headers.get('x-forwarded-host');
-  const host = forwardedHost || request.headers.get('host');
+  const forwardedHost = getHeader(request, 'x-forwarded-host');
+  const host = forwardedHost || getHeader(request, 'host');
   try {
     return Boolean(host && new URL(origin).host === host);
   } catch {
     return false;
   }
+}
+
+function getHeader(request, name) {
+  if (typeof request.headers?.get === 'function') return request.headers.get(name);
+  return request.headers?.[name.toLowerCase()] || request.headers?.[name] || '';
+}
+
+function readJsonBody(req) {
+  if (req.body && typeof req.body === 'object') return Promise.resolve(req.body);
+  if (typeof req.json === 'function') return req.json();
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', (chunk) => {
+      body += chunk;
+      if (body.length > 1024 * 1024) {
+        reject(new Error('Request body is too large.'));
+      }
+    });
+    req.on('end', () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch (error) {
+        reject(error);
+      }
+    });
+    req.on('error', reject);
+  });
 }

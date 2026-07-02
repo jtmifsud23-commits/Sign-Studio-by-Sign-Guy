@@ -3148,7 +3148,7 @@ async function saveHypeChainProjectFile() {
     });
   } catch (error) {
     console.error(error);
-    els.projectNote.textContent = 'Could not save this Hype Chain design.';
+    els.projectNote.textContent = formatSaveFailureMessage(error, 'Could not save this Hype Chain design.');
     setStatus('Save failed');
   } finally {
     updateProjectControls();
