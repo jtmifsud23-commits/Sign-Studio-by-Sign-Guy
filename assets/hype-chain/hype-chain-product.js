@@ -15,6 +15,8 @@ const HYPE_SPINNER_FIXED_CENTER_LOGO_VERTICAL_OFFSET = 0;
 const HYPE_UPLOADED_TOP_HOOK_BASE_WIDTH = 26;
 const HYPE_UPLOADED_TOP_HOOK_TUBE_RADIUS = 2.6;
 const HYPE_UPLOADED_TOP_HOOK_TOP_INSET = 1.8;
+const HYPE_UPLOADED_TOP_HOOK_MAX_CENTER_DROP = 18;
+const HYPE_UPLOADED_TOP_HOOK_MAX_CENTER_DROP_RATIO = 0.16;
 const HYPE_PENDANT_FRAME_PADDING = 1.24;
 const HYPE_PENDANT_BOTTOM_SAFE_PADDING = 0.18;
 const HYPE_PENDANT_FIT_RELAX_ZOOM = 2.4;
@@ -816,25 +818,20 @@ function buildHypeThreeModel() {
   chainRig.add(connectorEntryLinks);
 
   if (!isSpinner) {
-    const isUploadedLogoPendant = Boolean(state.hype.logoDataUrl);
     const connector = new THREE.Mesh(connectorGeometry, connectorMaterial);
     connector.name = 'stlFusedThreeWayChainConnector';
     connector.position.set(0, -106, 0);
     connector.castShadow = true;
     connector.receiveShadow = true;
-    connector.visible = !isUploadedLogoPendant;
-    connector.userData.uploadedLogoAlignmentProxy = isUploadedLogoPendant;
     chainRig.add(connector);
 
     const attachmentLink = new THREE.Mesh(linkGeometry, attachmentMaterial);
     attachmentLink.name = 'pendantAttachmentLink';
-    attachmentLink.position.set(0, isUploadedLogoPendant ? -140 : -137, isUploadedLogoPendant ? -2 : 4);
+    attachmentLink.position.set(0, state.hype.logoDataUrl ? -140 : -137, state.hype.logoDataUrl ? -2 : 4);
     attachmentLink.rotation.z = Math.PI / 2;
     attachmentLink.rotation.y = THREE.Math.degToRad(68);
     attachmentLink.castShadow = true;
     attachmentLink.receiveShadow = true;
-    attachmentLink.visible = !isUploadedLogoPendant;
-    attachmentLink.userData.uploadedLogoAlignmentProxy = isUploadedLogoPendant;
     chainRig.add(attachmentLink);
   }
   group.add(chainRig);
@@ -2267,9 +2264,21 @@ function makeHypeUploadedTopHookGeometry() {
 }
 
 function getHypePendantTopCenterY(silhouette) {
-  if (Number.isFinite(silhouette?.centerTopY)) return silhouette.centerTopY;
-  if (Number.isFinite(silhouette?.topY)) return silhouette.topY;
-  if (Number.isFinite(silhouette?.hookAnchorY)) return silhouette.hookAnchorY;
+  const topY = Number.isFinite(silhouette?.topY) ? silhouette.topY : NaN;
+  const candidate = Number.isFinite(silhouette?.hookAnchorY)
+    ? silhouette.hookAnchorY
+    : (Number.isFinite(silhouette?.centerTopY) ? silhouette.centerTopY : topY);
+  if (Number.isFinite(topY) && Number.isFinite(candidate)) {
+    const height = Math.max(1, Number(silhouette?.uvBounds?.height) || 1);
+    const maxDrop = clamp(
+      height * HYPE_UPLOADED_TOP_HOOK_MAX_CENTER_DROP_RATIO,
+      8,
+      HYPE_UPLOADED_TOP_HOOK_MAX_CENTER_DROP,
+    );
+    return clamp(candidate, topY - maxDrop, topY);
+  }
+  if (Number.isFinite(candidate)) return candidate;
+  if (Number.isFinite(topY)) return topY;
   return 0;
 }
 
