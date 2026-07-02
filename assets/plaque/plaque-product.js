@@ -2176,7 +2176,7 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
   backingGroup.add(baseMesh);
   group.add(backingGroup);
   resources.push(baseGeometry, baseMaterial);
-  const isUploadedRasterPlaque = shouldUseUploadedRasterPlaqueHierarchy();
+  const isUploadedRasterPlaque = shouldUseUploadedRasterPlaqueHierarchy(processed);
   if (isUploadedRasterPlaque && buildUploadedRasterReliefPlaque(group, processed, bounds, baseThickness)) return;
   const renderRegions = getPlaqueRaisedRasterRenderRegions(processed);
   const topology = {
@@ -2316,7 +2316,7 @@ function getPlaqueBackingHex(processed) {
 }
 
 function getUploadedRasterPlaqueDefaultBackingHex(processed) {
-  if (!shouldUseUploadedRasterPlaqueHierarchy()) return '';
+  if (!shouldUseUploadedRasterPlaqueHierarchy(processed)) return '';
   const regions = getPlaqueRasterRenderRegions(processed);
   if (!regions?.length) return '#ffffff';
   const totalPixels = Math.max(1, regions.reduce((sum, region) => sum + (Number(region?.count) || 0), 0));
@@ -5191,20 +5191,28 @@ function getPlaqueRaisedRasterRenderRegions(processed) {
     sourceIndex,
     sourceRegion: region,
   }));
-  if (shouldUseUploadedRasterPlaqueHierarchy()) return getUploadedRasterPlaqueHierarchy(processed, mappedRegions);
+  if (shouldUseUploadedRasterPlaqueHierarchy(processed)) return getUploadedRasterPlaqueHierarchy(processed, mappedRegions);
   const backingIndex = getPlaqueBackingRenderRegionIndex(processed, regions);
   if (regions.length <= 1) return [];
   return mappedRegions.filter((region) => region.sourceIndex !== backingIndex);
 }
 
-function shouldUseUploadedRasterPlaqueHierarchy() {
-  const hasUploadedFile = Boolean(state.uploadedFile || state.plaque.uploadedFile);
+function shouldUseUploadedRasterPlaqueHierarchy(processed = state.processed || state.plaque.processed) {
+  const artwork = state.artwork || state.plaque.artwork;
+  const hasProcessedRasterArtwork = Boolean(
+    processed?.regionIndex
+    && processed?.alphaMask
+    && processed?.width
+    && processed?.height
+    && processed?.colours?.length
+  );
   return Boolean(
     state.productType === 'plaque'
-    && state.artwork?.type !== 'svg'
+    && artwork?.type !== 'svg'
     && !state.isDefaultPreview
+    && !state.plaque.isDefaultPreview
     && !state.plaque.isExampleProject
-    && hasUploadedFile
+    && hasProcessedRasterArtwork
   );
 }
 
