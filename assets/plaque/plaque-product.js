@@ -3,6 +3,7 @@
 const DEFAULT_PLAQUE_DESKTOP_PREVIEW_ZOOM = 1;
 const DEFAULT_PLAQUE_MOBILE_PREVIEW_ZOOM = 1;
 const PLAQUE_RASTER_FALLBACK_MAX_SIDE = 760;
+const PLAQUE_UPLOADED_RASTER_LAYER_BASE_OVERLAP = 0.025;
 const plaqueBaseDilationOffsetCache = new Map();
 
 function normalizePlaqueTraceQuality() {
@@ -1921,6 +1922,9 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
       ? 'smooth-independent-mask'
       : `${normalizePlaqueTraceQuality(state.plaque.traceQuality)}-labelled-map`,
   };
+  const rasterLayerZBase = shouldUseUploadedRasterPlaqueHierarchy()
+    ? baseThickness - PLAQUE_UPLOADED_RASTER_LAYER_BASE_OVERLAP
+    : baseThickness + 0.01;
   renderRegions.forEach((region, index) => {
     const layerRise = clamp(Number(state.plaque.layerDepths[index]) || getDefaultPlaqueLayerDepth(index, region), PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
     const depth = layerRise;
@@ -1932,7 +1936,7 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
       hex,
       index,
       material,
-      zBase: baseThickness + 0.01,
+      zBase: rasterLayerZBase,
       cacheOwner: region.sourceRegion || region,
       ...previewQuality,
       ...contourOptions,
@@ -5140,11 +5144,7 @@ function getPlaqueLayerDepthForIndex(index) {
 }
 
 function getDefaultPlaqueLayerDepth(index, layer) {
-  if (layer?.plaqueRole === 'body') return 0.95;
-  if (layer?.plaqueRole === 'light-detail') return 1.75;
-  if (layer?.plaqueRole === 'accent') return 1.65;
-  if (layer?.plaqueRole === 'detail') return 1.55;
-  if (layer?.plaqueRole === 'dark-detail') return 1.25;
+  if (layer?.plaqueRole) return PLAQUE_DEFAULT_LAYER_DEPTH;
   const rgb = hexToRgb(normalizeHex(layer?.hex || '#ffffff'));
   const luma = colourLuma(rgb);
   const chroma = colourChroma(rgb);
