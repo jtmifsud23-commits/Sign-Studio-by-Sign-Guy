@@ -885,12 +885,14 @@ output,
 
 .plaque-studio {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(178px, 0.9fr) minmax(226px, 1.1fr);
   gap: 10px;
+  overflow: hidden;
 }
 
 .plaque-section {
   display: grid;
+  min-width: 0;
   gap: 10px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -905,13 +907,20 @@ output,
   gap: 6px;
 }
 
+.plaque-options-section .section-heading {
+  min-width: 0;
+}
+
 .plaque-options-section .section-heading h2 {
-  font-size: 16px;
+  max-width: 100%;
+  font-size: 15px;
   line-height: 1.15;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .plaque-options-section .segmented {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-top: 0;
 }
 
@@ -919,14 +928,37 @@ output,
   margin-top: 5px;
 }
 
+.plaque-options-section .usage-segmented {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.plaque-options-section .seg {
+  min-width: 0;
+  padding-inline: 7px;
+  line-height: 1.08;
+  overflow-wrap: anywhere;
+}
+
 .plaque-layer-section {
   grid-column: 1 / -1;
 }
 
 .plaque-upload-button {
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 10px;
   width: 100%;
   min-height: 42px;
   padding: 0 12px;
+  overflow: hidden;
+  line-height: 1.05;
+}
+
+#plaqueChooseFileText {
+  min-width: 0;
+  font-size: 17px;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .plaque-trace-quality {
