@@ -12,9 +12,10 @@ const HYPE_SPINNER_CONNECTOR_ENTRY_CLEARANCE_DROP_Y = -11;
 const HYPE_SPINNER_BASE_FORWARD_DEPTH_OFFSET = 20;
 const HYPE_SPINNER_FIXED_CENTER_LOGO_FORWARD_DEPTH_OFFSET = 20;
 const HYPE_SPINNER_FIXED_CENTER_LOGO_VERTICAL_OFFSET = 0;
-const HYPE_UPLOADED_HOOK_FUSE_RELIEF = 2.8;
-const HYPE_WIDE_LOGO_HOOK_FUSE_RELIEF = 1.8;
-const HYPE_DEFAULT_EXAMPLE_HOOK_FUSE_EXTRA = 2.4;
+const HYPE_HOOK_VISIBLE_HOLE_FUSE_EXTRA = 2.8;
+const HYPE_HOOK_EXAMPLE_FUSE_EXTRA = 0.8;
+const HYPE_WIDE_LOGO_HOOK_FUSE_EXTRA = 0.6;
+const HYPE_HOOK_ANCHOR_CORRECTION_MAX = 4.5;
 const HYPE_PENDANT_FRAME_PADDING = 1.24;
 const HYPE_PENDANT_BOTTOM_SAFE_PADDING = 0.18;
 const HYPE_PENDANT_FIT_RELAX_ZOOM = 2.4;
@@ -2174,7 +2175,7 @@ function getHypeLogoPendantOffset(silhouette, options = {}) {
     };
   }
   return {
-    x: -(Number(silhouette?.hookAnchorX) || 0),
+    x: 0,
     y: Number.isFinite(logoYOffset) ? logoYOffset : -10,
   };
 }
@@ -2212,10 +2213,14 @@ function makeHypePendantHookMesh(silhouette, bodyMaterial, resources, depth) {
   const zScale = (depth * 0.5) / Math.max(size.z, 0.001);
   const hookHeight = size.y * xyScale;
   const fuseOverlap = getHypePendantHookFuseOverlap(silhouette, hookHeight);
-  const hookAnchorY = Number.isFinite(silhouette.hookAnchorY)
-    ? silhouette.hookAnchorY
-    : (Number.isFinite(silhouette.centerTopY) ? silhouette.centerTopY : silhouette.topY);
-  const fusedAnchorY = getHookFusedAnchorY(silhouette, hookAnchorY, desiredWidth, fuseOverlap);
+  const hookAnchorY = getHypePendantTopCenterY(silhouette);
+  const sampledAnchorY = getHookFusedAnchorY(
+    { ...silhouette, hookAnchorX: 0 },
+    hookAnchorY,
+    desiredWidth,
+    fuseOverlap,
+  );
+  const fusedAnchorY = clampHypePendantHookAnchorY(hookAnchorY, sampledAnchorY, hookHeight);
   const extraDrop = Math.max(0, hookAnchorY - fusedAnchorY);
   const bodyTopY = -10 + fusedAnchorY;
 
@@ -2238,7 +2243,7 @@ function makeHypePendantHookMesh(silhouette, bodyMaterial, resources, depth) {
     source: hookGeometry ? 'stl' : 'fallback',
     anchorY: Number(bodyTopY.toFixed(2)),
     anchorX: Number((silhouette.hookAnchorX || 0).toFixed(2)),
-    extraDrop: Number(extraDrop.toFixed(2)),
+    anchorCorrection: Number(extraDrop.toFixed(2)),
     width: Number(desiredWidth.toFixed(2)),
     height: Number(hookHeight.toFixed(2)),
     fuseOverlap: Number(fuseOverlap.toFixed(2)),
@@ -2255,10 +2260,22 @@ function getHypePendantHookFuseOverlap(silhouette, hookHeight) {
   const width = Math.max(1, Number(bounds.width) || 1);
   const height = Math.max(1, Number(bounds.height) || 1);
   const ratio = height / width;
-  const wideLogoRelief = clamp((0.95 - ratio) / 0.35, 0, 1) * HYPE_WIDE_LOGO_HOOK_FUSE_RELIEF;
-  const exampleDrop = state.hype.isExampleProject ? HYPE_DEFAULT_EXAMPLE_HOOK_FUSE_EXTRA : 0;
-  const uploadedLift = state.hype.isExampleProject ? 0 : HYPE_UPLOADED_HOOK_FUSE_RELIEF + wideLogoRelief;
-  return clamp(baseOverlap + exampleDrop - uploadedLift, 3.4, 12);
+  const wideLogoSeat = clamp((0.95 - ratio) / 0.35, 0, 1) * HYPE_WIDE_LOGO_HOOK_FUSE_EXTRA;
+  const exampleSeat = state.hype.isExampleProject ? HYPE_HOOK_EXAMPLE_FUSE_EXTRA : 0;
+  return clamp(baseOverlap + HYPE_HOOK_VISIBLE_HOLE_FUSE_EXTRA + exampleSeat + wideLogoSeat, 8.4, 12);
+}
+
+function getHypePendantTopCenterY(silhouette) {
+  if (Number.isFinite(silhouette?.centerTopY)) return silhouette.centerTopY;
+  if (Number.isFinite(silhouette?.topY)) return silhouette.topY;
+  if (Number.isFinite(silhouette?.hookAnchorY)) return silhouette.hookAnchorY;
+  return 0;
+}
+
+function clampHypePendantHookAnchorY(topCenterY, sampledAnchorY, hookHeight) {
+  if (!Number.isFinite(sampledAnchorY)) return topCenterY;
+  const maxCorrection = clamp(hookHeight * 0.1, 2.5, HYPE_HOOK_ANCHOR_CORRECTION_MAX);
+  return clamp(sampledAnchorY, topCenterY - maxCorrection, topCenterY);
 }
 
 function alignHypeChainRigToPendantHook(hookGroup) {
