@@ -1910,6 +1910,7 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
   group.add(backingGroup);
   resources.push(baseGeometry, baseMaterial);
   const renderRegions = getPlaqueRaisedRasterRenderRegions(processed);
+  const isUploadedRasterPlaque = shouldUseUploadedRasterPlaqueHierarchy();
   const topology = {
     topFaces: 0,
     sideFaces: 0,
@@ -1934,12 +1935,20 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
       index,
       material,
       zBase: rasterLayerZBase,
+      uploadedRasterAnchored: isUploadedRasterPlaque,
       cacheOwner: region.sourceRegion || region,
       ...previewQuality,
       ...contourOptions,
     });
     if (!layerGroup.children.length) return;
-    layerGroup.userData = { ...layerGroup.userData, plaqueLayer: index, depth, hex, material };
+    layerGroup.userData = {
+      ...layerGroup.userData,
+      plaqueLayer: index,
+      depth,
+      hex,
+      material,
+      uploadedRasterAnchored: isUploadedRasterPlaque,
+    };
     group.add(layerGroup);
     group.userData.plaqueMeshes.push(layerGroup);
     group.userData.frontArtworkObjects = group.userData.frontArtworkObjects || [];
@@ -3837,7 +3846,8 @@ function updatePlaqueLayerHighlight() {
   const meshes = state.three?.group?.userData?.plaqueMeshes || [];
   meshes.forEach((layerGroup) => {
     const selected = layerGroup.userData.plaqueLayer === state.plaque.selectedLayer;
-    layerGroup.scale.set(selected ? 1.008 : 1, selected ? 1.008 : 1, 1);
+    const shouldScale = selected && !layerGroup.userData.uploadedRasterAnchored;
+    layerGroup.scale.set(shouldScale ? 1.008 : 1, shouldScale ? 1.008 : 1, 1);
     const materials = flattenMaterials(layerGroup.material || layerGroup.userData.material);
     materials.forEach((material, materialIndex) => {
       if (!material?.emissive) return;
@@ -5087,6 +5097,7 @@ function updateRenderedPlaqueLayerDepth(index, nextDepth) {
   const layerGroup = state.three?.group?.userData?.plaqueMeshes?.find((item) => item.userData?.plaqueLayer === index);
   const oldDepth = Number(layerGroup?.userData?.depth);
   if (!layerGroup || !Number.isFinite(oldDepth) || oldDepth <= 0) return false;
+  if (layerGroup.userData.uploadedRasterAnchored) return false;
   if (layerGroup.userData.fastRaisedPreview) {
     const zBase = Number(layerGroup.userData.zBase) || 0;
     const zOffset = Number(layerGroup.userData.zOffset) || 0;
