@@ -1691,8 +1691,10 @@ function buildFastRaisedRasterPlaquePreview(group, processed, bounds, baseThickn
   group.add(backingGroup);
   resources.push(baseGeometry, baseMaterial);
 
+  let maxLayerDepth = 0;
   getPlaqueRaisedRasterRenderRegions(processed).forEach((region, index) => {
     const depth = getPlaqueLayerDepthForIndex(index);
+    maxLayerDepth = Math.max(maxLayerDepth, depth);
     const hex = getPlaqueLayerDisplayHex({ type: 'raster', hex: region.hex }, index);
     const layerGroup = new THREE.Group();
     layerGroup.name = `plaqueFastRaisedLayer${index}`;
@@ -1713,6 +1715,16 @@ function buildFastRaisedRasterPlaquePreview(group, processed, bounds, baseThickn
     group.userData.frontArtworkObjects.push(layerGroup);
     resources.push(surface.geometry, surface.material.map, surface.material);
   });
+  const exactArtwork = shouldRenderRasterPlaqueArtworkSurface(processed)
+    ? makeRasterPlaqueExactArtworkSurface(processed, bounds, maxLayerDepth)
+    : null;
+  if (exactArtwork) {
+    exactArtwork.position.z = baseThickness + maxLayerDepth + 0.035;
+    exactArtwork.renderOrder = 220;
+    group.add(exactArtwork);
+    group.userData.frontArtworkObjects.push(exactArtwork);
+    resources.push(exactArtwork.geometry, exactArtwork.material.map, exactArtwork.material);
+  }
 }
 
 function buildDefaultPlaqueExampleModel(group, processed, bounds, baseThickness) {
@@ -2009,9 +2021,7 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
     topology.topFaces += layerGroup.userData.geometries.reduce((sum, geometry) => sum + (geometry.index ? geometry.index.count / 3 : geometry.attributes.position.count / 3), 0);
     if (state.plaque.showVectorDebug) addRasterLayerDebugLines(group, layerGroup, index, depth);
   });
-  const exactArtwork = state.artwork?.type !== 'svg'
-    && state.plaque.usePngFrontTextureFallback === true
-    && state.plaque.hideTopTexture !== true
+  const exactArtwork = shouldRenderRasterPlaqueArtworkSurface(processed)
     ? makeRasterPlaqueExactArtworkSurface(processed, bounds, maxLayerDepth)
     : null;
   if (exactArtwork) {
@@ -2025,6 +2035,16 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
   group.userData.topology = topology;
   group.userData.solidMode = 'smooth-contour-stack';
   if (state.plaque.topologyDebug) addPlaqueTopologyDebug(group, topology, bounds);
+}
+
+function shouldRenderRasterPlaqueArtworkSurface(processed) {
+  return Boolean(
+    processed
+    && state.productType === 'plaque'
+    && !state.isDefaultPreview
+    && state.artwork?.type !== 'svg'
+    && state.plaque.hideTopTexture !== true
+  );
 }
 
 function preparePlaqueSolidField(processed, maxSide = 380) {
@@ -4876,7 +4896,7 @@ function setPlaqueLayerColour(index, hex) {
   const normalized = normalizeHex(hex);
   state.plaque.colourOverrides[index] = normalized;
   state.plaque.selectedLayer = clamp(index, 0, layers.length - 1);
-  const updatedLive = state.plaque.usePngFrontTextureFallback === true
+  const updatedLive = shouldRenderRasterPlaqueArtworkSurface(state.processed)
     ? false
     : updateRenderedPlaqueLayerColour(index, normalized);
   updatePlaqueLayerHighlight();
@@ -5032,7 +5052,7 @@ function updateRenderedPlaqueLayerDepth(index, nextDepth) {
 
 function updatePlaqueTextureFallbackDepth() {
   const group = state.three?.group;
-  if (!group || state.plaque.usePngFrontTextureFallback !== true) return;
+  if (!group) return;
   const overlay = group.getObjectByName?.('plaqueExactArtworkSurface');
   if (!overlay) return;
   const baseThickness = Number(group.userData?.plaqueBaseThickness) || 0;
