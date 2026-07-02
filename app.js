@@ -7318,26 +7318,37 @@ async function saveProjectFile() {
     const project = await buildSignGuyProject();
     state.projectId = project.id;
     const localSave = isLocalTesting();
+    let serverSaveError = null;
     if (localSave) {
       if (state.isAdmin) downloadProjectPayload(project);
     } else {
-      await uploadProjectFolder(project);
+      try {
+        await uploadProjectFolder(project);
+      } catch (error) {
+        serverSaveError = error;
+        console.warn(error);
+      }
     }
+    let recordSaved = false;
     try {
       await saveProjectRecord(project);
       await refreshProjectLog();
+      recordSaved = true;
     } catch (storageError) {
       console.warn(storageError);
       els.projectNote.textContent = localSave
         ? 'The .SignGuy file was downloaded, but the local recent list could not be updated.'
         : 'The server folder was saved, but the local recent list could not be updated.';
     }
-    els.projectNote.textContent = localSave
+    if (serverSaveError && !recordSaved) throw serverSaveError;
+    els.projectNote.textContent = serverSaveError
+      ? `${project.name} saved to this device. ${formatSaveFailureMessage(serverSaveError, 'Server folder was not saved.')}`
+      : localSave
       ? state.isAdmin
         ? `${project.name}.SignGuy downloaded and logged for local testing.`
         : ''
       : `${project.name} saved to the ${state.customerEmail} server folder.`;
-    setStatus('Saved');
+    setStatus(serverSaveError ? 'Saved locally' : 'Saved');
     trackSignStudioEvent('save_design', {
       product_type: state.productType,
       save_destination: localSave ? 'local' : 'server',

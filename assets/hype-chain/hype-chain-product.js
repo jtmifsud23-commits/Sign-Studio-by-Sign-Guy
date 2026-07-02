@@ -3129,19 +3129,30 @@ async function saveHypeChainProjectFile() {
     queueEmailMarketingSubscription(state.customerEmail);
     const project = await buildHypeChainProject({ forceNewId: true });
     state.projectId = project.id;
+    let serverSaveError = null;
     if (isLocalTesting()) {
       if (state.isAdmin) downloadProjectPayload(project);
     } else {
-      await uploadProjectFolder(project);
+      try {
+        await uploadProjectFolder(project);
+      } catch (error) {
+        serverSaveError = error;
+        console.warn(error);
+      }
     }
+    let recordSaved = false;
     try {
       await saveProjectRecord(project);
       await refreshProjectLog();
+      recordSaved = true;
     } catch (storageError) {
       console.warn(storageError);
     }
-    els.projectNote.textContent = isLocalTesting() && !state.isAdmin ? '' : `${project.name} saved.`;
-    setStatus('Saved');
+    if (serverSaveError && !recordSaved) throw serverSaveError;
+    els.projectNote.textContent = serverSaveError
+      ? `${project.name} saved to this device. ${formatSaveFailureMessage(serverSaveError, 'Server folder was not saved.')}`
+      : isLocalTesting() && !state.isAdmin ? '' : `${project.name} saved.`;
+    setStatus(serverSaveError ? 'Saved locally' : 'Saved');
     trackSignStudioEvent('save_design', {
       product_type: 'hype',
       save_destination: isLocalTesting() ? 'local' : 'server',
