@@ -12,12 +12,9 @@ const HYPE_SPINNER_CONNECTOR_ENTRY_CLEARANCE_DROP_Y = -11;
 const HYPE_SPINNER_BASE_FORWARD_DEPTH_OFFSET = 20;
 const HYPE_SPINNER_FIXED_CENTER_LOGO_FORWARD_DEPTH_OFFSET = 20;
 const HYPE_SPINNER_FIXED_CENTER_LOGO_VERTICAL_OFFSET = 0;
-const HYPE_HOOK_VISIBLE_HOLE_FUSE_EXTRA = 2.8;
-const HYPE_HOOK_EXAMPLE_FUSE_EXTRA = 0.8;
-const HYPE_WIDE_LOGO_HOOK_FUSE_EXTRA = 0.6;
-const HYPE_HOOK_ANCHOR_CORRECTION_MAX = 4.5;
 const HYPE_UPLOADED_TOP_HOOK_BASE_WIDTH = 26;
 const HYPE_UPLOADED_TOP_HOOK_TUBE_RADIUS = 2.6;
+const HYPE_UPLOADED_TOP_HOOK_TOP_INSET = 1.8;
 const HYPE_PENDANT_FRAME_PADDING = 1.24;
 const HYPE_PENDANT_BOTTOM_SAFE_PADDING = 0.18;
 const HYPE_PENDANT_FIT_RELAX_ZOOM = 2.4;
@@ -2209,28 +2206,19 @@ function makeHypePendantHookMesh(silhouette, bodyMaterial, resources, depth) {
   const xyScale = desiredWidth / Math.max(size.x, 0.001);
   const zScale = (depth * 0.5) / Math.max(size.z, 0.001);
   const hookHeight = size.y * xyScale;
-  const fuseOverlap = getHypePendantHookFuseOverlap(silhouette, hookHeight);
   const hookAnchorY = getHypePendantTopCenterY(silhouette);
-  const sampledAnchorY = getHookFusedAnchorY(
-    { ...silhouette, hookAnchorX: 0 },
-    hookAnchorY,
-    desiredWidth,
-    fuseOverlap,
-  );
-  const fusedAnchorY = clampHypePendantHookAnchorY(hookAnchorY, sampledAnchorY, hookHeight);
-  const extraDrop = Math.max(0, hookAnchorY - fusedAnchorY);
-  const bodyTopY = -10 + fusedAnchorY;
+  const bodyTopY = -10 + hookAnchorY;
 
   const hookGroup = new THREE.Group();
   hookGroup.name = 'uploadedLogoPendantHookAssembly';
   hookGroup.position.z = 0;
-  hookGroup.userData.extraDrop = extraDrop;
+  hookGroup.userData.extraDrop = 0;
   hookGroup.userData.shortLogoChainDrop = getShortLogoChainDrop(silhouette);
 
   const hook = new THREE.Mesh(geometry, hookMaterial);
   hook.name = 'uploadedLogoPendantHook';
   hook.scale.set(xyScale, xyScale, zScale);
-  hook.position.set(0, bodyTopY + hookHeight / 2 - fuseOverlap, 0);
+  hook.position.set(0, bodyTopY - HYPE_UPLOADED_TOP_HOOK_TOP_INSET, 0);
   hook.renderOrder = 2;
   hook.castShadow = true;
   hook.receiveShadow = true;
@@ -2240,10 +2228,9 @@ function makeHypePendantHookMesh(silhouette, bodyMaterial, resources, depth) {
     source: 'procedural-top-loop',
     anchorY: Number(bodyTopY.toFixed(2)),
     anchorX: 0,
-    anchorCorrection: Number(extraDrop.toFixed(2)),
+    topInset: Number(HYPE_UPLOADED_TOP_HOOK_TOP_INSET.toFixed(2)),
     width: Number(desiredWidth.toFixed(2)),
     height: Number(hookHeight.toFixed(2)),
-    fuseOverlap: Number(fuseOverlap.toFixed(2)),
     exampleProject: Boolean(state.hype.isExampleProject),
     shortLogoChainDrop: Number(hookGroup.userData.shortLogoChainDrop.toFixed(2)),
     zOffset: Number(hookGroup.position.z.toFixed(2)),
@@ -2269,20 +2256,9 @@ function makeHypeUploadedTopHookGeometry() {
   geometry.computeBoundingBox();
   const center = new THREE.Vector3();
   geometry.boundingBox.getCenter(center);
-  geometry.translate(-center.x, -center.y, -center.z);
+  geometry.translate(-center.x, -geometry.boundingBox.min.y, -center.z);
   geometry.computeBoundingBox();
   return geometry;
-}
-
-function getHypePendantHookFuseOverlap(silhouette, hookHeight) {
-  const baseOverlap = clamp(hookHeight * 0.18, 6, 9);
-  const bounds = silhouette?.uvBounds || {};
-  const width = Math.max(1, Number(bounds.width) || 1);
-  const height = Math.max(1, Number(bounds.height) || 1);
-  const ratio = height / width;
-  const wideLogoSeat = clamp((0.95 - ratio) / 0.35, 0, 1) * HYPE_WIDE_LOGO_HOOK_FUSE_EXTRA;
-  const exampleSeat = state.hype.isExampleProject ? HYPE_HOOK_EXAMPLE_FUSE_EXTRA : 0;
-  return clamp(baseOverlap + HYPE_HOOK_VISIBLE_HOLE_FUSE_EXTRA + exampleSeat + wideLogoSeat, 8.4, 12);
 }
 
 function getHypePendantTopCenterY(silhouette) {
@@ -2290,12 +2266,6 @@ function getHypePendantTopCenterY(silhouette) {
   if (Number.isFinite(silhouette?.topY)) return silhouette.topY;
   if (Number.isFinite(silhouette?.hookAnchorY)) return silhouette.hookAnchorY;
   return 0;
-}
-
-function clampHypePendantHookAnchorY(topCenterY, sampledAnchorY, hookHeight) {
-  if (!Number.isFinite(sampledAnchorY)) return topCenterY;
-  const maxCorrection = clamp(hookHeight * 0.1, 2.5, HYPE_HOOK_ANCHOR_CORRECTION_MAX);
-  return clamp(sampledAnchorY, topCenterY - maxCorrection, topCenterY);
 }
 
 function alignHypeChainRigToPendantHook(hookGroup) {
