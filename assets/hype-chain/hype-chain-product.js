@@ -17,7 +17,6 @@ const HYPE_HOOK_EXAMPLE_FUSE_EXTRA = 0.8;
 const HYPE_WIDE_LOGO_HOOK_FUSE_EXTRA = 0.6;
 const HYPE_HOOK_ANCHOR_CORRECTION_MAX = 4.5;
 const HYPE_UPLOADED_TOP_HOOK_BASE_WIDTH = 26;
-const HYPE_UPLOADED_TOP_HOOK_STEM_DEPTH = 10;
 const HYPE_UPLOADED_TOP_HOOK_TUBE_RADIUS = 2.6;
 const HYPE_PENDANT_FRAME_PADDING = 1.24;
 const HYPE_PENDANT_BOTTOM_SAFE_PADDING = 0.18;
@@ -2255,11 +2254,7 @@ function makeHypePendantHookMesh(silhouette, bodyMaterial, resources, depth) {
 function makeHypeUploadedTopHookGeometry() {
   const halfWidth = HYPE_UPLOADED_TOP_HOOK_BASE_WIDTH / 2;
   const archCenterY = 0;
-  const bottomY = -HYPE_UPLOADED_TOP_HOOK_STEM_DEPTH;
-  const points = [
-    new THREE.Vector3(-halfWidth, bottomY, 0),
-    new THREE.Vector3(-halfWidth, archCenterY, 0),
-  ];
+  const points = [];
   const arcSegments = 28;
   for (let i = 0; i <= arcSegments; i += 1) {
     const angle = Math.PI - (i / arcSegments) * Math.PI;
@@ -2269,7 +2264,6 @@ function makeHypeUploadedTopHookGeometry() {
       0,
     ));
   }
-  points.push(new THREE.Vector3(halfWidth, bottomY, 0));
   const curve = new THREE.CatmullRomCurve3(points, false, 'centripetal', 0.5);
   const geometry = new THREE.TubeBufferGeometry(curve, 72, HYPE_UPLOADED_TOP_HOOK_TUBE_RADIUS, 18, false);
   geometry.computeBoundingBox();
