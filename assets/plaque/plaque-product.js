@@ -3,7 +3,6 @@
 const DEFAULT_PLAQUE_DESKTOP_PREVIEW_ZOOM = 1;
 const DEFAULT_PLAQUE_MOBILE_PREVIEW_ZOOM = 1;
 const PLAQUE_RASTER_FALLBACK_MAX_SIDE = 760;
-const PLAQUE_RASTER_STACK_LAYER_GAP = 0.015;
 const plaqueBaseDilationOffsetCache = new Map();
 
 function normalizePlaqueTraceQuality() {
@@ -1922,26 +1921,18 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
       ? 'smooth-independent-mask'
       : `${normalizePlaqueTraceQuality(state.plaque.traceQuality)}-labelled-map`,
   };
-  const stackRasterLayers = shouldUseUploadedRasterPlaqueStack();
-  let nextStackZBase = baseThickness + 0.01;
   renderRegions.forEach((region, index) => {
     const layerRise = clamp(Number(state.plaque.layerDepths[index]) || getDefaultPlaqueLayerDepth(index, region), PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
     const depth = layerRise;
     const hex = getPlaqueLayerDisplayHex({ type: 'raster', hex: region.hex }, index);
     const material = makePlaqueExtrudeMaterials(hex, { roughness: 0.86 });
     const contourOptions = getPlaqueContourClassOptions(region, index, processed, previewQuality);
-    const layerZBase = stackRasterLayers ? nextStackZBase : baseThickness + 0.01;
-    if (stackRasterLayers) {
-      contourOptions.contourOverlap = 0;
-      contourOptions.preserveCorners = true;
-      contourOptions.preserveLogoEdges = true;
-    }
     const layerGroup = buildRasterPlaqueContourGroup(region.mask, processed.width, processed.height, bounds, {
       depth,
       hex,
       index,
       material,
-      zBase: layerZBase,
+      zBase: baseThickness + 0.01,
       cacheOwner: region.sourceRegion || region,
       ...previewQuality,
       ...contourOptions,
@@ -1955,7 +1946,6 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
     resources.push(...flattenMaterials(material), ...layerGroup.userData.geometries);
     topology.topFaces += layerGroup.userData.geometries.reduce((sum, geometry) => sum + (geometry.index ? geometry.index.count / 3 : geometry.attributes.position.count / 3), 0);
     if (state.plaque.showVectorDebug) addRasterLayerDebugLines(group, layerGroup, index, depth);
-    if (stackRasterLayers) nextStackZBase += depth + PLAQUE_RASTER_STACK_LAYER_GAP;
   });
   group.userData.topology = topology;
   group.userData.solidMode = 'smooth-contour-stack';
@@ -4791,10 +4781,6 @@ function getPlaqueRaisedRasterRenderRegions(processed) {
 }
 
 function shouldKeepAllRasterPlaqueColoursRaised() {
-  return shouldUseUploadedRasterPlaqueStack();
-}
-
-function shouldUseUploadedRasterPlaqueStack() {
   return Boolean(
     state.productType === 'plaque'
     && state.artwork?.type !== 'svg'
@@ -5087,11 +5073,10 @@ function setPlaqueLayerDepth(index, value, options = {}) {
   const next = clamp(Number(value) || PLAQUE_DEFAULT_LAYER_DEPTH, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
   state.plaque.layerDepths[index] = next;
   state.plaque.selectedLayer = clamp(Number(index) || 0, 0, Math.max(0, (getPlaqueLayerDescriptors().length || 1) - 1));
-  const rebuildStack = shouldUseUploadedRasterPlaqueStack();
-  const updatedLive = rebuildStack ? false : updateRenderedPlaqueLayerDepth(index, next);
+  const updatedLive = updateRenderedPlaqueLayerDepth(index, next);
   if (options.renderControls !== false) renderPlaqueLayerControls();
   else syncPlaqueLayerControlState(index, next);
-  if (options.rebuild === true || rebuildStack || !updatedLive) schedulePlaqueBuild(options.buildDelay ?? (rebuildStack ? 60 : 220));
+  if (options.rebuild === true || !updatedLive) schedulePlaqueBuild(options.buildDelay ?? 220);
   updateStats();
 }
 
