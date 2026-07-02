@@ -1908,9 +1908,13 @@ function makeUploadedRasterReliefGeometry(processed, bounds, baseThickness) {
   if (!raisedRegions.length) return null;
   const field = prepareUploadedRasterReliefField(source, getUploadedRasterReliefFieldMaxSide(source));
   if (!field?.width || !field?.height) return null;
-  const zBase = baseThickness + 0.012;
+  const zBase = baseThickness + 0.006;
   const materials = [];
   const layerByMaterialIndex = [];
+  const baseCapMaterial = makePlaqueMaterial(getPlaqueBackingHex(processed), { roughness: 0.88, colourAccurate: true, colourBoost: 0.08 });
+  baseCapMaterial.side = THREE.DoubleSide;
+  const baseCapMaterialIndex = materials.length;
+  materials.push(baseCapMaterial);
   const regionLayer = new Map();
   const regionHeights = new Map();
   const regionCapMaterial = new Map();
@@ -1972,7 +1976,9 @@ function makeUploadedRasterReliefGeometry(processed, bounds, baseThickness) {
     let x = 0;
     while (x < field.width) {
       const region = cellAt(x, y);
-      const materialIndex = regionCapMaterial.get(region);
+      const materialIndex = regionCapMaterial.has(region)
+        ? regionCapMaterial.get(region)
+        : (region >= 0 ? baseCapMaterialIndex : undefined);
       if (!Number.isFinite(materialIndex)) {
         x += 1;
         continue;
@@ -5239,8 +5245,7 @@ function getUploadedRasterPlaqueHierarchy(processed, regions) {
       isNearBlack: isNearBlackHex(hex),
     };
   });
-  const hasBackingOverride = Boolean(state.plaque.backingColourOverride);
-  const backingIndex = hasBackingOverride ? -1 : getUploadedRasterBackingRegionIndex(infos);
+  const backingIndex = getUploadedRasterBackingRegionIndex(infos);
   const backingHex = normalizeHex(getPlaqueBackingHex(processed));
   const candidates = infos.filter((info) => {
     if (info.count <= 0) return false;
