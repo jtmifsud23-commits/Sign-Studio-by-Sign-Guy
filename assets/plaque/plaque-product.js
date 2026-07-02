@@ -2021,6 +2021,8 @@ function makePlaqueSolidMaterials(processed) {
 
 function getPlaqueBackingHex(processed) {
   if (state.plaque.backingColourOverride) return normalizeHex(state.plaque.backingColourOverride);
+  const uploadedBackingHex = getUploadedRasterPlaqueDefaultBackingHex(processed);
+  if (uploadedBackingHex) return uploadedBackingHex;
   const colours = processed?.colours || [];
   const edgeIndex = getPlaqueOuterEdgeColourIndex(processed);
   if (edgeIndex >= 0 && colours[edgeIndex]) {
@@ -2032,6 +2034,34 @@ function getPlaqueBackingHex(processed) {
     .filter((item) => !isNearWhiteHex(item.hex))
     .sort((a, b) => (b.region.count || 0) - (a.region.count || 0));
   return nonWhite[0]?.hex || normalizeHex(colours[0]?.hex || '#f2efe7');
+}
+
+function getUploadedRasterPlaqueDefaultBackingHex(processed) {
+  if (!shouldUseUploadedRasterPlaqueHierarchy()) return '';
+  const regions = getPlaqueRasterRenderRegions(processed);
+  if (!regions?.length) return '#ffffff';
+  const totalPixels = Math.max(1, regions.reduce((sum, region) => sum + (Number(region?.count) || 0), 0));
+  const edgeIndex = getPlaqueOuterEdgeColourIndex(processed);
+  const infos = regions.map((region, index) => {
+    const hex = normalizeHex(region?.hex || '#ffffff');
+    const rgb = hexToRgb(hex);
+    const count = Number(region?.count) || 0;
+    return {
+      index,
+      hex,
+      chroma: colourChroma(rgb),
+      count,
+      share: count / totalPixels,
+      isEdge: index === edgeIndex,
+      isNearWhite: isNearWhiteHex(hex),
+    };
+  });
+  const backingIndex = getUploadedRasterBackingRegionIndex(infos);
+  if (backingIndex >= 0 && regions[backingIndex]) return normalizeHex(regions[backingIndex].hex);
+  const whiteRegion = infos
+    .filter((info) => info.isNearWhite && info.share >= 0.035)
+    .sort((a, b) => b.share - a.share)[0];
+  return whiteRegion?.hex || '#ffffff';
 }
 
 function getPlaqueBasePlateHex(processed) {
@@ -3211,6 +3241,7 @@ function getPlaqueRasterPreviewQuality(processed) {
 function getPlaqueContourClassOptions(region, index, processed, baseOptions = {}) {
   const traceQuality = normalizePlaqueTraceQuality(state.plaque.traceQuality);
   if (traceQuality === 'raw') return { contourClass: 'raw-pixel', contourOverlap: 0 };
+  if (region?.plaqueRole) return getUploadedRasterPlaqueContourOptions(region, baseOptions);
   const sourceIndex = Number(region?.sourceIndex);
   const originalIndex = Number.isFinite(sourceIndex) ? sourceIndex : index;
   const hex = normalizeHex(region?.hex || '#ffffff');
@@ -3254,6 +3285,45 @@ function getPlaqueContourClassOptions(region, index, processed, baseOptions = {}
   return {
     contourClass: originalIndex === 0 ? 'outer-silhouette' : 'large-smooth-shape',
     contourOverlap: originalIndex === 0 ? 0.06 : 0.18,
+  };
+}
+
+function getUploadedRasterPlaqueContourOptions(region, baseOptions = {}) {
+  const role = region?.plaqueRole || 'detail';
+  const hex = normalizeHex(region?.hex || '#ffffff');
+  const rgb = hexToRgb(hex);
+  const luma = colourLuma(rgb);
+  const chroma = colourChroma(rgb);
+  const isLightDetail = role === 'light-detail' || (luma >= 222 && chroma <= 42);
+  if (role === 'body') {
+    return {
+      contourClass: 'uploaded-raster-body',
+      simplifyTolerance: Math.min(Number(baseOptions.simplifyTolerance) || 0.44, 0.22),
+      finalPointSpacing: Math.min(Number(baseOptions.finalPointSpacing) || 0.065, 0.04),
+      minAreaRatio: 0.00005,
+      bevelThickness: 0.055,
+      bevelSize: 0.024,
+      bevelSegments: 1,
+      preserveCorners: true,
+      preserveLogoEdges: true,
+      contourOverlap: 0,
+    };
+  }
+  return {
+    contourClass: isLightDetail ? 'uploaded-raster-light-detail' : 'uploaded-raster-detail',
+    simplifyTolerance: isLightDetail ? 0.045 : 0.075,
+    finalPointSpacing: isLightDetail ? 0.014 : 0.022,
+    minAreaRatio: isLightDetail ? 0.000006 : 0.00001,
+    maxShapes: Math.max(Number(baseOptions.maxShapes) || 0, isLightDetail ? 180 : 150),
+    maxHoles: Math.max(Number(baseOptions.maxHoles) || 0, isLightDetail ? 260 : 210),
+    bevelThickness: isLightDetail ? 0.045 : 0.06,
+    bevelSize: isLightDetail ? 0.018 : 0.026,
+    bevelSegments: 1,
+    curveSegments: 10,
+    preserveTextCorners: isLightDetail,
+    preserveCorners: true,
+    preserveLogoEdges: true,
+    contourOverlap: 0,
   };
 }
 
@@ -4774,18 +4844,106 @@ function getPlaqueRaisedRasterRenderRegions(processed) {
     sourceIndex,
     sourceRegion: region,
   }));
-  if (shouldKeepAllRasterPlaqueColoursRaised()) return mappedRegions;
+  if (shouldUseUploadedRasterPlaqueHierarchy()) return getUploadedRasterPlaqueHierarchy(processed, mappedRegions);
   const backingIndex = getPlaqueBackingRenderRegionIndex(processed, regions);
   if (regions.length <= 1) return [];
   return mappedRegions.filter((region) => region.sourceIndex !== backingIndex);
 }
 
-function shouldKeepAllRasterPlaqueColoursRaised() {
+function shouldUseUploadedRasterPlaqueHierarchy() {
   return Boolean(
     state.productType === 'plaque'
     && state.artwork?.type !== 'svg'
     && !state.isDefaultPreview
   );
+}
+
+function getUploadedRasterPlaqueHierarchy(processed, regions) {
+  const totalPixels = Math.max(1, regions.reduce((sum, region) => sum + (Number(region?.count) || 0), 0));
+  const edgeIndex = getPlaqueOuterEdgeColourIndex(processed);
+  const infos = regions.map((region, index) => {
+    const hex = normalizeHex(region?.hex || '#ffffff');
+    const rgb = hexToRgb(hex);
+    const luma = colourLuma(rgb);
+    const chroma = colourChroma(rgb);
+    const count = Number(region?.count) || 0;
+    return {
+      index,
+      region,
+      hex,
+      rgb,
+      luma,
+      chroma,
+      count,
+      share: count / totalPixels,
+      isEdge: index === edgeIndex,
+      isNearWhite: isNearWhiteHex(hex),
+      isNearBlack: isNearBlackHex(hex),
+    };
+  });
+  const backingIndex = getUploadedRasterBackingRegionIndex(infos);
+  const candidates = infos.filter((info) => info.index !== backingIndex && info.count > 0);
+  if (!candidates.length) return [];
+  const bodyInfo = getUploadedRasterBodyRegionInfo(candidates, edgeIndex);
+  const roleRank = {
+    body: 0,
+    'dark-detail': 1,
+    detail: 2,
+    'light-detail': 3,
+    accent: 4,
+  };
+  return candidates
+    .map((info) => {
+      const role = getUploadedRasterPlaqueRegionRole(info, bodyInfo);
+      return {
+        ...info.region,
+        sourceIndex: info.index,
+        sourceRegion: info.region.sourceRegion || info.region,
+        plaqueRole: role,
+        plaqueRoleRank: roleRank[role] ?? 2,
+      };
+    })
+    .sort((a, b) => {
+      const rankGap = (a.plaqueRoleRank ?? 2) - (b.plaqueRoleRank ?? 2);
+      if (rankGap) return rankGap;
+      return (b.count || 0) - (a.count || 0);
+    });
+}
+
+function getUploadedRasterBackingRegionIndex(infos) {
+  if (!infos?.length) return -1;
+  const hasLogoColour = infos.some((info) => !info.isNearWhite && info.chroma >= 42 && info.share >= 0.035);
+  const backing = infos
+    .filter((info) => (
+      info.isNearWhite
+      && info.isEdge
+      && hasLogoColour
+      && info.share >= 0.5
+    ))
+    .sort((a, b) => b.share - a.share)[0];
+  return backing ? backing.index : -1;
+}
+
+function getUploadedRasterBodyRegionInfo(candidates, edgeIndex) {
+  const edgeBody = candidates
+    .filter((info) => info.index === edgeIndex && !info.isNearWhite && info.share >= 0.08)
+    .sort((a, b) => b.share - a.share)[0];
+  if (edgeBody) return edgeBody;
+  return [...candidates]
+    .filter((info) => !info.isNearWhite)
+    .sort((a, b) => {
+      const aScore = a.share * 3 + (a.chroma / 255) + (a.isEdge ? 0.6 : 0);
+      const bScore = b.share * 3 + (b.chroma / 255) + (b.isEdge ? 0.6 : 0);
+      return bScore - aScore;
+    })[0] || candidates[0];
+}
+
+function getUploadedRasterPlaqueRegionRole(info, bodyInfo) {
+  if (bodyInfo && info.index === bodyInfo.index) return 'body';
+  if (info.isNearWhite || (info.luma >= 222 && info.chroma <= 48)) return 'light-detail';
+  if (info.isNearBlack || (info.luma <= 58 && info.chroma <= 58)) return 'dark-detail';
+  if (info.chroma >= 88 && info.share < 0.38) return 'accent';
+  return 'detail';
 }
 
 function getPlaqueRasterRegionDisplayHex(processed, regions, sourceIndex, backingIndex = getPlaqueBackingRenderRegionIndex(processed, regions)) {
@@ -4982,6 +5140,11 @@ function getPlaqueLayerDepthForIndex(index) {
 }
 
 function getDefaultPlaqueLayerDepth(index, layer) {
+  if (layer?.plaqueRole === 'body') return 0.95;
+  if (layer?.plaqueRole === 'light-detail') return 1.75;
+  if (layer?.plaqueRole === 'accent') return 1.65;
+  if (layer?.plaqueRole === 'detail') return 1.55;
+  if (layer?.plaqueRole === 'dark-detail') return 1.25;
   const rgb = hexToRgb(normalizeHex(layer?.hex || '#ffffff'));
   const luma = colourLuma(rgb);
   const chroma = colourChroma(rgb);
