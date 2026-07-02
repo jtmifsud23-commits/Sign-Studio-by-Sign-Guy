@@ -16,6 +16,9 @@ const HYPE_HOOK_VISIBLE_HOLE_FUSE_EXTRA = 2.8;
 const HYPE_HOOK_EXAMPLE_FUSE_EXTRA = 0.8;
 const HYPE_WIDE_LOGO_HOOK_FUSE_EXTRA = 0.6;
 const HYPE_HOOK_ANCHOR_CORRECTION_MAX = 4.5;
+const HYPE_UPLOADED_TOP_HOOK_BASE_WIDTH = 26;
+const HYPE_UPLOADED_TOP_HOOK_STEM_DEPTH = 10;
+const HYPE_UPLOADED_TOP_HOOK_TUBE_RADIUS = 2.6;
 const HYPE_PENDANT_FRAME_PADDING = 1.24;
 const HYPE_PENDANT_BOTTOM_SAFE_PADDING = 0.18;
 const HYPE_PENDANT_FIT_RELAX_ZOOM = 2.4;
@@ -2191,15 +2194,10 @@ function isHypeObjectAttachedToCurrentModel(object) {
 }
 
 function makeHypePendantHookMesh(silhouette, bodyMaterial, resources, depth) {
-  const hookGeometry = state.hypeThree?.stlGeometries?.hook;
   if (!window.THREE) return null;
-  if (!hookGeometry) {
-    console.error('Pendant Hook STL geometry is missing; not rendering placeholder geometry.');
-    return null;
-  }
   const usableWidth = Math.max(1, silhouette.uvBounds?.width || 120);
   const desiredWidth = clamp(usableWidth * 0.2, 27, 34);
-  const geometry = hookGeometry.clone();
+  const geometry = makeHypeUploadedTopHookGeometry();
   geometry.computeBoundingBox();
   const size = new THREE.Vector3();
   geometry.boundingBox.getSize(size);
@@ -2234,15 +2232,15 @@ function makeHypePendantHookMesh(silhouette, bodyMaterial, resources, depth) {
   hook.name = 'uploadedLogoPendantHook';
   hook.scale.set(xyScale, xyScale, zScale);
   hook.position.set(0, bodyTopY + hookHeight / 2 - fuseOverlap, 0);
-  hook.renderOrder = 4;
+  hook.renderOrder = 2;
   hook.castShadow = true;
   hook.receiveShadow = true;
   hook.frustumCulled = false;
   hookGroup.add(hook);
   console.info('Pendant Hook added to uploaded-logo pendant', {
-    source: hookGeometry ? 'stl' : 'fallback',
+    source: 'procedural-top-loop',
     anchorY: Number(bodyTopY.toFixed(2)),
-    anchorX: Number((silhouette.hookAnchorX || 0).toFixed(2)),
+    anchorX: 0,
     anchorCorrection: Number(extraDrop.toFixed(2)),
     width: Number(desiredWidth.toFixed(2)),
     height: Number(hookHeight.toFixed(2)),
@@ -2252,6 +2250,34 @@ function makeHypePendantHookMesh(silhouette, bodyMaterial, resources, depth) {
     zOffset: Number(hookGroup.position.z.toFixed(2)),
   });
   return hookGroup;
+}
+
+function makeHypeUploadedTopHookGeometry() {
+  const halfWidth = HYPE_UPLOADED_TOP_HOOK_BASE_WIDTH / 2;
+  const archCenterY = 0;
+  const bottomY = -HYPE_UPLOADED_TOP_HOOK_STEM_DEPTH;
+  const points = [
+    new THREE.Vector3(-halfWidth, bottomY, 0),
+    new THREE.Vector3(-halfWidth, archCenterY, 0),
+  ];
+  const arcSegments = 28;
+  for (let i = 0; i <= arcSegments; i += 1) {
+    const angle = Math.PI - (i / arcSegments) * Math.PI;
+    points.push(new THREE.Vector3(
+      Math.cos(angle) * halfWidth,
+      archCenterY + Math.sin(angle) * halfWidth,
+      0,
+    ));
+  }
+  points.push(new THREE.Vector3(halfWidth, bottomY, 0));
+  const curve = new THREE.CatmullRomCurve3(points, false, 'centripetal', 0.5);
+  const geometry = new THREE.TubeBufferGeometry(curve, 72, HYPE_UPLOADED_TOP_HOOK_TUBE_RADIUS, 18, false);
+  geometry.computeBoundingBox();
+  const center = new THREE.Vector3();
+  geometry.boundingBox.getCenter(center);
+  geometry.translate(-center.x, -center.y, -center.z);
+  geometry.computeBoundingBox();
+  return geometry;
 }
 
 function getHypePendantHookFuseOverlap(silhouette, hookHeight) {
