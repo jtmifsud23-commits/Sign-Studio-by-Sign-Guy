@@ -3,8 +3,6 @@
 const DEFAULT_PLAQUE_DESKTOP_PREVIEW_ZOOM = 1;
 const DEFAULT_PLAQUE_MOBILE_PREVIEW_ZOOM = 1;
 const PLAQUE_RASTER_FALLBACK_MAX_SIDE = 760;
-const PLAQUE_UPLOADED_RASTER_LAYER_BASE_OVERLAP = 0.025;
-const PLAQUE_UPLOADED_RASTER_RELIEF_MAX_SIDE = 340;
 const plaqueBaseDilationOffsetCache = new Map();
 
 function normalizePlaqueTraceQuality() {
@@ -1912,15 +1910,6 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
   group.add(backingGroup);
   resources.push(baseGeometry, baseMaterial);
   const renderRegions = getPlaqueRaisedRasterRenderRegions(processed);
-  if (shouldUseUploadedRasterPlaqueHierarchy()) {
-    const uploadedTopology = buildUploadedRasterPlaqueRelief(group, processed, bounds, baseThickness, renderRegions);
-    if (uploadedTopology) {
-      group.userData.topology = uploadedTopology;
-      group.userData.solidMode = 'uploaded-raster-anchored-relief';
-      if (state.plaque.topologyDebug) addPlaqueTopologyDebug(group, uploadedTopology, bounds);
-      return;
-    }
-  }
   const topology = {
     topFaces: 0,
     sideFaces: 0,
@@ -1932,9 +1921,7 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
       ? 'smooth-independent-mask'
       : `${normalizePlaqueTraceQuality(state.plaque.traceQuality)}-labelled-map`,
   };
-  const rasterLayerZBase = shouldUseUploadedRasterPlaqueHierarchy()
-    ? baseThickness - PLAQUE_UPLOADED_RASTER_LAYER_BASE_OVERLAP
-    : baseThickness + 0.01;
+  const rasterLayerZBase = baseThickness + 0.01;
   renderRegions.forEach((region, index) => {
     const layerRise = clamp(Number(state.plaque.layerDepths[index]) || getDefaultPlaqueLayerDepth(index, region), PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
     const depth = layerRise;
@@ -1964,211 +1951,6 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
   group.userData.topology = topology;
   group.userData.solidMode = 'smooth-contour-stack';
   if (state.plaque.topologyDebug) addPlaqueTopologyDebug(group, topology, bounds);
-}
-
-function buildUploadedRasterPlaqueRelief(group, processed, bounds, baseThickness, renderRegions) {
-  if (!renderRegions?.length || !processed?.regionIndex || !processed?.alphaMask) return null;
-  const resources = state.three.resources;
-  const field = prepareUploadedRasterPlaqueReliefField(
-    processed,
-    renderRegions,
-    Math.min(getPlaqueSolidFieldMaxSide(processed), PLAQUE_UPLOADED_RASTER_RELIEF_MAX_SIDE),
-  );
-  if (!field || !field.layerCounts.some((count) => count > 0)) return null;
-  const layerDepths = renderRegions.map((region, index) => {
-    const current = Number(state.plaque.layerDepths[index]);
-    const fallback = getDefaultPlaqueLayerDepth(index, region);
-    return clamp(Number.isFinite(current) ? current : fallback, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
-  });
-  const layerTopZ = layerDepths.map((depth) => baseThickness + depth);
-  const topology = {
-    topFaces: 0,
-    sideFaces: 0,
-    bottomFaces: 0,
-    solidCells: 0,
-    openEdges: 0,
-    shells: 1,
-    pipeline: 'uploaded-raster-anchored-heightfield',
-  };
-
-  renderRegions.forEach((region, index) => {
-    if (!field.layerCounts[index]) return;
-    const hex = getPlaqueLayerDisplayHex({ type: 'raster', hex: region.hex }, index);
-    const material = makePlaqueExtrudeMaterials(hex, { roughness: 0.86 });
-    const sideMaterial = Array.isArray(material) ? material[1] : null;
-    if (sideMaterial) sideMaterial.side = THREE.DoubleSide;
-    const layerResult = buildUploadedRasterPlaqueReliefLayerGeometry(field, index, bounds, baseThickness, layerTopZ);
-    if (!layerResult?.geometry) return;
-    const mesh = new THREE.Mesh(layerResult.geometry, material);
-    mesh.name = `plaqueUploadedReliefLayer${index}`;
-    mesh.userData = { plaqueLayer: index, depth: layerDepths[index], uploadedRasterRelief: true };
-    mesh.castShadow = true;
-    mesh.receiveShadow = false;
-    validatePlaqueMeshZRange(mesh, `Uploaded raster relief layer ${index}`, baseThickness, layerTopZ[index]);
-
-    const layerGroup = new THREE.Group();
-    layerGroup.name = `plaqueUploadedReliefGroup${index}`;
-    layerGroup.userData = {
-      plaqueLayer: index,
-      depth: layerDepths[index],
-      zBase: baseThickness,
-      hex,
-      material,
-      geometries: [layerResult.geometry],
-      uploadedRasterRelief: true,
-      reliefLayer: index,
-    };
-    layerGroup.add(mesh);
-    group.add(layerGroup);
-    group.userData.plaqueMeshes.push(layerGroup);
-    group.userData.frontArtworkObjects = group.userData.frontArtworkObjects || [];
-    group.userData.frontArtworkObjects.push(layerGroup);
-    resources.push(...flattenMaterials(material), layerResult.geometry);
-    topology.topFaces += layerResult.topFaces;
-    topology.sideFaces += layerResult.sideFaces;
-    topology.solidCells += layerResult.solidCells;
-    topology.openEdges += layerResult.openEdges;
-    topology.shells += 1;
-  });
-
-  return topology.shells > 1 ? topology : null;
-}
-
-function prepareUploadedRasterPlaqueReliefField(processed, renderRegions, maxSide = PLAQUE_UPLOADED_RASTER_RELIEF_MAX_SIDE) {
-  const sourceWidth = processed.width || 0;
-  const sourceHeight = processed.height || 0;
-  if (!sourceWidth || !sourceHeight || !processed.regionIndex || !processed.alphaMask) return null;
-  const scale = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight));
-  const width = Math.max(12, Math.round(sourceWidth * scale));
-  const height = Math.max(12, Math.round(sourceHeight * scale));
-  const sourceToLayer = new Int16Array(Math.max(processed.colours?.length || 0, renderRegions.length, 1));
-  sourceToLayer.fill(-1);
-  renderRegions.forEach((region, layerIndex) => {
-    const sourceIndex = Number(region?.sourceIndex);
-    if (Number.isFinite(sourceIndex) && sourceIndex >= 0) sourceToLayer[sourceIndex] = layerIndex;
-  });
-  const cells = new Int16Array(width * height);
-  const layerCounts = new Array(renderRegions.length).fill(0);
-  cells.fill(-1);
-  const samples = [
-    [0.5, 0.5],
-    [0.25, 0.25],
-    [0.75, 0.25],
-    [0.25, 0.75],
-    [0.75, 0.75],
-  ];
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const counts = new Map();
-      samples.forEach(([offsetX, offsetY]) => {
-        const sx = clamp(Math.floor(((x + offsetX) / width) * sourceWidth), 0, sourceWidth - 1);
-        const sy = clamp(Math.floor(((y + offsetY) / height) * sourceHeight), 0, sourceHeight - 1);
-        const sourcePixel = sy * sourceWidth + sx;
-        if (!processed.alphaMask[sourcePixel]) return;
-        const sourceRegion = processed.regionIndex[sourcePixel];
-        const layer = sourceToLayer[sourceRegion] ?? -1;
-        if (layer < 0) return;
-        counts.set(layer, (counts.get(layer) || 0) + 1);
-      });
-      if (!counts.size) continue;
-      let bestLayer = -1;
-      let bestCount = -1;
-      counts.forEach((count, layer) => {
-        if (count > bestCount) {
-          bestLayer = layer;
-          bestCount = count;
-        }
-      });
-      if (bestLayer < 0) continue;
-      cells[y * width + x] = bestLayer;
-      layerCounts[bestLayer] += 1;
-    }
-  }
-  return { width, height, cells, layerCounts };
-}
-
-function buildUploadedRasterPlaqueReliefLayerGeometry(field, layerIndex, bounds, baseThickness, layerTopZ) {
-  const topPositions = [];
-  const sidePositions = [];
-  let topFaces = 0;
-  let sideFaces = 0;
-  let openEdges = 0;
-  const topZ = layerTopZ[layerIndex] ?? baseThickness;
-  const cellWidth = bounds.width / field.width;
-  const cellHeight = bounds.height / field.height;
-  for (let y = 0; y < field.height; y += 1) {
-    const y0 = bounds.maxY - y * cellHeight;
-    const y1 = bounds.maxY - (y + 1) * cellHeight;
-    for (let x = 0; x < field.width; x += 1) {
-      const offset = y * field.width + x;
-      if (field.cells[offset] !== layerIndex) continue;
-      const x0 = bounds.minX + x * cellWidth;
-      const x1 = bounds.minX + (x + 1) * cellWidth;
-      pushPlaqueReliefTopQuad(topPositions, x0, x1, y0, y1, topZ);
-      topFaces += 2;
-      const leftLayer = x > 0 ? field.cells[offset - 1] : -1;
-      const rightLayer = x + 1 < field.width ? field.cells[offset + 1] : -1;
-      const topLayer = y > 0 ? field.cells[offset - field.width] : -1;
-      const bottomLayer = y + 1 < field.height ? field.cells[offset + field.width] : -1;
-      const sideSpecs = [
-        ['left', leftLayer],
-        ['right', rightLayer],
-        ['top', topLayer],
-        ['bottom', bottomLayer],
-      ];
-      sideSpecs.forEach(([edge, neighborLayer]) => {
-        const bottomZ = neighborLayer >= 0 ? (layerTopZ[neighborLayer] ?? baseThickness) : baseThickness;
-        if (topZ <= bottomZ + 0.001) return;
-        pushPlaqueReliefSideQuad(sidePositions, edge, x0, x1, y0, y1, bottomZ, topZ);
-        sideFaces += 2;
-        if (neighborLayer < 0) openEdges += 1;
-      });
-    }
-  }
-  if (!topPositions.length && !sidePositions.length) return null;
-  const geometry = new THREE.BufferGeometry();
-  const positions = topPositions.concat(sidePositions);
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.clearGroups();
-  if (topPositions.length) geometry.addGroup(0, topPositions.length / 3, 0);
-  if (sidePositions.length) geometry.addGroup(topPositions.length / 3, sidePositions.length / 3, 1);
-  geometry.computeVertexNormals();
-  geometry.computeBoundingBox();
-  geometry.computeBoundingSphere();
-  geometry.userData.plaqueUploadedRasterRelief = true;
-  return {
-    geometry,
-    topFaces,
-    sideFaces,
-    openEdges,
-    solidCells: field.layerCounts[layerIndex] || 0,
-  };
-}
-
-function pushPlaqueReliefTopQuad(target, x0, x1, y0, y1, z) {
-  pushPlaqueReliefTriangle(target, x0, y0, z, x0, y1, z, x1, y1, z);
-  pushPlaqueReliefTriangle(target, x0, y0, z, x1, y1, z, x1, y0, z);
-}
-
-function pushPlaqueReliefSideQuad(target, edge, x0, x1, y0, y1, bottomZ, topZ) {
-  if (edge === 'left') {
-    pushPlaqueReliefQuad(target, x0, y1, bottomZ, x0, y0, bottomZ, x0, y0, topZ, x0, y1, topZ);
-  } else if (edge === 'right') {
-    pushPlaqueReliefQuad(target, x1, y0, bottomZ, x1, y1, bottomZ, x1, y1, topZ, x1, y0, topZ);
-  } else if (edge === 'top') {
-    pushPlaqueReliefQuad(target, x1, y0, bottomZ, x0, y0, bottomZ, x0, y0, topZ, x1, y0, topZ);
-  } else {
-    pushPlaqueReliefQuad(target, x0, y1, bottomZ, x1, y1, bottomZ, x1, y1, topZ, x0, y1, topZ);
-  }
-}
-
-function pushPlaqueReliefQuad(target, ax, ay, az, bx, by, bz, cx, cy, cz, dx, dy, dz) {
-  pushPlaqueReliefTriangle(target, ax, ay, az, bx, by, bz, cx, cy, cz);
-  pushPlaqueReliefTriangle(target, ax, ay, az, cx, cy, cz, dx, dy, dz);
-}
-
-function pushPlaqueReliefTriangle(target, ax, ay, az, bx, by, bz, cx, cy, cz) {
-  target.push(ax, ay, az, bx, by, bz, cx, cy, cz);
 }
 
 function preparePlaqueSolidField(processed, maxSide = 380) {
@@ -4055,8 +3837,7 @@ function updatePlaqueLayerHighlight() {
   const meshes = state.three?.group?.userData?.plaqueMeshes || [];
   meshes.forEach((layerGroup) => {
     const selected = layerGroup.userData.plaqueLayer === state.plaque.selectedLayer;
-    const shouldScale = selected && !layerGroup.userData.uploadedRasterRelief;
-    layerGroup.scale.set(shouldScale ? 1.008 : 1, shouldScale ? 1.008 : 1, 1);
+    layerGroup.scale.set(selected ? 1.008 : 1, selected ? 1.008 : 1, 1);
     const materials = flattenMaterials(layerGroup.material || layerGroup.userData.material);
     materials.forEach((material, materialIndex) => {
       if (!material?.emissive) return;
@@ -5306,7 +5087,6 @@ function updateRenderedPlaqueLayerDepth(index, nextDepth) {
   const layerGroup = state.three?.group?.userData?.plaqueMeshes?.find((item) => item.userData?.plaqueLayer === index);
   const oldDepth = Number(layerGroup?.userData?.depth);
   if (!layerGroup || !Number.isFinite(oldDepth) || oldDepth <= 0) return false;
-  if (layerGroup.userData.uploadedRasterRelief) return false;
   if (layerGroup.userData.fastRaisedPreview) {
     const zBase = Number(layerGroup.userData.zBase) || 0;
     const zOffset = Number(layerGroup.userData.zOffset) || 0;
