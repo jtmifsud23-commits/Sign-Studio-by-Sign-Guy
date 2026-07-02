@@ -19,8 +19,10 @@ const HYPE_UPLOADED_TOP_HOOK_VISIBLE_STEM = 3.2;
 const HYPE_UPLOADED_TOP_HOOK_HOLE_LOCAL_RISE = 4.8;
 const HYPE_UPLOADED_TOP_HOOK_MAX_CENTER_DROP = 18;
 const HYPE_UPLOADED_TOP_HOOK_MAX_CENTER_DROP_RATIO = 0.16;
-const HYPE_UPLOADED_LOGO_BODY_Y_OFFSET = -20;
+const HYPE_UPLOADED_LOGO_BODY_Y_OFFSET = -30;
+const HYPE_EXAMPLE_LOGO_BODY_Y_OFFSET = -20;
 const HYPE_UPLOADED_HOOK_ANCHOR_Y_OFFSET = -10;
+const HYPE_EXAMPLE_HOOK_ANCHOR_Y_OFFSET = -30;
 const HYPE_ATTACHMENT_LINK_HOLE_CONTACT_FROM_BOTTOM = 0.18;
 const HYPE_PENDANT_FRAME_PADDING = 1.24;
 const HYPE_PENDANT_BOTTOM_SAFE_PADDING = 0.18;
@@ -2182,8 +2184,12 @@ function getHypeLogoPendantOffset(silhouette, options = {}) {
   }
   return {
     x: 0,
-    y: Number.isFinite(logoYOffset) ? logoYOffset : HYPE_UPLOADED_LOGO_BODY_Y_OFFSET,
+    y: Number.isFinite(logoYOffset) ? logoYOffset : getHypeUploadedLogoBodyYOffset(),
   };
+}
+
+function getHypeUploadedLogoBodyYOffset() {
+  return state.hype.isExampleProject ? HYPE_EXAMPLE_LOGO_BODY_Y_OFFSET : HYPE_UPLOADED_LOGO_BODY_Y_OFFSET;
 }
 
 function isHypeObjectAttachedToCurrentModel(object) {
@@ -2214,7 +2220,7 @@ function makeHypePendantHookMesh(silhouette, bodyMaterial, resources, depth) {
   const zScale = (depth * 0.5) / Math.max(size.z, 0.001);
   const hookHeight = size.y * xyScale;
   const hookAnchorY = getHypePendantTopCenterY(silhouette);
-  const hookTopEdgeY = HYPE_UPLOADED_HOOK_ANCHOR_Y_OFFSET + hookAnchorY;
+  const hookTopEdgeY = getHypeUploadedHookAnchorYOffset() + hookAnchorY;
   const hookPositionY = hookTopEdgeY
     + HYPE_UPLOADED_TOP_HOOK_VISIBLE_STEM
     - HYPE_UPLOADED_TOP_HOOK_LEG_LENGTH * xyScale;
@@ -2255,6 +2261,10 @@ function makeHypePendantHookMesh(silhouette, bodyMaterial, resources, depth) {
     zOffset: Number(hookGroup.position.z.toFixed(2)),
   });
   return hookGroup;
+}
+
+function getHypeUploadedHookAnchorYOffset() {
+  return state.hype.isExampleProject ? HYPE_EXAMPLE_HOOK_ANCHOR_Y_OFFSET : HYPE_UPLOADED_HOOK_ANCHOR_Y_OFFSET;
 }
 
 function makeHypeUploadedTopHookGeometry() {
