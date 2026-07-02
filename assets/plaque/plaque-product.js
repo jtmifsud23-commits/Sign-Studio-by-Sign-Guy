@@ -2,6 +2,7 @@
 
 const DEFAULT_PLAQUE_DESKTOP_PREVIEW_ZOOM = 1;
 const DEFAULT_PLAQUE_MOBILE_PREVIEW_ZOOM = 1;
+const PLAQUE_RASTER_FALLBACK_MAX_SIDE = 760;
 const plaqueBaseDilationOffsetCache = new Map();
 
 function normalizePlaqueTraceQuality() {
@@ -342,6 +343,7 @@ async function handlePlaqueFiles(fileList) {
       console.warn('3D Plaque layer processing failed; using raster fallback preview.', processError);
       state.plaque.processed = createPlaqueRasterFallbackProcessed(state.plaque.artwork);
       state.plaque.fastPreviewOnly = true;
+      state.plaque.usePngFrontTextureFallback = state.plaque.artwork?.type !== 'svg';
       activatePlaqueArtworkState();
       syncColorOverrides();
       renderPreview();
@@ -390,18 +392,20 @@ async function readPlaqueRasterArtwork(file) {
 function createPlaqueRasterFallbackProcessed(artwork) {
   const sourceWidth = getArtworkImageWidth(artwork.image);
   const sourceHeight = getArtworkImageHeight(artwork.image);
-  const scale = Math.min(1, PLAQUE_UPLOAD_MAX_SIDE / Math.max(sourceWidth, sourceHeight));
-  const width = Math.max(12, Math.round(sourceWidth * scale));
-  const height = Math.max(12, Math.round(sourceHeight * scale));
-  const canvas = document.createElement('canvas');
+  const scale = Math.min(1, PLAQUE_RASTER_FALLBACK_MAX_SIDE / Math.max(sourceWidth, sourceHeight));
+  let width = Math.max(12, Math.round(sourceWidth * scale));
+  let height = Math.max(12, Math.round(sourceHeight * scale));
+  let canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  let ctx = canvas.getContext('2d', { willReadFrequently: true });
   ctx.clearRect(0, 0, width, height);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(artwork.image, 0, 0, width, height);
-  const frame = ctx.getImageData(0, 0, width, height);
+  let frame = ctx.getImageData(0, 0, width, height);
+  ({ canvas, ctx, img: frame, width, height } = tightenProcessedCanvasToVisibleArtwork(canvas, ctx, frame, width, height));
+  ({ canvas, ctx, img: frame, width, height } = addTransparentCanvasPadding(canvas, ctx, width, height));
   const alphaMask = new Uint8Array(width * height);
   const alphaValues = new Uint8Array(width * height);
   const regionIndex = new Int16Array(width * height).fill(-1);
@@ -450,7 +454,7 @@ function createPlaqueRasterFallbackProcessed(artwork) {
     regionIndex,
     colours,
     silhouette,
-    warnings: [{ level: 'warn', text: 'PNG colour layers were detected with raster fallback. Upload an SVG for the cleanest plaque geometry.' }],
+    warnings: [{ level: 'warn', text: 'PNG colour layers were simplified with raster fallback. Upload an SVG for the cleanest plaque geometry.' }],
   };
   return reorderPlaqueRasterColoursByEdge(processed);
 }
@@ -1625,6 +1629,9 @@ function buildPlaqueThreeModel() {
     if (state.plaque.showVectorDebug) addPlaqueBaseDebugLines(group, baseShape, baseThickness);
     if (state.plaque.topologyDebug) addPlaqueAxisDebug(group, bounds, baseThickness);
     group.userData.solidMode = 'svg-layered-2d-stack';
+  } else if (state.plaque.fastPreviewOnly && state.plaque.usePngFrontTextureFallback === true) {
+    buildFastRaisedRasterPlaquePreview(group, processed, bounds, baseThickness);
+    group.userData.solidMode = 'raster-fast-texture-preview';
   } else {
     buildRasterPlaqueSolid(group, processed, bounds, baseThickness);
     group.userData.solidMode = 'raster-layered-contour-stack';
