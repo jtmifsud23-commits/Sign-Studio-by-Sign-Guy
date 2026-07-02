@@ -3243,6 +3243,11 @@ body.product-plaque .visualizer-light-toggle {
   text-underline-offset: 3px;
 }
 
+.product-selection-build-version {
+  padding: 0;
+  color: rgba(255, 255, 255, 0.48);
+}
+
 @media (max-width: 1120px) {
   .product-selection-inner {
     width: min(820px, 100%);
