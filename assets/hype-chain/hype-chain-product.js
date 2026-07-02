@@ -19,7 +19,7 @@ const HYPE_UPLOADED_TOP_HOOK_VISIBLE_STEM = 3.2;
 const HYPE_UPLOADED_TOP_HOOK_HOLE_LOCAL_RISE = 4.8;
 const HYPE_UPLOADED_TOP_HOOK_MAX_CENTER_DROP = 18;
 const HYPE_UPLOADED_TOP_HOOK_MAX_CENTER_DROP_RATIO = 0.16;
-const HYPE_UPLOADED_LOGO_BODY_Y_OFFSET = -16;
+const HYPE_UPLOADED_LOGO_BODY_Y_OFFSET = -20;
 const HYPE_UPLOADED_HOOK_ANCHOR_Y_OFFSET = -10;
 const HYPE_ATTACHMENT_LINK_HOLE_CONTACT_FROM_BOTTOM = 0.18;
 const HYPE_PENDANT_FRAME_PADDING = 1.24;
@@ -2236,6 +2236,13 @@ function makeHypePendantHookMesh(silhouette, bodyMaterial, resources, depth) {
   hook.receiveShadow = true;
   hook.frustumCulled = false;
   hookGroup.add(hook);
+
+  addHypeUploadedHookShoulderWelds(hookGroup, hookMaterial, resources, {
+    xyScale,
+    zScale,
+    hookPositionY,
+  });
+
   console.info('Pendant Hook added to uploaded-logo pendant', {
     source: 'procedural-top-loop',
     anchorY: Number(hookTopEdgeY.toFixed(2)),
@@ -2257,7 +2264,7 @@ function makeHypeUploadedTopHookGeometry() {
   points.push(new THREE.Vector3(-halfWidth, 0, 0));
   points.push(new THREE.Vector3(-halfWidth, archCenterY, 0));
   const arcSegments = 28;
-  for (let i = 0; i <= arcSegments; i += 1) {
+  for (let i = 1; i <= arcSegments; i += 1) {
     const angle = Math.PI - (i / arcSegments) * Math.PI;
     points.push(new THREE.Vector3(
       Math.cos(angle) * halfWidth,
@@ -2274,6 +2281,30 @@ function makeHypeUploadedTopHookGeometry() {
   geometry.translate(-center.x, -geometry.boundingBox.min.y, -center.z);
   geometry.computeBoundingBox();
   return geometry;
+}
+
+function addHypeUploadedHookShoulderWelds(hookGroup, material, resources, placement) {
+  if (!window.THREE) return;
+  const { xyScale, zScale, hookPositionY } = placement;
+  const halfWidth = HYPE_UPLOADED_TOP_HOOK_BASE_WIDTH / 2;
+  const shoulderY = HYPE_UPLOADED_TOP_HOOK_LEG_LENGTH;
+  [-1, 1].forEach((side) => {
+    const weldGeometry = new THREE.SphereBufferGeometry(
+      HYPE_UPLOADED_TOP_HOOK_TUBE_RADIUS * 1.04,
+      18,
+      12,
+    );
+    resources.push(weldGeometry);
+    const weld = new THREE.Mesh(weldGeometry, material);
+    weld.name = side < 0 ? 'uploadedLogoPendantHookLeftShoulderWeld' : 'uploadedLogoPendantHookRightShoulderWeld';
+    weld.scale.set(xyScale, xyScale, zScale);
+    weld.position.set(side * halfWidth * xyScale, hookPositionY + shoulderY * xyScale, -0.2);
+    weld.renderOrder = 0;
+    weld.castShadow = true;
+    weld.receiveShadow = true;
+    weld.frustumCulled = false;
+    hookGroup.add(weld);
+  });
 }
 
 function getHypePendantTopCenterY(silhouette) {
