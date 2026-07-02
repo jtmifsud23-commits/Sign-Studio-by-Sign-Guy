@@ -3019,9 +3019,6 @@ function showUploadError(message) {
 
 function getUploadErrorMessage(error) {
   if (error?.plaqueUploadStage) {
-    if (error.plaqueUploadStage === 'processing plaque layers') {
-      return 'The 3D Plaque logo loaded, but the layer trace could not finish. Try an SVG or a transparent PNG with clean separated colours.';
-    }
     return `The 3D Plaque upload failed while ${error.plaqueUploadStage}. Please try a smaller PNG or an SVG.`;
   }
   if (error?.code === 'plaque-upload-read-timeout') {

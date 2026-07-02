@@ -340,7 +340,16 @@ async function handlePlaqueFiles(fileList) {
     try {
       await reprocessPlaqueArtwork();
     } catch (processError) {
-      await applyPlaqueLayerProcessingFallback(processError);
+      console.warn('3D Plaque layer processing failed; using raster fallback preview.', processError);
+      state.plaque.processed = createPlaqueRasterFallbackProcessed(state.plaque.artwork);
+      state.plaque.fastPreviewOnly = true;
+      state.plaque.usePngFrontTextureFallback = state.plaque.artwork?.type !== 'svg';
+      activatePlaqueArtworkState();
+      syncColorOverrides();
+      renderPreview();
+      renderDiagnostics();
+      updateProjectControls();
+      setStatus('Ready');
     }
 
     setPlaqueLoadingProgress(92, 'Rendering plaque');
@@ -358,46 +367,6 @@ async function handlePlaqueFiles(fileList) {
     activatePlaqueArtworkState();
     if (state.plaque.processed) renderPreview();
     showUploadError(getUploadErrorMessage(error));
-  }
-}
-
-async function applyPlaqueLayerProcessingFallback(processError) {
-  console.warn('3D Plaque layer processing failed; using raster fallback preview.', processError);
-  let fallbackError = null;
-  try {
-    state.plaque.processed = createPlaqueRasterFallbackProcessed(state.plaque.artwork, {
-      maxSide: 560,
-      includePaths: false,
-    });
-  } catch (error) {
-    fallbackError = error;
-    console.warn('3D Plaque raster fallback failed; trying smaller preview fallback.', error);
-    state.plaque.processed = createPlaqueRasterFallbackProcessed(state.plaque.artwork, {
-      maxSide: 360,
-      includePaths: false,
-      includeComponents: false,
-    });
-  }
-  state.plaque.fastPreviewOnly = true;
-  state.plaque.usePngFrontTextureFallback = state.plaque.artwork?.type !== 'svg';
-  activatePlaqueArtworkState();
-  syncColorOverrides();
-  try {
-    renderPreview();
-  } catch (error) {
-    console.warn('3D Plaque simplified preview render failed after upload.', error);
-  }
-  try {
-    renderPlaqueDiagnostics();
-  } catch (error) {
-    console.warn('3D Plaque diagnostics failed after simplified upload fallback.', error);
-  }
-  updateProjectControls();
-  setStatus('Ready');
-  if (els.submitNote) {
-    els.submitNote.textContent = fallbackError
-      ? 'Logo uploaded with a simplified plaque preview. SVG artwork will create cleaner separated layers.'
-      : '';
   }
 }
 
@@ -420,13 +389,10 @@ async function readPlaqueRasterArtwork(file) {
   }
 }
 
-function createPlaqueRasterFallbackProcessed(artwork, options = {}) {
+function createPlaqueRasterFallbackProcessed(artwork) {
   const sourceWidth = getArtworkImageWidth(artwork.image);
   const sourceHeight = getArtworkImageHeight(artwork.image);
-  const maxSide = clamp(Number(options.maxSide) || PLAQUE_RASTER_FALLBACK_MAX_SIDE, 96, PLAQUE_RASTER_FALLBACK_MAX_SIDE);
-  const includePaths = options.includePaths !== false;
-  const includeComponents = options.includeComponents !== false;
-  const scale = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight));
+  const scale = Math.min(1, PLAQUE_RASTER_FALLBACK_MAX_SIDE / Math.max(sourceWidth, sourceHeight));
   let width = Math.max(12, Math.round(sourceWidth * scale));
   let height = Math.max(12, Math.round(sourceHeight * scale));
   let canvas = document.createElement('canvas');
@@ -472,8 +438,8 @@ function createPlaqueRasterFallbackProcessed(artwork, options = {}) {
     hex: rgbToHex(cluster.rgb),
     count: cluster.count,
     mask: masks[index],
-    path: includePaths ? maskToSvgPath(masks[index], width, height, 4) : '',
-    components: includeComponents ? countComponents(masks[index], width, height, minIslandPixels) : 1,
+    path: maskToSvgPath(masks[index], width, height, 4),
+    components: countComponents(masks[index], width, height, minIslandPixels),
   })).filter((region) => region.count > 0);
   const processed = {
     width,
@@ -931,15 +897,8 @@ async function reprocessPlaqueArtwork(options = {}) {
         ? cachedProcessed
         : stripPlaqueDeferredDebugData(cachedProcessed);
     } else {
-      const workerProcessed = await processPlaqueArtworkWithWorker(state.plaque.artwork, getPlaqueProcessArtworkOptions());
-      const shouldUseRasterFallback = !workerProcessed && state.plaque.artwork?.type !== 'svg';
-      state.plaque.processed = workerProcessed
-        || (shouldUseRasterFallback
-          ? createPlaqueRasterFallbackProcessed(state.plaque.artwork, {
-            maxSide: 620,
-            includePaths: false,
-          })
-          : processArtwork(state.plaque.artwork, getPlaqueProcessArtworkOptions()));
+      state.plaque.processed = await processPlaqueArtworkWithWorker(state.plaque.artwork, getPlaqueProcessArtworkOptions())
+        || processArtwork(state.plaque.artwork, getPlaqueProcessArtworkOptions());
       if (!shouldKeepPlaqueDeferredDebugData()) {
         stripPlaqueDeferredDebugData(state.plaque.processed);
       }
@@ -947,12 +906,7 @@ async function reprocessPlaqueArtwork(options = {}) {
         reorderPlaqueRasterColoursByEdge(state.plaque.processed);
       }
     }
-    const hasRasterTraceGeometry = Boolean(state.plaque.processed?.plaqueLabelledMap?.regions?.length)
-      || (state.plaque.processed?.colours || []).some((region) => typeof region?.path === 'string' && region.path.trim());
-    const usePngFallbackPreview = Boolean(state.plaque.usePngFrontTextureFallback)
-      || (state.plaque.artwork?.type !== 'svg' && !hasRasterTraceGeometry);
-    state.plaque.usePngFrontTextureFallback = usePngFallbackPreview;
-    state.plaque.fastPreviewOnly = usePngFallbackPreview || shouldUsePlaqueFastRaisedPreview(state.plaque.processed);
+    state.plaque.fastPreviewOnly = shouldUsePlaqueFastRaisedPreview(state.plaque.processed);
     state.plaque.processingDirty = false;
     activatePlaqueArtworkState();
     if (!options.preserveTargetColorCount && !state.plaque.frontColoursCustomized && state.plaque.processed.naturalColourCount) {
@@ -971,7 +925,7 @@ async function reprocessPlaqueArtwork(options = {}) {
     if (uploadCacheContext?.key) {
       queueUploadedPlaqueProcessedCacheWrite(uploadCacheContext, state.plaque.processed);
     }
-    renderPlaqueDiagnostics();
+    renderDiagnostics();
     if (els.submitDesign) els.submitDesign.disabled = true;
     updateProjectControls();
     setStatus('Ready');
@@ -1073,7 +1027,7 @@ async function processPlaqueArtworkWithWorker(artwork, options = {}) {
     }), PLAQUE_PROCESSING_WORKER_TIMEOUT_MS, 'plaque-worker-timeout');
     return hydratePlaqueWorkerProcessed(result.processed, result.artworkBitmap);
   } catch (error) {
-    console.warn('3D Plaque worker processing unavailable; falling back to simplified processing.', error);
+    console.warn('3D Plaque worker processing unavailable; falling back to main-thread processing.', error);
     return null;
   } finally {
     bitmap?.close?.();
