@@ -2008,7 +2008,7 @@ function makeUploadedRasterReliefGeometry(processed, bounds, baseThickness) {
     return {
       materialIndex: regionSideMaterial.get(highRegion),
       zTop: Math.max(heightA, heightB),
-      zBottom: Math.min(heightA, heightB),
+      zBottom: zBase,
     };
   };
   const sameWall = (a, b) => Boolean(a && b
@@ -4952,6 +4952,7 @@ function renderPlaqueBaseControl() {
 function syncPlaqueLayers() {
   const layers = getPlaqueLayerDescriptors();
   const sourceIndices = getPlaqueLayerSourceIndices(layers);
+  const keepDepthsLayerAligned = shouldUseUploadedRasterPlaqueHierarchy(state.processed);
   const previousSourceIndices = Array.isArray(state.plaque.layerSourceIndices)
     ? state.plaque.layerSourceIndices
     : [];
@@ -4960,7 +4961,7 @@ function syncPlaqueLayers() {
   const currentDepths = Array.isArray(state.plaque.layerDepths) ? state.plaque.layerDepths : [];
   state.plaque.layerDepths = layers.map((_, index) => {
     const sourceIndex = sourceIndices[index];
-    if (!valuesAreAlreadyLayerAligned && Number.isFinite(sourceIndex) && sourceIndex !== index) {
+    if (!keepDepthsLayerAligned && !valuesAreAlreadyLayerAligned && Number.isFinite(sourceIndex) && sourceIndex !== index) {
       const sourceCurrent = Number(currentDepths[sourceIndex]);
       if (Number.isFinite(sourceCurrent)) return clamp(sourceCurrent, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
     }
@@ -4971,7 +4972,7 @@ function syncPlaqueLayers() {
   const currentOverrides = Array.isArray(state.plaque.colourOverrides) ? state.plaque.colourOverrides : [];
   state.plaque.colourOverrides = layers.map((_, index) => {
     const sourceIndex = sourceIndices[index];
-    const current = (!valuesAreAlreadyLayerAligned && Number.isFinite(sourceIndex) && sourceIndex !== index ? currentOverrides[sourceIndex] : '') || currentOverrides[index];
+    const current = (!keepDepthsLayerAligned && !valuesAreAlreadyLayerAligned && Number.isFinite(sourceIndex) && sourceIndex !== index ? currentOverrides[sourceIndex] : '') || currentOverrides[index];
     return current ? normalizeHex(current) : '';
   });
   state.plaque.layerSourceIndices = sourceIndices;
@@ -5253,17 +5254,15 @@ function getUploadedRasterPlaqueHierarchy(processed, regions) {
     return normalizeHex(info.hex) !== backingHex;
   });
   if (!candidates.length) return [];
-  const bodyInfo = getUploadedRasterBodyRegionInfo(candidates, edgeIndex);
   const roleRank = {
-    body: 0,
-    'dark-detail': 1,
-    detail: 2,
+    detail: 0,
+    accent: 1,
+    'dark-detail': 2,
     'light-detail': 3,
-    accent: 4,
   };
   return candidates
     .map((info) => {
-      const role = getUploadedRasterPlaqueRegionRole(info, bodyInfo);
+      const role = getUploadedRasterPlaqueRegionRole(info);
       return {
         ...info.region,
         sourceIndex: info.index,
@@ -5273,9 +5272,7 @@ function getUploadedRasterPlaqueHierarchy(processed, regions) {
       };
     })
     .sort((a, b) => {
-      const rankGap = (a.plaqueRoleRank ?? 2) - (b.plaqueRoleRank ?? 2);
-      if (rankGap) return rankGap;
-      return (b.count || 0) - (a.count || 0);
+      return (a.sourceIndex ?? 0) - (b.sourceIndex ?? 0);
     });
 }
 
@@ -5309,22 +5306,7 @@ function getUploadedRasterBackingRegionIndex(infos) {
   return edgeBody ? edgeBody.index : -1;
 }
 
-function getUploadedRasterBodyRegionInfo(candidates, edgeIndex) {
-  const edgeBody = candidates
-    .filter((info) => info.index === edgeIndex && !info.isNearWhite && info.share >= 0.08)
-    .sort((a, b) => b.share - a.share)[0];
-  if (edgeBody) return edgeBody;
-  return [...candidates]
-    .filter((info) => !info.isNearWhite)
-    .sort((a, b) => {
-      const aScore = a.share * 3 + (a.chroma / 255) + (a.isEdge ? 0.6 : 0);
-      const bScore = b.share * 3 + (b.chroma / 255) + (b.isEdge ? 0.6 : 0);
-      return bScore - aScore;
-    })[0] || candidates[0];
-}
-
-function getUploadedRasterPlaqueRegionRole(info, bodyInfo) {
-  if (bodyInfo && info.index === bodyInfo.index) return 'body';
+function getUploadedRasterPlaqueRegionRole(info) {
   if (info.isNearWhite || (info.luma >= 222 && info.chroma <= 48)) return 'light-detail';
   if (info.isNearBlack || (info.luma <= 58 && info.chroma <= 58)) return 'dark-detail';
   if (info.chroma >= 88 && info.share < 0.38) return 'accent';
