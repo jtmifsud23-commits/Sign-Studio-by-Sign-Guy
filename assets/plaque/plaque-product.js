@@ -1998,67 +1998,51 @@ function makeUploadedRasterReliefGeometry(processed, bounds, baseThickness) {
       x = endX;
     }
   }
-  const makeWall = (regionA, regionB) => {
-    const heightA = heightForRegion(regionA);
-    const heightB = heightForRegion(regionB);
-    if (Math.abs(heightA - heightB) < 0.001) return null;
-    const highRegion = heightA > heightB ? regionA : regionB;
-    const layerIndex = layerForRegion(highRegion);
-    if (layerIndex < 0) return null;
-    return {
-      materialIndex: regionSideMaterial.get(highRegion),
-      zTop: Math.max(heightA, heightB),
-      zBottom: zBase,
-    };
-  };
-  const sameWall = (a, b) => Boolean(a && b
-    && a.materialIndex === b.materialIndex
-    && Math.abs(a.zTop - b.zTop) < 0.001
-    && Math.abs(a.zBottom - b.zBottom) < 0.001);
-  for (let edgeX = 0; edgeX <= field.width; edgeX += 1) {
-    let y = 0;
-    while (y < field.height) {
-      const wall = makeWall(cellAt(edgeX - 1, y), cellAt(edgeX, y));
-      if (!wall) {
-        y += 1;
-        continue;
-      }
-      let endY = y + 1;
-      while (endY < field.height && sameWall(wall, makeWall(cellAt(edgeX - 1, endY), cellAt(edgeX, endY)))) endY += 1;
-      const x = xAt(edgeX);
+  const pushRaisedRegionWall = (region, orientation, edge, start) => {
+    const layerIndex = layerForRegion(region);
+    if (layerIndex < 0) return false;
+    const materialIndex = regionSideMaterial.get(region);
+    if (!Number.isFinite(materialIndex)) return false;
+    const zTop = heightForRegion(region);
+    if (zTop <= zBase + 0.001) return false;
+    if (orientation === 'vertical') {
+      const x = xAt(edge);
       pushQuad(
-        wall.materialIndex,
-        [x, yAt(endY), wall.zBottom],
-        [x, yAt(endY), wall.zTop],
-        [x, yAt(y), wall.zTop],
-        [x, yAt(y), wall.zBottom],
+        materialIndex,
+        [x, yAt(start + 1), zBase],
+        [x, yAt(start + 1), zTop],
+        [x, yAt(start), zTop],
+        [x, yAt(start), zBase],
       );
-      topology.sideFaces += 2;
-      if (edgeX === 0 || edgeX === field.width) topology.openEdges += endY - y;
-      y = endY;
+    } else {
+      const y = yAt(edge);
+      pushQuad(
+        materialIndex,
+        [xAt(start), y, zBase],
+        [xAt(start + 1), y, zBase],
+        [xAt(start + 1), y, zTop],
+        [xAt(start), y, zTop],
+      );
+    }
+    topology.sideFaces += 2;
+    return true;
+  };
+  for (let edgeX = 0; edgeX <= field.width; edgeX += 1) {
+    for (let y = 0; y < field.height; y += 1) {
+      const leftRegion = cellAt(edgeX - 1, y);
+      const rightRegion = cellAt(edgeX, y);
+      if (leftRegion === rightRegion) continue;
+      if (pushRaisedRegionWall(leftRegion, 'vertical', edgeX, y) && edgeX === 0) topology.openEdges += 1;
+      if (pushRaisedRegionWall(rightRegion, 'vertical', edgeX, y) && edgeX === field.width) topology.openEdges += 1;
     }
   }
   for (let edgeY = 0; edgeY <= field.height; edgeY += 1) {
-    let x = 0;
-    while (x < field.width) {
-      const wall = makeWall(cellAt(x, edgeY - 1), cellAt(x, edgeY));
-      if (!wall) {
-        x += 1;
-        continue;
-      }
-      let endX = x + 1;
-      while (endX < field.width && sameWall(wall, makeWall(cellAt(endX, edgeY - 1), cellAt(endX, edgeY)))) endX += 1;
-      const y = yAt(edgeY);
-      pushQuad(
-        wall.materialIndex,
-        [xAt(x), y, wall.zBottom],
-        [xAt(endX), y, wall.zBottom],
-        [xAt(endX), y, wall.zTop],
-        [xAt(x), y, wall.zTop],
-      );
-      topology.sideFaces += 2;
-      if (edgeY === 0 || edgeY === field.height) topology.openEdges += endX - x;
-      x = endX;
+    for (let x = 0; x < field.width; x += 1) {
+      const topRegion = cellAt(x, edgeY - 1);
+      const bottomRegion = cellAt(x, edgeY);
+      if (topRegion === bottomRegion) continue;
+      if (pushRaisedRegionWall(topRegion, 'horizontal', edgeY, x) && edgeY === 0) topology.openEdges += 1;
+      if (pushRaisedRegionWall(bottomRegion, 'horizontal', edgeY, x) && edgeY === field.height) topology.openEdges += 1;
     }
   }
   const geometry = buildPlaqueReliefBufferGeometryFromBuckets(buckets);
@@ -4958,8 +4942,10 @@ function syncPlaqueLayers() {
     : [];
   const valuesAreAlreadyLayerAligned = sourceIndices.length === previousSourceIndices.length
     && sourceIndices.every((sourceIndex, index) => Number(previousSourceIndices[index]) === sourceIndex);
+  const resetUploadedLayerState = keepDepthsLayerAligned && !valuesAreAlreadyLayerAligned && previousSourceIndices.length > 0;
   const currentDepths = Array.isArray(state.plaque.layerDepths) ? state.plaque.layerDepths : [];
   state.plaque.layerDepths = layers.map((_, index) => {
+    if (resetUploadedLayerState) return getDefaultPlaqueLayerDepth(index, layers[index]);
     const sourceIndex = sourceIndices[index];
     if (!keepDepthsLayerAligned && !valuesAreAlreadyLayerAligned && Number.isFinite(sourceIndex) && sourceIndex !== index) {
       const sourceCurrent = Number(currentDepths[sourceIndex]);
@@ -4971,6 +4957,7 @@ function syncPlaqueLayers() {
   });
   const currentOverrides = Array.isArray(state.plaque.colourOverrides) ? state.plaque.colourOverrides : [];
   state.plaque.colourOverrides = layers.map((_, index) => {
+    if (resetUploadedLayerState) return '';
     const sourceIndex = sourceIndices[index];
     const current = (!keepDepthsLayerAligned && !valuesAreAlreadyLayerAligned && Number.isFinite(sourceIndex) && sourceIndex !== index ? currentOverrides[sourceIndex] : '') || currentOverrides[index];
     return current ? normalizeHex(current) : '';
@@ -5603,7 +5590,12 @@ function setPlaqueLayerDepth(index, value, options = {}) {
   const updatedLive = updateRenderedPlaqueLayerDepth(index, next);
   if (options.renderControls !== false) renderPlaqueLayerControls();
   else syncPlaqueLayerControlState(index, next);
-  if (options.rebuild === true || !updatedLive) schedulePlaqueBuild(options.buildDelay ?? 220);
+  if (options.rebuild === true || !updatedLive) {
+    const buildDelay = shouldUseUploadedRasterPlaqueHierarchy(state.processed)
+      ? 30
+      : (options.buildDelay ?? 220);
+    schedulePlaqueBuild(buildDelay);
+  }
   updateStats();
 }
 
