@@ -4950,6 +4950,28 @@ function getPlaqueRasterRenderRegions(processed) {
 
 function getPlaqueBackingRenderRegionIndex(processed, regions = getPlaqueRasterRenderRegions(processed)) {
   if (!regions?.length) return -1;
+  if (shouldUseUploadedRasterPlaqueHierarchy(processed)) {
+    const totalPixels = Math.max(1, regions.reduce((sum, region) => sum + (Number(region?.count) || 0), 0));
+    const edgeIndex = getPlaqueOuterEdgeColourIndex(processed);
+    const infos = regions.map((region, index) => {
+      const hex = normalizeHex(region?.hex || '#ffffff');
+      const rgb = hexToRgb(hex);
+      const count = Number(region?.count) || 0;
+      return {
+        index,
+        hex,
+        rgb,
+        luma: colourLuma(rgb),
+        chroma: colourChroma(rgb),
+        count,
+        share: count / totalPixels,
+        isEdge: index === edgeIndex,
+        isNearWhite: isNearWhiteHex(hex),
+        isNearBlack: isNearBlackHex(hex),
+      };
+    });
+    return getUploadedRasterBackingRegionIndex(infos);
+  }
   const edgeIndex = getPlaqueOuterEdgeColourIndex(processed);
   if (edgeIndex >= 0 && edgeIndex < regions.length) return edgeIndex;
   const backingHex = normalizeHex(getPlaqueBackingHex(processed));
@@ -5015,11 +5037,10 @@ function getUploadedRasterPlaqueHierarchy(processed, regions) {
     };
   });
   const backingIndex = getUploadedRasterBackingRegionIndex(infos);
-  const backingHex = normalizeHex(getPlaqueBackingHex(processed));
   const candidates = infos.filter((info) => {
     if (info.count <= 0) return false;
     if (backingIndex >= 0) return info.index !== backingIndex;
-    return normalizeHex(info.hex) !== backingHex;
+    return true;
   });
   if (!candidates.length) return [];
   const roleRank = {
@@ -5046,30 +5067,18 @@ function getUploadedRasterPlaqueHierarchy(processed, regions) {
 
 function getUploadedRasterBackingRegionIndex(infos) {
   if (!infos?.length) return -1;
-  const hasLogoColour = infos.some((info) => !info.isNearWhite && info.chroma >= 42 && info.share >= 0.035);
-  const lightBody = infos
-    .filter((info) => (
-      info.isNearWhite
-      && hasLogoColour
-      && (info.share >= 0.18 || (info.isEdge && info.share >= 0.08))
-    ))
-    .sort((a, b) => {
-      const aScore = a.share * 5 + (a.isEdge ? 1.2 : 0) - a.chroma / 255;
-      const bScore = b.share * 5 + (b.isEdge ? 1.2 : 0) - b.chroma / 255;
-      return bScore - aScore;
-    })[0];
-  if (lightBody) return lightBody.index;
+  const hasLogoColour = infos.some((info) => !info.isNearWhite && info.chroma >= 42 && info.share >= 0.03);
   const backing = infos
     .filter((info) => (
-      info.isNearWhite
-      && info.isEdge
+      info.isEdge
       && hasLogoColour
-      && info.share >= 0.5
+      && info.share >= 0.62
+      && (info.isNearWhite || info.chroma <= 44)
     ))
     .sort((a, b) => b.share - a.share)[0];
   if (backing) return backing.index;
   const edgeBody = infos
-    .filter((info) => info.isEdge && info.share >= 0.16)
+    .filter((info) => info.isEdge && info.share >= 0.72)
     .sort((a, b) => b.share - a.share)[0];
   return edgeBody ? edgeBody.index : -1;
 }

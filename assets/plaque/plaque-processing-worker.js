@@ -128,15 +128,22 @@ function processPlaqueRasterArtwork(message) {
   const meaningfulColourCount = printableClusters.filter((cluster) => (
     cluster.count >= Math.max(12, printableWeight * 0.006)
   )).length;
-  const naturalColourCount = Math.min(Math.max(stableClusters.length, meaningfulColourCount, printableClusters.length ? 1 : 0), 8);
+  let naturalColourCount = Math.min(Math.max(stableClusters.length, meaningfulColourCount, printableClusters.length ? 1 : 0), 8);
   const requestedColourCount = clamp(Number(config?.targetColorCount) || 8, 1, 8);
   const plaqueTraceQuality = normalizePlaqueTraceQuality(config?.traceQuality);
   const plaqueRasterAutoPalette = !config?.frontColoursCustomized;
+  const plaqueDominantClusters = plaqueRasterAutoPalette
+    ? selectPlaqueDominantRasterColourClusters(activeClusters, stableClusters, printableWeight)
+    : null;
+  if (plaqueDominantClusters?.length) {
+    naturalColourCount = Math.min(plaqueDominantClusters.length + (floatingSupportCluster ? 1 : 0), 8);
+  }
+  const activeColourCandidates = plaqueDominantClusters?.length ? plaqueDominantClusters : activeClusters;
   const plaqueAutoColourLimit = plaqueRasterAutoPalette
-    ? getPlaqueAutoPaletteLimit(activeClusters.filter((cluster) => cluster.original !== FLOATING_SUPPORT_CLUSTER_ORIGINAL), printableWeight)
+    ? getPlaqueAutoPaletteLimit(activeColourCandidates.filter((cluster) => cluster.original !== FLOATING_SUPPORT_CLUSTER_ORIGINAL), printableWeight)
     : null;
   const colourLimit = config?.frontColoursCustomized ? requestedColourCount : (plaqueAutoColourLimit || naturalColourCount);
-  const main = activeClusters
+  const main = activeColourCandidates
     .filter((cluster) => cluster.original !== FLOATING_SUPPORT_CLUSTER_ORIGINAL)
     .slice(0, Math.max(0, colourLimit - (floatingSupportCluster ? 1 : 0)));
   if (floatingSupportCluster) main.push(floatingSupportCluster);
@@ -588,6 +595,62 @@ function rankActiveColourClusters(sourceClusters, stableClusters) {
     seen.add(cluster.original);
   });
   return ranked.length ? ranked : sourceClusters;
+}
+
+function selectPlaqueDominantRasterColourClusters(activeClusters, stableClusters, totalWeight = 0) {
+  const active = (activeClusters || [])
+    .filter((cluster) => cluster?.original !== FLOATING_SUPPORT_CLUSTER_ORIGINAL && cluster.count > 0);
+  if (!active.length) return [];
+  const stableOriginals = new Set((stableClusters || []).map((cluster) => cluster.original));
+  const candidates = [
+    ...(stableClusters || []),
+    ...active.filter((cluster) => !stableOriginals.has(cluster.original)),
+  ].filter((cluster) => cluster?.original !== FLOATING_SUPPORT_CLUSTER_ORIGINAL && cluster.count > 0);
+  const selected = [];
+  candidates.forEach((cluster) => {
+    const share = cluster.count / Math.max(totalWeight, 1);
+    const rgb = Array.isArray(cluster.rgb) ? cluster.rgb : [0, 0, 0];
+    const luma = colourLuma(rgb);
+    const chroma = colourChroma(rgb);
+    const isCriticalNeutral = (luma <= 52 && chroma <= 42) || (luma >= 218 && chroma <= 58);
+    const isStrongLogoColour = chroma >= 54;
+    const minShare = isCriticalNeutral ? 0.003 : (isStrongLogoColour ? 0.005 : 0.012);
+    if (selected.length && share < minShare) return;
+    const similar = selected.find((item) => shouldMergePlaqueDominantRasterCluster(item, cluster, totalWeight));
+    if (similar) return;
+    selected.push(cluster);
+  });
+  return selected.length ? selected.slice(0, 8) : active.slice(0, 8);
+}
+
+function shouldMergePlaqueDominantRasterCluster(a, b, totalWeight = 0) {
+  if (!a || !b) return false;
+  const rgbA = Array.isArray(a.rgb) ? a.rgb : [0, 0, 0];
+  const rgbB = Array.isArray(b.rgb) ? b.rgb : [0, 0, 0];
+  const distance = colourDistance(rgbA, rgbB);
+  const lumaA = colourLuma(rgbA);
+  const lumaB = colourLuma(rgbB);
+  const chromaA = colourChroma(rgbA);
+  const chromaB = colourChroma(rgbB);
+  const shareA = a.count / Math.max(totalWeight, 1);
+  const shareB = b.count / Math.max(totalWeight, 1);
+  if (lumaA >= 214 && lumaB >= 214 && chromaA <= 62 && chromaB <= 62) return true;
+  if (lumaA >= 170 && lumaB >= 170 && Math.max(lumaA, lumaB) >= 198 && chromaA <= 70 && chromaB <= 70 && Math.min(shareA, shareB) <= 0.12) return true;
+  if (lumaA <= 62 && lumaB <= 62 && chromaA <= 62 && chromaB <= 62) return true;
+  if (chromaA <= 46 && chromaB <= 46 && distance <= 74 && Math.min(shareA, shareB) <= 0.08) return true;
+  if (chromaA < 32 || chromaB < 32) return false;
+  const hueA = colourHue(rgbA);
+  const hueB = colourHue(rgbB);
+  const hueGap = Math.min(Math.abs(hueA - hueB), 360 - Math.abs(hueA - hueB));
+  if (hueGap > 18) return false;
+  if (distance <= 78) return true;
+  const lumaGap = Math.abs(lumaA - lumaB);
+  const chromaGap = Math.abs(chromaA - chromaB);
+  const countRatio = Math.min(a.count, b.count) / Math.max(a.count, b.count, 1);
+  const smallerShare = Math.min(shareA, shareB);
+  if (smallerShare <= 0.1 && distance <= 230) return true;
+  if (smallerShare <= 0.08 && countRatio <= 0.32 && distance <= 210) return true;
+  return lumaGap <= 96 && chromaGap <= 132 && distance <= 168;
 }
 
 function getPlaqueAutoPaletteLimit(clusters, totalWeight = 0) {
