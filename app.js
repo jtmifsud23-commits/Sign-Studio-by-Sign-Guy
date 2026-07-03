@@ -179,12 +179,12 @@ const PLAQUE_DEFAULT_TRACE_QUALITY = 'smooth';
 const PLAQUE_SVG_LAYER_SHAPE_LIMIT = 420;
 const DEFAULT_PLAQUE_PROCESSED_CACHE_VERSION = 1;
 const DEFAULT_PLAQUE_PROCESSED_CACHE_KEY = 'default-sign-guy-plaque:v20260526-04';
-const PLAQUE_UPLOAD_PROCESSED_CACHE_VERSION = 1;
+const PLAQUE_UPLOAD_PROCESSED_CACHE_VERSION = 2;
 const PLAQUE_UPLOAD_PROCESSED_CACHE_PREFIX = 'uploaded-plaque:';
 const PLAQUE_UPLOAD_PROCESSED_CACHE_LIMIT = 18;
-const PLAQUE_CONTOUR_CACHE_VERSION = 1;
-const PLAQUE_BASE_SILHOUETTE_CACHE_VERSION = 6;
-const PLAQUE_PROCESSING_WORKER_SRC = './assets/plaque/plaque-processing-worker.js?v=20260526-11';
+const PLAQUE_CONTOUR_CACHE_VERSION = 4;
+const PLAQUE_BASE_SILHOUETTE_CACHE_VERSION = 8;
+const PLAQUE_PROCESSING_WORKER_SRC = './assets/plaque/plaque-processing-worker.js?v=20260703-example-containment-01';
 const PLAQUE_PROCESSING_WORKER_TIMEOUT_MS = 90000;
 const LED_THREE_UPGRADE_DELAY_MS = 80;
 const LED_THREE_CANVAS_SAMPLE_SIZE = 48;
@@ -3248,9 +3248,51 @@ function makeRasterArtworkPayload(decodeFile, originalFile, image, dataUrl, opti
     dataUrl,
     pathCount: 0,
     gradients: 0,
+    palette: Array.isArray(options.palette) && options.palette.length ? options.palette : null,
     hasTransparency,
     name: originalFile.name,
   };
+}
+
+async function extractIndexedPngPalette(file) {
+  if (!file || !/png/i.test(String(file.type || file.name || ''))) return null;
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  if (bytes.length < 33 || signature.some((value, index) => bytes[index] !== value)) return null;
+  const view = new DataView(buffer);
+  let offset = 8;
+  let colourType = -1;
+  let palette = null;
+  let transparency = null;
+  while (offset + 8 <= bytes.length) {
+    const length = view.getUint32(offset);
+    offset += 4;
+    const type = String.fromCharCode(bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]);
+    offset += 4;
+    if (offset + length > bytes.length) break;
+    if (type === 'IHDR') {
+      colourType = bytes[offset + 9];
+    } else if (type === 'PLTE') {
+      palette = [];
+      for (let i = 0; i + 2 < length; i += 3) {
+        palette.push([bytes[offset + i], bytes[offset + i + 1], bytes[offset + i + 2]]);
+      }
+    } else if (type === 'tRNS') {
+      transparency = bytes.slice(offset, offset + length);
+    } else if (type === 'IDAT' || type === 'IEND') {
+      break;
+    }
+    offset += length + 4;
+  }
+  if (colourType !== 3 || !palette?.length) return null;
+  const visible = [];
+  palette.forEach((rgb, index) => {
+    const alpha = transparency && index < transparency.length ? transparency[index] : 255;
+    if (alpha < 74) return;
+    if (!visible.some((colour) => colourDistance(colour, rgb) < 4)) visible.push(rgb);
+  });
+  return visible.length ? visible.slice(0, 64) : null;
 }
 
 async function normalizeRasterUploadFile(file) {
@@ -3879,8 +3921,30 @@ function renderMappingControlsMarkup() {
   const colours = state.processed?.colours || [];
   const plaqueMode = state.productType === 'plaque';
   const plaqueLayers = plaqueMode ? getPlaqueLayerDescriptors() : [];
-  const mappingItems = plaqueLayers.length
-    ? plaqueLayers.map((layer, idx) => {
+  const plaqueMappingRegions = plaqueMode && state.artwork?.type !== 'svg' && typeof getPlaqueRasterRenderRegions === 'function'
+    ? getPlaqueRasterRenderRegions(state.processed)
+    : [];
+  const backingIndex = plaqueMappingRegions.length && typeof getPlaqueBackingRenderRegionIndex === 'function'
+    ? getPlaqueBackingRenderRegionIndex(state.processed, plaqueMappingRegions)
+    : -1;
+  let mappingItems = [];
+  if (plaqueMappingRegions.length) {
+    mappingItems = plaqueMappingRegions
+      .map((region, sourceIndex) => ({ region, sourceIndex }))
+      .filter(({ region }) => !region.isFloatingSupport && (region.count ?? 1) > 0)
+      .map(({ region, sourceIndex }) => {
+        const hex = typeof getPlaqueRasterRegionDisplayHex === 'function'
+          ? getPlaqueRasterRegionDisplayHex(state.processed, plaqueMappingRegions, sourceIndex, backingIndex)
+          : getDisplayColour(sourceIndex, region.hex);
+        return {
+          sourceHex: region.hex,
+          targetHex: hex,
+          tokenHex: hex,
+          label: `${sourceIndex + 1}`,
+        };
+      });
+  } else if (plaqueLayers.length) {
+    mappingItems = plaqueLayers.map((layer, idx) => {
       const hex = getPlaqueLayerDisplayHex(layer, idx);
       return {
         sourceHex: hex,
@@ -3888,8 +3952,9 @@ function renderMappingControlsMarkup() {
         tokenHex: hex,
         label: `${idx + 1}`,
       };
-    })
-    : colours.map((region, idx) => {
+    });
+  } else {
+    mappingItems = colours.map((region, idx) => {
       const hex = getDisplayColour(idx, region.hex);
       return {
         sourceHex: region.hex,
@@ -3898,6 +3963,7 @@ function renderMappingControlsMarkup() {
         label: region.isFloatingSupport ? 'S' : `${idx + 1}`,
       };
     });
+  }
   const detectedColourCount = getCurrentDetectedColourCount(mappingItems.length || colours.length);
   if (!state.frontColoursCustomized) {
     state.targetColorCount = detectedColourCount;

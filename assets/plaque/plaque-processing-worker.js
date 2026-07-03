@@ -602,11 +602,13 @@ function getPlaqueAutoPaletteLimit(clusters, totalWeight = 0) {
     const luma = colourLuma(rgb);
     const chroma = colourChroma(rgb);
     const isCriticalNeutral = (luma <= 46 && chroma <= 34) || (luma >= 228 && chroma <= 36);
+    const isStrongLogoColour = chroma >= 68;
     const nearest = keyColours.reduce((best, item) => Math.min(best, colourDistance(rgb, item.rgb)), Infinity);
     const distinctEnough = nearest > (isCriticalNeutral ? 42 : 58);
-    if ((share >= 0.018 || isCriticalNeutral) && distinctEnough) keyColours.push(cluster);
+    const shareThreshold = isStrongLogoColour ? 0.004 : 0.01;
+    if ((share >= shareThreshold || isCriticalNeutral) && distinctEnough) keyColours.push(cluster);
   });
-  return clamp(keyColours.length || Math.min(usable.length, 5), 1, 5);
+  return clamp(keyColours.length || Math.min(usable.length, 8), 1, 8);
 }
 
 function assignPlaqueRasterPixelsToFinalColours(regionIndex, alphaMask, alphaValues, data, main, width, height, config) {
