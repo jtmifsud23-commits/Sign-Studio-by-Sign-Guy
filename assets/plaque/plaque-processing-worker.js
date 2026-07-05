@@ -53,8 +53,11 @@ function processPlaqueRasterArtwork(message) {
   const safeCrop = normalizeCrop(crop);
   const srcW = Math.max(1, Math.round(imageWidth * safeCrop.w));
   const srcH = Math.max(1, Math.round(imageHeight * safeCrop.h));
-  const maxSide = Number(options?.maxSide) || 1200;
-  const scale = Math.min(maxSide / srcW, maxSide / srcH, 1);
+  const maxSide = Number(config?.traceLongEdge) || Number(options?.traceLongEdge) || Number(options?.maxSide) || 1200;
+  const allowRasterUpscale = Boolean(config?.allowUpscale || options?.allowUpscale);
+  const scale = allowRasterUpscale
+    ? maxSide / Math.max(srcW, srcH)
+    : Math.min(maxSide / srcW, maxSide / srcH, 1);
   let width = Math.max(12, Math.round(srcW * scale));
   let height = Math.max(12, Math.round(srcH * scale));
   let canvas = new OffscreenCanvas(width, height);
@@ -132,6 +135,7 @@ function processPlaqueRasterArtwork(message) {
   const requestedColourCount = clamp(Number(config?.targetColorCount) || 8, 1, 8);
   const plaqueTraceQuality = normalizePlaqueTraceQuality(config?.traceQuality);
   const plaqueRasterAutoPalette = !config?.frontColoursCustomized;
+  const preservePlaqueRasterColourTopology = config?.preserveRasterColourTopology !== false;
   const plaqueDominantClusters = plaqueRasterAutoPalette
     ? selectPlaqueDominantRasterColourClusters(activeClusters, stableClusters, printableWeight)
     : null;
@@ -162,7 +166,7 @@ function processPlaqueRasterArtwork(message) {
   postProgress(message.id, 72, 'Cleaning colour map');
   assignPlaqueRasterPixelsToFinalColours(regionIndex, alphaMask, alphaValues, data, main, width, height, config);
   refinePlaqueRasterPaletteFromAssignedPixels(regionIndex, alphaMask, alphaValues, data, main);
-  if (plaqueTraceQuality !== 'raw') {
+  if (plaqueTraceQuality !== 'raw' && !preservePlaqueRasterColourTopology) {
     cleanupPlaqueExactAntiAliasRegions(regionIndex, alphaMask, alphaValues, data, main, width, height);
     cleanPlaqueLabelledColourMap(regionIndex, alphaMask, alphaValues, data, main, width, height);
     refinePlaqueRasterPaletteFromAssignedPixels(regionIndex, alphaMask, alphaValues, data, main);
@@ -176,7 +180,7 @@ function processPlaqueRasterArtwork(message) {
   for (let i = 0; i < regionIndex.length; i += 1) {
     if (alphaMask[i] && regionIndex[i] >= 0) main[regionIndex[i]].mask[i] = 1;
   }
-  if (plaqueTraceQuality === 'smooth') {
+  if (plaqueTraceQuality === 'smooth' && !preservePlaqueRasterColourTopology) {
     cleanPlaqueRasterRegionMasks(main, regionIndex, alphaMask, width, height, {
       includeRemoved: Boolean(config?.includeDebugPayload),
     });
@@ -196,6 +200,13 @@ function processPlaqueRasterArtwork(message) {
   const tinyShapes = regionPaths.filter((region) => region.count / Math.max(opaqueCount, 1) < 0.012).length;
 
   return {
+    sourceWidth: srcW,
+    sourceHeight: srcH,
+    workingWidth: width,
+    workingHeight: height,
+    traceLongEdge: maxSide,
+    workingScale: scale,
+    allowRasterUpscale,
     width,
     height,
     aspect: width / height,

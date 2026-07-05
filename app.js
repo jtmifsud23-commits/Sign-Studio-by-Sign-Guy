@@ -135,7 +135,8 @@ const ORDER_SCREENSHOT_MAX_SIDE = 900;
 const ORDER_SCREENSHOT_QUALITY = 0.74;
 const ORDER_PROJECT_PREVIEW_MAX_SIDE = 760;
 const ORDER_LOGO_MAX_SIDE = 1400;
-const PLAQUE_UPLOAD_MAX_SIDE = 1200;
+const PLAQUE_UPLOAD_MAX_SIDE = 2048;
+const PLAQUE_UPLOAD_TRACE_LONG_EDGE = 2048;
 const PLAQUE_RASTER_PREVIEW_TRACE_MAX_SIDE = 1600;
 const PLAQUE_RASTER_PREVIEW_TRACE_MIN_SIDE = 1100;
 const PLAQUE_UPLOAD_READ_TIMEOUT_MS = 12000;
@@ -172,6 +173,9 @@ const PLAQUE_BASE_THICKNESS_MIN = 4;
 const PLAQUE_BASE_THICKNESS_MAX = 8;
 const PLAQUE_DEFAULT_BASE_PADDING = 2.5;
 const PLAQUE_DEFAULT_LAYER_DEPTH = 1.4;
+const PLAQUE_UPLOADED_CHROMATIC_LAYER_DEPTH = 4.6;
+const PLAQUE_UPLOADED_LIGHT_LAYER_DEPTH = 1.7;
+const PLAQUE_UPLOADED_DARK_LAYER_DEPTH = 1.1;
 const PLAQUE_BASE_LAYER_DEPTH = 1;
 const PLAQUE_LAYER_DEPTH_MIN = 0.2;
 const PLAQUE_LAYER_DEPTH_MAX = 8;
@@ -179,12 +183,12 @@ const PLAQUE_DEFAULT_TRACE_QUALITY = 'smooth';
 const PLAQUE_SVG_LAYER_SHAPE_LIMIT = 420;
 const DEFAULT_PLAQUE_PROCESSED_CACHE_VERSION = 1;
 const DEFAULT_PLAQUE_PROCESSED_CACHE_KEY = 'default-sign-guy-plaque:v20260526-04';
-const PLAQUE_UPLOAD_PROCESSED_CACHE_VERSION = 3;
+const PLAQUE_UPLOAD_PROCESSED_CACHE_VERSION = 14;
 const PLAQUE_UPLOAD_PROCESSED_CACHE_PREFIX = 'uploaded-plaque:';
 const PLAQUE_UPLOAD_PROCESSED_CACHE_LIMIT = 18;
-const PLAQUE_CONTOUR_CACHE_VERSION = 5;
+const PLAQUE_CONTOUR_CACHE_VERSION = 14;
 const PLAQUE_BASE_SILHOUETTE_CACHE_VERSION = 8;
-const PLAQUE_PROCESSING_WORKER_SRC = './assets/plaque/plaque-processing-worker.js?v=20260703-dominant-colours-01';
+const PLAQUE_PROCESSING_WORKER_SRC = './assets/plaque/plaque-processing-worker.js?v=20260705-uploaded-trace-quality-01';
 const PLAQUE_PROCESSING_WORKER_TIMEOUT_MS = 90000;
 const LED_THREE_UPGRADE_DELAY_MS = 80;
 const LED_THREE_CANVAS_SAMPLE_SIZE = 48;
@@ -351,6 +355,7 @@ const state = {
     basePadding: PLAQUE_DEFAULT_BASE_PADDING,
     backingColourOverride: '',
     layerDepths: [],
+    layerDepthSources: [],
     colourOverrides: [],
     layerSourceIndices: [],
     selectedLayer: 0,
@@ -5698,8 +5703,9 @@ function processArtwork(artwork, options = {}) {
   const crop = state.edit.crop || { x: 0, y: 0, w: 1, h: 1 };
   const srcW = Math.max(1, Math.round(getArtworkImageWidth(artwork.image) * crop.w));
   const srcH = Math.max(1, Math.round(getArtworkImageHeight(artwork.image) * crop.h));
-  const maxSide = Number(options.maxSide) || (artwork.type === 'svg' ? 1500 : 1200);
-  const scale = artwork.type === 'svg'
+  const maxSide = Number(options.traceLongEdge) || Number(options.maxSide) || (artwork.type === 'svg' ? 1500 : 1200);
+  const allowRasterUpscale = artwork.type !== 'svg' && options.allowUpscale === true;
+  const scale = artwork.type === 'svg' || allowRasterUpscale
     ? maxSide / Math.max(srcW, srcH)
     : Math.min(maxSide / srcW, maxSide / srcH, 1);
   let width = Math.max(12, Math.round(srcW * scale));
@@ -5802,6 +5808,10 @@ function processArtwork(artwork, options = {}) {
     ? clamp(Number(state.plaque.targetColorCount) || requestedColourCount, 1, 8)
     : requestedColourCount;
   const plaqueRasterAutoPalette = state.productType === 'plaque' && artwork.type !== 'svg' && !frontColoursWereCustomized;
+  const preservePlaqueRasterColourTopology = plaqueRasterAutoPalette
+    && !state.isDefaultPreview
+    && !state.plaque.isDefaultPreview
+    && !state.plaque.isExampleProject;
   const plaqueDominantClusters = plaqueRasterAutoPalette
     ? selectPlaqueDominantRasterColourClusters(activeClusters, stableClusters, printableWeight)
     : null;
@@ -5831,7 +5841,7 @@ function processArtwork(artwork, options = {}) {
   if (state.productType === 'plaque' && artwork.type !== 'svg') {
     assignPlaqueRasterPixelsToFinalColours(regionIndex, alphaMask, alphaValues, data, main, width, height);
     refinePlaqueRasterPaletteFromAssignedPixels(regionIndex, alphaMask, alphaValues, data, main);
-    if (plaqueTraceQuality !== 'raw') {
+    if (plaqueTraceQuality !== 'raw' && !preservePlaqueRasterColourTopology) {
       cleanupPlaqueExactAntiAliasRegions(regionIndex, alphaMask, alphaValues, data, main, width, height);
       cleanPlaqueLabelledColourMap(regionIndex, alphaMask, alphaValues, data, main, width, height);
       refinePlaqueRasterPaletteFromAssignedPixels(regionIndex, alphaMask, alphaValues, data, main);
@@ -5845,7 +5855,7 @@ function processArtwork(artwork, options = {}) {
   for (let i = 0; i < regionIndex.length; i += 1) {
     if (alphaMask[i] && regionIndex[i] >= 0) main[regionIndex[i]].mask[i] = 1;
   }
-  if (state.productType === 'plaque' && artwork.type !== 'svg' && plaqueTraceQuality === 'smooth') {
+  if (state.productType === 'plaque' && artwork.type !== 'svg' && plaqueTraceQuality === 'smooth' && !preservePlaqueRasterColourTopology) {
     cleanPlaqueRasterRegionMasks(main, regionIndex, alphaMask, width, height, {
       includeRemoved: shouldKeepPlaqueDeferredDebugData(),
     });
@@ -5866,6 +5876,13 @@ function processArtwork(artwork, options = {}) {
   const tinyShapes = regionPaths.filter((region) => region.count / Math.max(opaqueCount, 1) < 0.012).length;
 
   return {
+    sourceWidth: srcW,
+    sourceHeight: srcH,
+    workingWidth: width,
+    workingHeight: height,
+    traceLongEdge: maxSide,
+    workingScale: scale,
+    allowRasterUpscale,
     width,
     height,
     aspect: width / height,
