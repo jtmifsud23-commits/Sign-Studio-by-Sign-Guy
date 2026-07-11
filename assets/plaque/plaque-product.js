@@ -4,6 +4,7 @@ const DEFAULT_PLAQUE_DESKTOP_PREVIEW_ZOOM = 1;
 const DEFAULT_PLAQUE_MOBILE_PREVIEW_ZOOM = 1;
 const PLAQUE_RASTER_FALLBACK_MAX_SIDE = 760;
 const PLAQUE_LAYER_Z_EPSILON = 0.02;
+const PLAQUE_FLOATING_SUPPORT_ORIGINAL = -7777;
 const plaqueBaseDilationOffsetCache = new Map();
 
 function normalizePlaqueTraceQuality(value) {
@@ -204,6 +205,106 @@ function pickPlaqueLayer(clientX, clientY) {
   return hit.object.userData.plaqueLayer;
 }
 
+function countPlaqueThreeSceneStats() {
+  const stats = {
+    meshCount: 0,
+    geometryCount: 0,
+    materialCount: 0,
+    resourceCount: 0,
+  };
+  const countMeshes = (root) => {
+    root?.traverse?.((object) => {
+      if (object?.isMesh) stats.meshCount += 1;
+    });
+  };
+  countMeshes(state.three?.group);
+  countMeshes(state.three?.floorGroup);
+  (state.three?.resources || []).forEach((resource) => {
+    stats.resourceCount += 1;
+    if (resource?.isBufferGeometry || resource?.attributes?.position) stats.geometryCount += 1;
+    if (resource?.isMaterial) stats.materialCount += 1;
+  });
+  return stats;
+}
+
+function beginPlaqueUploadLifecycle(file) {
+  const requestId = (Number(state.plaque.uploadRequestId) || 0) + 1;
+  const previousStats = countPlaqueThreeSceneStats();
+  cancelPlaqueBuild();
+  clearThreeModel();
+  state.plaque.uploadRequestId = requestId;
+  state.plaque.processed = null;
+  state.processed = null;
+  state.plaque.svgLayerCache = null;
+  state.plaque.layerDepths = [];
+  state.plaque.layerDepthSources = [];
+  state.plaque.layerDepthsByLayerId = {};
+  state.plaque.layerDepthsBySourceIndex = {};
+  state.plaque.layerDepthsByOriginal = {};
+  state.plaque.layerSourceIndices = [];
+  state.plaque.layerStableIds = [];
+  state.plaque.colourOverrides = [];
+  state.plaque.colourOverridesByLayerId = {};
+  state.plaque.colourOverridesBySourceIndex = {};
+  state.plaque.colourOverridesByOriginal = {};
+  state.plaque.colorOverrides = [];
+  state.plaque.frontColoursCustomized = false;
+  state.plaque.uploadLifecycleLog = {
+    requestId,
+    fileName: file?.name || '',
+    fileHash: '',
+    previousMeshCountRemoved: previousStats.meshCount,
+    previousGeometryCountDisposed: previousStats.geometryCount,
+    previousMaterialCountDisposed: previousStats.materialCount,
+    previousResourceCountDisposed: previousStats.resourceCount,
+    oldWorkerResultsIgnored: 0,
+    newMeshCountCreated: 0,
+    cacheHit: false,
+    cacheKey: '',
+  };
+  clearUploadedPlaqueDebugHelpers();
+  return requestId;
+}
+
+function isCurrentPlaqueUploadRequest(requestId) {
+  if (!Number.isFinite(Number(requestId))) return true;
+  return Number(requestId) === Number(state.plaque.uploadRequestId);
+}
+
+function updatePlaqueUploadLifecycle(requestId, patch = {}) {
+  if (!Number.isFinite(Number(requestId))) return;
+  if (!isCurrentPlaqueUploadRequest(requestId)) return;
+  state.plaque.uploadLifecycleLog = {
+    ...(state.plaque.uploadLifecycleLog || { requestId }),
+    ...patch,
+    requestId,
+  };
+}
+
+function markIgnoredPlaqueUploadResult(requestId) {
+  if (!Number.isFinite(Number(requestId))) return;
+  if (state.plaque.uploadLifecycleLog) {
+    state.plaque.uploadLifecycleLog.oldWorkerResultsIgnored = (Number(state.plaque.uploadLifecycleLog.oldWorkerResultsIgnored) || 0) + 1;
+    state.plaque.uploadLifecycleLog.lastIgnoredRequestId = requestId;
+  }
+}
+
+function logPlaqueUploadLifecycle(requestId, patch = {}) {
+  if (!Number.isFinite(Number(requestId))) return;
+  if (!isCurrentPlaqueUploadRequest(requestId)) return;
+  updatePlaqueUploadLifecycle(requestId, patch);
+  const lifecycle = state.plaque.uploadLifecycleLog;
+  if (!lifecycle) return;
+  console.info('[3D Plaque upload lifecycle]', { ...lifecycle });
+}
+
+function clearUploadedPlaqueDebugHelpers() {
+  if (typeof window === 'undefined' || !window.SignStudioPlaqueDebug) return;
+  delete window.SignStudioPlaqueDebug.getUploadedMaskPreviews;
+  delete window.SignStudioPlaqueDebug.dumpUploadedDepthState;
+  delete window.SignStudioPlaqueDebug.getUploadedVectorPreviews;
+}
+
 async function handlePlaqueFiles(fileList) {
   const file = fileList?.[0];
   if (!file) return;
@@ -227,7 +328,14 @@ async function handlePlaqueFiles(fileList) {
       targetColorCount: state.plaque.targetColorCount,
       colorOverrides: [...(state.plaque.colorOverrides || [])],
       colourOverrides: [...(state.plaque.colourOverrides || [])],
+      colourOverridesByLayerId: { ...(state.plaque.colourOverridesByLayerId || {}) },
+      colourOverridesBySourceIndex: { ...(state.plaque.colourOverridesBySourceIndex || {}) },
+      colourOverridesByOriginal: { ...(state.plaque.colourOverridesByOriginal || {}) },
+      layerDepthsByLayerId: { ...(state.plaque.layerDepthsByLayerId || {}) },
+      layerDepthsBySourceIndex: { ...(state.plaque.layerDepthsBySourceIndex || {}) },
+      layerDepthsByOriginal: { ...(state.plaque.layerDepthsByOriginal || {}) },
       layerSourceIndices: [...(state.plaque.layerSourceIndices || [])],
+      layerStableIds: [...(state.plaque.layerStableIds || [])],
       backingColourOverride: state.plaque.backingColourOverride || '',
       frontColoursCustomized: state.plaque.frontColoursCustomized,
     selectedColor: state.plaque.selectedColor,
@@ -259,6 +367,7 @@ async function handlePlaqueFiles(fileList) {
     return;
   }
 
+  const uploadRequestId = beginPlaqueUploadLifecycle(file);
   setUploadLoading('plaque');
   let uploadFile = file;
   state.designName = '';
@@ -268,6 +377,7 @@ async function handlePlaqueFiles(fileList) {
     if (validation.kind === 'heic') {
       uploadFile = await convertHeicToPngFile(file);
     }
+    if (!isCurrentPlaqueUploadRequest(uploadRequestId)) return;
     const uploadFingerprintPromise = getPlaqueArtworkFingerprint(null, uploadFile).catch((error) => {
       console.warn('Could not precompute uploaded plaque fingerprint.', error);
       return '';
@@ -296,7 +406,13 @@ async function handlePlaqueFiles(fileList) {
       ? readSvgArtwork(uploadFile)
       : readPlaqueRasterArtwork(uploadFile);
     state.plaque.artwork = await withTimeout(artworkRead, PLAQUE_UPLOAD_READ_TIMEOUT_MS, 'plaque-upload-read-timeout');
+    if (!isCurrentPlaqueUploadRequest(uploadRequestId)) return;
     state.plaque.uploadFingerprint = await uploadFingerprintPromise;
+    updatePlaqueUploadLifecycle(uploadRequestId, {
+      fileName: uploadFile.name,
+      fileHash: state.plaque.uploadFingerprint || '',
+    });
+    if (!isCurrentPlaqueUploadRequest(uploadRequestId)) return;
 
     setPlaqueLoadingProgress(42, 'Detecting colours');
     await waitFrame();
@@ -307,7 +423,11 @@ async function handlePlaqueFiles(fileList) {
     state.plaque.targetColorCount = 8;
     state.plaque.colorOverrides = [];
     state.plaque.colourOverrides = [];
+    state.plaque.colourOverridesByLayerId = {};
+    state.plaque.colourOverridesBySourceIndex = {};
+    state.plaque.colourOverridesByOriginal = {};
     state.plaque.layerSourceIndices = [];
+    state.plaque.layerStableIds = [];
     state.plaque.svgLayerCache = null;
     state.plaque.fastPreviewOnly = false;
     state.plaque.previewDebugMode = 'extruded';
@@ -318,6 +438,9 @@ async function handlePlaqueFiles(fileList) {
     state.plaque.baseThickness = PLAQUE_DEFAULT_BASE_THICKNESS;
     state.plaque.layerDepths = [];
     state.plaque.layerDepthSources = [];
+    state.plaque.layerDepthsByLayerId = {};
+    state.plaque.layerDepthsBySourceIndex = {};
+    state.plaque.layerDepthsByOriginal = {};
     state.plaque.frontColoursCustomized = false;
     state.plaque.selectedColor = 0;
     state.plaque.selectedColourTarget = { type: 'front', index: 0 };
@@ -341,8 +464,10 @@ async function handlePlaqueFiles(fileList) {
     await waitFrame();
     plaqueUploadStage = 'processing plaque layers';
     try {
-      await reprocessPlaqueArtwork();
+      await reprocessPlaqueArtwork({ uploadRequestId });
+      if (!isCurrentPlaqueUploadRequest(uploadRequestId)) return;
     } catch (processError) {
+      if (!isCurrentPlaqueUploadRequest(uploadRequestId)) return;
       console.warn('3D Plaque layer processing failed; using raster fallback preview.', processError);
       state.plaque.processed = createPlaqueRasterFallbackProcessed(state.plaque.artwork);
       state.plaque.fastPreviewOnly = true;
@@ -364,6 +489,7 @@ async function handlePlaqueFiles(fileList) {
       file_type: validation.kind,
     });
   } catch (error) {
+    if (!isCurrentPlaqueUploadRequest(uploadRequestId)) return;
     error.plaqueUploadStage = error.plaqueUploadStage || plaqueUploadStage;
     console.warn(`3D Plaque upload failed while ${plaqueUploadStage}.`, error);
     Object.assign(state.plaque, previousPlaqueState);
@@ -892,6 +1018,12 @@ function activatePlaqueArtworkState() {
 
 async function reprocessPlaqueArtwork(options = {}) {
   if (!state.plaque.artwork) return;
+  const uploadRequestId = Number.isFinite(Number(options.uploadRequestId)) ? Number(options.uploadRequestId) : null;
+  const abortIfStaleUpload = () => {
+    if (uploadRequestId === null || isCurrentPlaqueUploadRequest(uploadRequestId)) return false;
+    markIgnoredPlaqueUploadResult(uploadRequestId);
+    return true;
+  };
   let cachedProcessed = options.processedCache
     ? hydrateCachedPlaqueProcessed(clonePlaqueProcessedForCache(options.processedCache, { slimLabelledMap: false }), state.plaque.artwork)
     : null;
@@ -906,19 +1038,28 @@ async function reprocessPlaqueArtwork(options = {}) {
   })) || null;
   if (!cachedProcessed && shouldUseUploadedPlaqueProcessedCache(options)) {
     uploadCacheContext = await getUploadedPlaqueProcessedCacheContext(state.plaque.artwork, state.plaque.uploadedFile);
+    if (abortIfStaleUpload()) return;
+    updatePlaqueUploadLifecycle(uploadRequestId, {
+      cacheHit: Boolean(uploadCacheContext?.processed),
+      cacheKey: uploadCacheContext?.key || '',
+      fileHash: uploadCacheContext?.fingerprint || state.plaque.uploadFingerprint || '',
+    });
     if (uploadCacheContext?.processed) {
       cachedProcessed = hydrateCachedPlaqueProcessed(uploadCacheContext.processed, state.plaque.artwork);
     }
   }
   if (!cachedProcessed) await waitFrame();
+  if (abortIfStaleUpload()) return;
   try {
     if (cachedProcessed) {
       state.plaque.processed = shouldKeepPlaqueDeferredDebugData()
         ? cachedProcessed
         : stripPlaqueDeferredDebugData(cachedProcessed);
     } else {
-      state.plaque.processed = await processPlaqueArtworkWithWorker(state.plaque.artwork, getPlaqueProcessArtworkOptions())
-        || processArtwork(state.plaque.artwork, getPlaqueProcessArtworkOptions());
+      const workerProcessed = await processPlaqueArtworkWithWorker(state.plaque.artwork, getPlaqueProcessArtworkOptions(), { uploadRequestId });
+      if (abortIfStaleUpload()) return;
+      state.plaque.processed = workerProcessed || processArtwork(state.plaque.artwork, getPlaqueProcessArtworkOptions());
+      if (abortIfStaleUpload()) return;
       if (!shouldKeepPlaqueDeferredDebugData()) {
         stripPlaqueDeferredDebugData(state.plaque.processed);
       }
@@ -926,6 +1067,20 @@ async function reprocessPlaqueArtwork(options = {}) {
         reorderPlaqueRasterColoursByEdge(state.plaque.processed);
       }
     }
+    if (state.plaque.processed && state.plaque.uploadFingerprint) {
+      state.plaque.processed.uploadFingerprint = state.plaque.uploadFingerprint;
+    }
+    if (state.plaque.processed && uploadCacheContext?.key) {
+      state.plaque.processed.uploadCacheKey = uploadCacheContext.key;
+    }
+    const vectorizeOptionChange = state.plaque.lastVectorizeOptionChange || '';
+    logPlaqueVectorizeState(state.plaque.processed, {
+      cacheHit: Boolean(uploadCacheContext?.processed),
+      cacheKey: uploadCacheContext?.key || state.plaque.processed?.uploadCacheKey || '',
+      previewRegeneratedAfterToggle: Boolean(vectorizeOptionChange),
+      optionChange: vectorizeOptionChange,
+    });
+    state.plaque.lastVectorizeOptionChange = '';
     state.plaque.fastPreviewOnly = shouldUsePlaqueFastRaisedPreview(state.plaque.processed);
     state.plaque.processingDirty = false;
     activatePlaqueArtworkState();
@@ -935,10 +1090,19 @@ async function reprocessPlaqueArtwork(options = {}) {
     }
     syncColorOverrides(previousColourSnapshot);
     state.plaque.colorOverrides = [...state.colorOverrides];
-    state.plaque.colourOverrides = [...state.colorOverrides];
+    syncPlaqueColourOverridesFromProcessed();
     state.plaque.frontColoursCustomized = state.frontColoursCustomized;
     state.plaque.processed = state.processed;
     renderPreview();
+    if (uploadRequestId !== null) {
+      const sceneStats = countPlaqueThreeSceneStats();
+      logPlaqueUploadLifecycle(uploadRequestId, {
+        newMeshCountCreated: sceneStats.meshCount,
+        cacheHit: Boolean(uploadCacheContext?.processed),
+        cacheKey: uploadCacheContext?.key || '',
+        fileHash: state.plaque.uploadFingerprint || uploadCacheContext?.fingerprint || '',
+      });
+    }
     if (options.cacheDefaultPlaqueProcessed) {
       queueDefaultPlaqueProcessedCacheWrite(options.defaultPlaqueProject, state.plaque.processed);
     }
@@ -1014,13 +1178,19 @@ function getPlaqueProcessArtworkOptions() {
   return {};
 }
 
-async function processPlaqueArtworkWithWorker(artwork, options = {}) {
+async function processPlaqueArtworkWithWorker(artwork, options = {}, meta = {}) {
   if (!canUsePlaqueProcessingWorker(artwork)) return null;
+  const uploadRequestId = Number.isFinite(Number(meta.uploadRequestId)) ? Number(meta.uploadRequestId) : null;
+  const isStaleUpload = () => uploadRequestId !== null && !isCurrentPlaqueUploadRequest(uploadRequestId);
   let bitmap = null;
   let worker = null;
   try {
     bitmap = await createPlaqueProcessingBitmap(artwork);
     if (!bitmap) return null;
+    if (isStaleUpload()) {
+      markIgnoredPlaqueUploadResult(uploadRequestId);
+      return null;
+    }
     setPlaqueLoadingProgress(58, 'Starting background processing');
     worker = new Worker(PLAQUE_PROCESSING_WORKER_SRC);
     const jobId = `plaque-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -1029,11 +1199,14 @@ async function processPlaqueArtworkWithWorker(artwork, options = {}) {
         const message = event.data || {};
         if (message.id && message.id !== jobId) return;
         if (message.type === 'progress') {
-          setPlaqueLoadingProgress(message.percent, message.label);
+          if (!isStaleUpload()) setPlaqueLoadingProgress(message.percent, message.label);
           return;
         }
         if (message.type === 'result') {
-          if (message.ok) resolve(message);
+          if (isStaleUpload()) {
+            markIgnoredPlaqueUploadResult(uploadRequestId);
+            resolve({ stale: true });
+          } else if (message.ok) resolve(message);
           else reject(Object.assign(new Error(message.error || 'Plaque worker failed.'), { code: 'plaque-worker-failed' }));
         }
       };
@@ -1052,6 +1225,10 @@ async function processPlaqueArtworkWithWorker(artwork, options = {}) {
       }, [bitmap]);
       bitmap = null;
     }), PLAQUE_PROCESSING_WORKER_TIMEOUT_MS, 'plaque-worker-timeout');
+    if (result?.stale || isStaleUpload()) {
+      markIgnoredPlaqueUploadResult(uploadRequestId);
+      return null;
+    }
     return hydratePlaqueWorkerProcessed(result.processed, result.artworkBitmap);
   } catch (error) {
     console.warn('3D Plaque worker processing unavailable; falling back to main-thread processing.', error);
@@ -1189,10 +1366,14 @@ async function getUploadedPlaqueProcessedCacheContext(artwork = state.plaque.art
 function getUploadedPlaqueProcessedCacheSignature(artwork = state.plaque.artwork) {
   const processOptions = getPlaqueProcessArtworkOptions();
   const frontColoursCustomized = Boolean(state.plaque.frontColoursCustomized || state.frontColoursCustomized);
+  const image = artwork?.image || {};
   return [
     'uploaded-plaque-processed',
     PLAQUE_UPLOAD_PROCESSED_CACHE_VERSION,
+    state.plaque.uploadFingerprint || '',
     artwork?.type || '',
+    Number(image.naturalWidth || image.width) || 0,
+    Number(image.naturalHeight || image.height) || 0,
     normalizePlaqueTraceQuality(state.plaque.traceQuality || PLAQUE_DEFAULT_TRACE_QUALITY),
     frontColoursCustomized ? (Number(state.plaque.targetColorCount || state.targetColorCount) || 0) : 'auto',
     Number(state.tolerance) || 0,
@@ -1613,7 +1794,8 @@ function buildPlaqueThreeModel() {
   group.userData.plaqueMeshes = [];
   group.userData.frontArtworkObjects = [];
 
-  const svgLayers = state.isDefaultPreview ? [] : getSvgPlaqueLayers();
+  const useProcessedSvgSupport = shouldUseProcessedRasterPlaqueForSvgSupport(processed);
+  const svgLayers = state.isDefaultPreview || useProcessedSvgSupport ? [] : getSvgPlaqueLayers();
   group.userData.hasSvgPlaqueLayers = Boolean(svgLayers.length);
   const previewMode = state.plaque.previewDebugMode || 'extruded';
   if (!state.isDefaultPreview && previewMode !== 'extruded') {
@@ -1671,8 +1853,8 @@ function limitPlaquePreviewSilhouette(points, maxPoints) {
 function buildRasterPlaqueLayers(group, processed, bounds) {
   const resources = state.three.resources;
   getPlaqueRaisedRasterRenderRegions(processed).forEach((region, index) => {
-    const depth = clamp(Number(state.plaque.layerDepths[index]) || PLAQUE_DEFAULT_LAYER_DEPTH, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
-    const hex = getPlaqueLayerDisplayHex({ type: 'raster', hex: region.hex }, index);
+    const depth = getPlaqueLayerDepthState(index, region).depth;
+    const hex = getPlaqueLayerDisplayHex(region, index);
     const material = makePlaqueMaterial(hex, { roughness: 0.9 });
     const layerGroup = buildRasterPlaqueContourGroup(region.mask, processed.width, processed.height, bounds, { depth, hex, index, material, cacheOwner: region.sourceRegion || region });
     if (!layerGroup.children.length) return;
@@ -1895,13 +2077,14 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
   const rasterLayerZBase = getPlaqueColourLayerBottomZ(backing.frontZ);
   const shouldClipRaisedLayers = shouldUseUploadedRasterPlaqueHierarchy(processed)
     && !uploadedRasterGeometryOnly;
+  const sourceCacheKey = getUploadedPlaqueGeometryCacheKey(processed);
   const uploadedDebugLayers = [];
   const uploadedDebugDepthLayers = [];
   const uploadedDebugMeshStats = [];
   renderRegions.forEach((region, index) => {
     const depthState = getPlaqueLayerDepthState(index, region);
     const depth = depthState.depth;
-    const hex = getPlaqueLayerDisplayHex({ type: 'raster', hex: region.hex }, index);
+    const hex = getPlaqueLayerDisplayHex(region, index);
     const material = makePlaqueExtrudeMaterials(hex, {
       roughness: 0.86,
       uploadedRasterSide: uploadedRasterGeometryOnly,
@@ -1922,6 +2105,7 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
       material,
       zBase: rasterLayerZBase,
       cacheOwner: uploadedRasterGeometryOnly ? null : containedLayer.cacheOwner,
+      sourceCacheKey,
       containmentClip: containedLayer.clipped,
       contourStatsTarget: contourStats,
       ...previewQuality,
@@ -1969,6 +2153,8 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
       zMin: Number.isFinite(layerBox.min.z) ? Number(layerBox.min.z.toFixed(4)) : null,
       zMax: Number.isFinite(layerBox.max.z) ? Number(layerBox.max.z.toFixed(4)) : null,
     });
+    const renderRole = getUploadedPlaqueLayerRenderRole(region);
+    const renderSource = getUploadedPlaqueLayerRenderSource(region);
     layerGroup.userData = {
       ...layerGroup.userData,
       plaqueLayer: index,
@@ -1976,6 +2162,8 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
       hex,
       material,
       contourStats,
+      renderRole,
+      renderSource,
     };
     group.add(layerGroup);
     group.userData.plaqueMeshes.push(layerGroup);
@@ -1988,10 +2176,12 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
   });
   if (uploadedRasterGeometryOnly) {
     installUploadedPlaqueDebugHelpers(processed);
+    logUploadedRasterPlaqueComplexity(processed);
     logUploadedRasterPlaqueTraceQuality(processed, uploadedDebugLayers, previewQuality, bounds);
     logUploadedRasterPlaqueDepths(processed, uploadedDebugDepthLayers, { phase: 'initial-render' });
     logUploadedRasterPlaqueMaskOverlaps(processed, renderRegions);
     logUploadedRasterPlaqueMeshStats(uploadedDebugMeshStats);
+    logUploadedRasterPlaqueRenderOrder(group, processed, baseMesh, uploadedDebugMeshStats);
     logUploadedRasterPlaqueGeometryDebug(processed, uploadedDebugLayers, {
       visibleRasterFrontPlane: false,
       backingHex,
@@ -2003,6 +2193,70 @@ function buildSmoothRasterPlaqueSolid(group, processed, bounds, baseThickness) {
   group.userData.solidMode = 'shared-contour-relief';
   group.userData.visibleRasterFrontPlane = false;
   if (state.plaque.topologyDebug) addPlaqueTopologyDebug(group, topology, bounds);
+}
+
+function getUploadedPlaqueGeometryCacheKey(processed) {
+  if (!shouldUseUploadedRasterPlaqueHierarchy(processed)) return '';
+  return [
+    'uploaded-plaque-geometry',
+    processed?.uploadFingerprint || state.plaque.uploadFingerprint || '',
+    processed?.uploadCacheKey || '',
+    processed?.sourceWidth || 0,
+    processed?.sourceHeight || 0,
+    processed?.width || 0,
+    processed?.height || 0,
+    normalizePlaqueTraceQuality(state.plaque.traceQuality || PLAQUE_DEFAULT_TRACE_QUALITY),
+    PLAQUE_UPLOAD_PROCESSED_CACHE_VERSION,
+    PLAQUE_CONTOUR_CACHE_VERSION,
+    processed?.plaqueComplexity?.mode || '',
+  ].join('|');
+}
+
+function logUploadedRasterPlaqueComplexity(processed) {
+  if (!shouldUseUploadedRasterPlaqueHierarchy(processed)) return;
+  const complexity = processed?.plaqueComplexity;
+  if (!complexity) return;
+  console.info('[3D Plaque complexity]', {
+    colourGroupCount: Number(complexity.colourGroupCount) || 0,
+    componentCount: Number(complexity.componentCount) || 0,
+    tinyComponentCount: Number(complexity.tinyComponentCount) || 0,
+    contourPointCount: Number(complexity.contourPointCount) || 0,
+    complexityScore: Number(complexity.complexityScore) || 0,
+    mode: complexity.mode || 'simple',
+    simplifiedPixels: Number(complexity.simplifiedPixels) || 0,
+    mergedComponents: Number(complexity.mergedComponents) || 0,
+  });
+}
+
+function logPlaqueVectorizeState(processed, options = {}) {
+  if (!shouldUseUploadedRasterPlaqueHierarchy(processed)) return;
+  const debug = processed?.plaqueVectorizeState || {};
+  console.info('[3D Plaque vectorize state]', {
+    fixFloatingRegions: Boolean(debug.fixFloatingRegions ?? state.plaque.fixFloatingRegions),
+    removeBackground: Boolean(debug.removeBackground ?? state.plaque.removeBg),
+    detectedColoursBeforeMapping: Array.isArray(debug.detectedColoursBeforeMapping)
+      ? debug.detectedColoursBeforeMapping
+      : [],
+    mappedColours: Array.isArray(debug.mappedColours)
+      ? debug.mappedColours
+      : (getPlaqueRasterRenderRegions(processed) || []).map((region, index) => ({
+        index,
+        hex: normalizeHex(region?.hex || '#ffffff'),
+        count: Math.round(Number(region?.count) || 0),
+      })),
+    whiteDetectedAsArtwork: Boolean(debug.whiteDetectedAsArtwork),
+    whiteSourceDetected: Boolean(debug.whiteSourceDetected),
+    whiteTreatment: debug.whiteTreatment || (debug.whiteDetectedAsArtwork ? 'artwork' : 'unknown'),
+    floatingComponentCount: Number(debug.floatingComponentCount) || 0,
+    preservedFloatingComponentCount: Number(debug.preservedFloatingComponentCount) || 0,
+    discardedComponentCount: Number(debug.discardedComponentCount) || 0,
+    componentCount: Number(debug.componentCount) || 0,
+    supportPixelCount: Number(debug.supportPixelCount) || 0,
+    cacheHit: Boolean(options.cacheHit),
+    cacheKey: String(options.cacheKey || processed?.uploadCacheKey || ''),
+    previewRegeneratedAfterToggle: Boolean(options.previewRegeneratedAfterToggle),
+    optionChange: options.optionChange || '',
+  });
 }
 
 function logUploadedRasterPlaqueTraceQuality(processed, layers, quality = {}, bounds = null) {
@@ -2137,20 +2391,28 @@ function makeUploadedPlaqueDepthDebugRow(index, layer, options = {}) {
   const defaultDepth = Number.isFinite(Number(options.defaultDepth))
     ? Number(options.defaultDepth)
     : getDefaultPlaqueLayerDepth(index, layer);
-  const sliderValue = Number(state.plaque.layerDepths?.[index]);
+  const sliderValue = getPlaqueStoredLayerDepth(index, layer);
   const depth = Number.isFinite(Number(options.depth))
     ? Number(options.depth)
-    : clamp(Number.isFinite(sliderValue) ? sliderValue : defaultDepth, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
+    : clamp(sliderValue !== null ? sliderValue : defaultDepth, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
   const hex = normalizeHex(options.hex || getPlaqueLayerDisplayHex(layer, index));
+  const renderRole = getUploadedPlaqueLayerRenderRole(layer);
+  const renderSource = getUploadedPlaqueLayerRenderSource(layer);
+  const sourceIndex = getPlaqueLayerSourceIndex(layer, index);
   return {
     index,
-    layerId: `${Number(layer?.sourceIndex ?? index)}:${hex}`,
-    sourceIndex: Number(layer?.sourceIndex ?? index),
+    layerId: getPlaqueLayerStableId(layer, index),
+    sourceIndex,
+    original: getPlaqueLayerOriginalIndex(layer),
     hex,
-    sliderValue: Number.isFinite(sliderValue) ? Number(sliderValue.toFixed(3)) : null,
+    label: getUploadedPlaqueDebugColourLabel(hex),
+    role: renderRole,
+    source: renderSource,
+    pixelShare: Number(getUploadedPlaqueLayerShare(layer).toFixed(4)),
+    sliderValue: sliderValue !== null ? Number(sliderValue.toFixed(3)) : null,
     depth: Number(depth.toFixed(3)),
     actualExtrusionDepth: Number(depth.toFixed(3)),
-    source: options.source || state.plaque.layerDepthSources?.[index] || (Number.isFinite(sliderValue) ? 'state' : 'fallback-default'),
+    depthSource: options.source || state.plaque.layerDepthSources?.[index] || (sliderValue !== null ? 'state' : 'fallback-default'),
     minDepth: PLAQUE_LAYER_DEPTH_MIN,
     maxDepth: PLAQUE_LAYER_DEPTH_MAX,
     defaultDepth: Number(defaultDepth.toFixed(3)),
@@ -2169,8 +2431,10 @@ function logUploadedRasterPlaqueDepths(processed, layers, options = {}) {
     initialDepthsReady: allLayers.length > 0 && allLayers.every((layer) => Number.isFinite(layer.depth) && layer.depth >= PLAQUE_LAYER_DEPTH_MIN),
     defaultColourDepths: {
       light: typeof PLAQUE_UPLOADED_LIGHT_LAYER_DEPTH === 'undefined' ? 1.7 : PLAQUE_UPLOADED_LIGHT_LAYER_DEPTH,
+      lightArtwork: typeof PLAQUE_UPLOADED_LIGHT_ARTWORK_LAYER_DEPTH === 'undefined' ? 5.4 : PLAQUE_UPLOADED_LIGHT_ARTWORK_LAYER_DEPTH,
       chromatic: typeof PLAQUE_UPLOADED_CHROMATIC_LAYER_DEPTH === 'undefined' ? 4.6 : PLAQUE_UPLOADED_CHROMATIC_LAYER_DEPTH,
       dark: typeof PLAQUE_UPLOADED_DARK_LAYER_DEPTH === 'undefined' ? 1.1 : PLAQUE_UPLOADED_DARK_LAYER_DEPTH,
+      darkArtwork: typeof PLAQUE_UPLOADED_DARK_ARTWORK_LAYER_DEPTH === 'undefined' ? 4.8 : PLAQUE_UPLOADED_DARK_ARTWORK_LAYER_DEPTH,
     },
     layers: allLayers,
   });
@@ -2246,6 +2510,97 @@ function logUploadedRasterPlaqueMeshStats(meshStats) {
   console.info('[3D Plaque uploaded mesh stats]', meshStats);
 }
 
+function logUploadedRasterPlaqueRenderOrder(group, processed, baseMesh, meshStats = []) {
+  if (!shouldUseUploadedRasterPlaqueHierarchy(processed)) return;
+  const baseBox = baseMesh ? new THREE.Box3().setFromObject(baseMesh) : null;
+  const supportRows = meshStats.filter((row) => row.role === 'generatedSupport' || row.role === 'basePlate');
+  const artworkRows = meshStats.filter((row) => row.role === 'artwork');
+  const supportZMax = supportRows.reduce((max, row) => (
+    Number.isFinite(Number(row.zMax)) ? Math.max(max, Number(row.zMax)) : max
+  ), Number.NEGATIVE_INFINITY);
+  const supportZMinValues = supportRows.map((row) => Number(row.zMin)).filter(Number.isFinite);
+  const supportZMin = supportZMinValues.length ? Math.min(...supportZMinValues) : Number.POSITIVE_INFINITY;
+  const generatedSupportCanCoverArtwork = artworkRows.some((row) => (
+    Number.isFinite(Number(row.zMax))
+    && Number.isFinite(supportZMax)
+    && Number(row.zMax) <= supportZMax + 0.01
+  ));
+  console.info('[3D Plaque render order]', {
+    basePlateZRange: baseBox && Number.isFinite(baseBox.min.z) && Number.isFinite(baseBox.max.z)
+      ? {
+        zMin: Number(baseBox.min.z.toFixed(4)),
+        zMax: Number(baseBox.max.z.toFixed(4)),
+      }
+      : null,
+    generatedSupportZRange: supportRows.length && Number.isFinite(supportZMin) && Number.isFinite(supportZMax)
+      ? {
+        zMin: Number(supportZMin.toFixed(4)),
+        zMax: Number(supportZMax.toFixed(4)),
+      }
+      : null,
+    artworkZRanges: artworkRows.map((row) => ({
+      index: row.index,
+      hex: row.hex,
+      label: row.label,
+      role: row.role,
+      source: row.source,
+      depth: row.depth,
+      zMin: row.zMin,
+      zMax: row.zMax,
+      visibleOnInitialRender: Number.isFinite(Number(row.zMax)) && Number(row.zMax) > supportZMax + 0.01,
+    })),
+    generatedSupportCanCoverArtwork,
+    meshCount: group?.userData?.plaqueMeshes?.length || meshStats.length,
+  });
+}
+
+function getRenderedPlaqueLayerGroup(index) {
+  return state.three?.group?.userData?.plaqueMeshes?.find((item) => item.userData?.plaqueLayer === index) || null;
+}
+
+function getRenderedPlaqueLayerBox(index) {
+  const layerGroup = getRenderedPlaqueLayerGroup(index);
+  return layerGroup ? new THREE.Box3().setFromObject(layerGroup) : null;
+}
+
+function getUploadedPlaqueCurrentSupportZMax(excludeIndex = -1) {
+  if (!shouldUseUploadedRasterPlaqueHierarchy(state.processed)) return Number.NEGATIVE_INFINITY;
+  return (state.three?.group?.userData?.plaqueMeshes || []).reduce((max, layerGroup) => {
+    const layerIndex = Number(layerGroup?.userData?.plaqueLayer);
+    if (layerIndex === excludeIndex) return max;
+    const role = layerGroup?.userData?.renderRole || '';
+    if (role !== 'generatedSupport' && role !== 'basePlate') return max;
+    const box = new THREE.Box3().setFromObject(layerGroup);
+    return Number.isFinite(box.max.z) ? Math.max(max, box.max.z) : max;
+  }, Number.NEGATIVE_INFINITY);
+}
+
+function makePlaqueZRange(box) {
+  if (!box || !Number.isFinite(box.min.z) || !Number.isFinite(box.max.z)) return null;
+  return {
+    zMin: Number(box.min.z.toFixed(4)),
+    zMax: Number(box.max.z.toFixed(4)),
+  };
+}
+
+function logUploadedRasterPlaqueLayerDepthChange(index, layer, options = {}) {
+  if (!shouldUseUploadedRasterPlaqueHierarchy(state.processed)) return;
+  const hex = normalizeHex(getPlaqueLayerDisplayHex(layer, index));
+  console.info('[3D Plaque layer depth change]', {
+    index,
+    hex,
+    label: getUploadedPlaqueDebugColourLabel(hex),
+    role: getUploadedPlaqueLayerRenderRole(layer),
+    source: getUploadedPlaqueLayerRenderSource(layer),
+    beforeDepth: Number.isFinite(Number(options.beforeDepth)) ? Number(Number(options.beforeDepth).toFixed(3)) : null,
+    afterDepth: Number.isFinite(Number(options.afterDepth)) ? Number(Number(options.afterDepth).toFixed(3)) : null,
+    beforeZRange: makePlaqueZRange(options.beforeBox),
+    afterZRange: makePlaqueZRange(options.afterBox),
+    wasHiddenBefore: Boolean(options.wasHiddenBefore),
+    visibleAfter: Boolean(options.visibleAfter),
+  });
+}
+
 function getUploadedPlaqueSceneMeshStats() {
   return (state.three?.group?.userData?.plaqueMeshes || [])
     .filter((item) => Number.isFinite(item.userData?.plaqueLayer))
@@ -2254,6 +2609,8 @@ function getUploadedPlaqueSceneMeshStats() {
       return makeUploadedPlaqueMeshStatsRow(index, { hex: item.userData.hex }, item, {
         hex: item.userData.hex,
         depth: item.userData.depth,
+        role: item.userData.renderRole,
+        source: item.userData.renderSource,
         boundingBox: new THREE.Box3().setFromObject(item),
       });
     });
@@ -2284,6 +2641,8 @@ function makeUploadedPlaqueMeshStatsRow(index, layer, layerGroup, options = {}) 
     sourceIndex: Number(layer?.sourceIndex ?? index),
     hex: normalizeHex(options.hex || layer?.hex || '#ffffff'),
     label: getUploadedPlaqueDebugColourLabel(options.hex || layer?.hex || '#ffffff'),
+    role: options.role || getUploadedPlaqueLayerRenderRole(layer),
+    source: options.source || getUploadedPlaqueLayerRenderSource(layer),
     componentCount: options.componentStats?.componentCount ?? null,
     shapeCount: options.contourStats?.keptOuterCount ?? layerGroup?.children?.length ?? 0,
     holeCount: options.contourStats?.keptHoleCount ?? 0,
@@ -2312,6 +2671,7 @@ function getUploadedPlaqueDebugColourLabel(hex) {
   const chroma = colourChroma(rgb);
   if (isNearWhiteHex(normalized) || (luma >= 222 && chroma <= 48)) return 'White';
   if (isNearBlackHex(normalized) || luma <= 58) return 'Black';
+  if (chroma <= 54 && luma >= 64 && luma <= 210) return 'Grey';
   if (r >= g + 35 && r >= b + 35) return 'Red';
   if (b >= r + 35 && b >= g + 20) return 'Blue';
   if (g >= r + 25 && g >= b + 25) return 'Green';
@@ -2425,7 +2785,7 @@ function makePlaqueLayerTopHeights(layerCount, baseThickness) {
   let current = 0;
   for (let index = 0; index < layerCount; index += 1) {
     if (index > 0) {
-      current += clamp(Number(state.plaque.layerDepths[index]) || PLAQUE_DEFAULT_LAYER_DEPTH, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
+      current += getPlaqueLayerDepthForIndex(index);
     }
     heights[index] = current;
   }
@@ -2462,20 +2822,25 @@ function getUploadedRasterPlaqueDefaultBackingHex(processed) {
   if (!regions?.length) return '#ffffff';
   const totalPixels = Math.max(1, regions.reduce((sum, region) => sum + (Number(region?.count) || 0), 0));
   const edgeIndex = getPlaqueOuterEdgeColourIndex(processed);
-  const infos = regions.map((region, index) => {
-    const hex = normalizeHex(region?.hex || '#ffffff');
-    const rgb = hexToRgb(hex);
-    const count = Number(region?.count) || 0;
-    return {
-      index,
-      hex,
-      chroma: colourChroma(rgb),
-      count,
-      share: count / totalPixels,
-      isEdge: index === edgeIndex,
-      isNearWhite: isNearWhiteHex(hex),
-    };
-  });
+	  const infos = regions.map((region, index) => {
+	    const hex = normalizeHex(region?.hex || '#ffffff');
+	    const rgb = hexToRgb(hex);
+	    const count = Number(region?.count) || 0;
+	    return {
+	      index,
+	      region,
+	      hex,
+	      rgb,
+	      luma: colourLuma(rgb),
+	      chroma: colourChroma(rgb),
+	      count,
+	      share: count / totalPixels,
+	      isEdge: index === edgeIndex,
+	      isNearWhite: isNearWhiteHex(hex),
+	      isNearBlack: isNearBlackHex(hex),
+	      ...getUploadedPlaqueRegionBoundaryStats(region, processed),
+	    };
+	  });
   const hasBackingOverride = Boolean(state.plaque.backingColourOverride);
   const backingIndex = hasBackingOverride ? -1 : getUploadedRasterBackingRegionIndex(infos);
   if (backingIndex >= 0 && regions[backingIndex]) return normalizeHex(regions[backingIndex].hex);
@@ -2617,12 +2982,19 @@ function getPlaqueColourLayerBottomZ(backingFrontZ) {
 function validatePlaqueColourLayerGap(backingMesh, layerGroup, label, tolerance = 0.05) {
   if (!backingMesh || !layerGroup || !window.THREE) return;
   const backingBox = new THREE.Box3().setFromObject(backingMesh);
-  if (!Number.isFinite(backingBox.max.z)) return;
+  const backingFrontZ = Number.isFinite(Number(backingMesh.userData?.plaqueBackingFrontZ))
+    ? Number(backingMesh.userData.plaqueBackingFrontZ)
+    : (Number.isFinite(Number(backingMesh.userData?.zRange?.expectedMax))
+      ? Number(backingMesh.userData.zRange.expectedMax)
+      : backingBox.max.z);
+  if (!Number.isFinite(backingFrontZ)) return;
+  const layerBaseZ = Number(layerGroup.userData?.zBase);
+  const groupGap = Number.isFinite(layerBaseZ) ? layerBaseZ - backingFrontZ : null;
   layerGroup.traverse((child) => {
     if (!child.isMesh) return;
     const colourLayerBox = new THREE.Box3().setFromObject(child);
-    if (!Number.isFinite(colourLayerBox.min.z)) return;
-    const gap = colourLayerBox.min.z - backingBox.max.z;
+    if (!Number.isFinite(colourLayerBox.min.z) && groupGap === null) return;
+    const gap = groupGap === null ? colourLayerBox.min.z - backingFrontZ : groupGap;
     child.userData.plaqueColourGap = gap;
     const message = `plaque colour gap ${label}: ${gap.toFixed(4)}`;
     if (Math.abs(gap) > tolerance) {
@@ -3463,7 +3835,7 @@ function getContainedPlaqueRaisedLayerMask(region, processed, width, height) {
   if (!containmentMask || containmentMask.length !== sourceMask.length) {
     return { mask: sourceMask, cacheOwner: owner, clipped: false };
   }
-  const cacheKey = `${PLAQUE_BASE_SILHOUETTE_CACHE_VERSION}:${width}:${height}:${sourceMask.length}`;
+  const cacheKey = `${PLAQUE_BASE_SILHOUETTE_CACHE_VERSION}:${getUploadedPlaqueGeometryCacheKey(processed)}:${width}:${height}:${sourceMask.length}`;
   const cached = owner?.plaqueContainedMaskCache;
   if (cached?.key === cacheKey && cached.mask?.length === sourceMask.length) {
     return { mask: cached.mask, cacheOwner: cached, clipped: true };
@@ -3966,6 +4338,7 @@ function buildRasterPlaqueContourGroup(mask, width, height, bounds, options) {
     preserveTextCorners: Boolean(options.preserveTextCorners),
     contourOverlap: Number(options.contourOverlap) || 0,
     cacheOwner: options.cacheOwner || null,
+    sourceCacheKey: options.sourceCacheKey || '',
     contourStatsTarget: options.contourStatsTarget || null,
   });
   if (options.contourStatsTarget) group.userData.contourStats = { ...options.contourStatsTarget };
@@ -4354,6 +4727,7 @@ function buildPlaqueShapesFromCachedContours(entry, bounds, options = {}) {
 
 function makePlaqueRasterShapeCacheKey(width, height, bounds, options = {}) {
   return [
+    options.sourceCacheKey || '',
     width,
     height,
     Math.round((bounds?.width || 0) * 100),
@@ -4693,6 +5067,11 @@ function buildPlaqueExactLabelledMap(regions, regionIndex, alphaMask, alphaValue
     rgb: Array.isArray(region.rgb) ? [...region.rgb] : hexToRgb(region.hex || '#ffffff'),
     count: region.count,
     mask: masks[index],
+    original: Number.isFinite(Number(region.original)) ? Number(region.original) : index,
+    isFloatingSupport: Boolean(region.isFloatingSupport || Number(region.original) === PLAQUE_FLOATING_SUPPORT_ORIGINAL),
+    renderSource: (region.isFloatingSupport || Number(region.original) === PLAQUE_FLOATING_SUPPORT_ORIGINAL)
+      ? 'floatingRegionSupport'
+      : 'uploadedPixel',
     originalRegion: region,
   }));
   const warnings = [];
@@ -5386,56 +5765,97 @@ function renderPlaqueBaseControl() {
 
 function syncPlaqueLayers() {
   const layers = getPlaqueLayerDescriptors();
+  ensurePlaqueLayerIdentityState();
   const sourceIndices = getPlaqueLayerSourceIndices(layers);
-  const keepDepthsLayerAligned = shouldUseUploadedRasterPlaqueHierarchy(state.processed);
+  const stableIds = layers.map((layer, index) => getPlaqueLayerStableId(layer, index));
+  const uploadedRasterLayers = shouldUseUploadedRasterPlaqueHierarchy(state.processed);
   const previousSourceIndices = Array.isArray(state.plaque.layerSourceIndices)
     ? state.plaque.layerSourceIndices
     : [];
-  const valuesAreAlreadyLayerAligned = sourceIndices.length === previousSourceIndices.length
-    && sourceIndices.every((sourceIndex, index) => Number(previousSourceIndices[index]) === sourceIndex);
-  const resetUploadedLayerState = keepDepthsLayerAligned && !valuesAreAlreadyLayerAligned && previousSourceIndices.length > 0;
+  const previousStableIds = Array.isArray(state.plaque.layerStableIds)
+    ? state.plaque.layerStableIds
+    : [];
   const currentDepths = Array.isArray(state.plaque.layerDepths) ? state.plaque.layerDepths : [];
   const currentDepthSources = Array.isArray(state.plaque.layerDepthSources) ? state.plaque.layerDepthSources : [];
+  const currentOverrides = Array.isArray(state.plaque.colourOverrides) ? state.plaque.colourOverrides : [];
+
+  currentDepths.forEach((value, index) => {
+    const depth = Number(value);
+    if (!Number.isFinite(depth)) return;
+    const clamped = clamp(depth, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
+    const previousLayerId = previousStableIds[index];
+    if (previousLayerId) state.plaque.layerDepthsByLayerId[previousLayerId] = clamped;
+    const previousSourceIndex = Number(previousSourceIndices[index]);
+    if (Number.isFinite(previousSourceIndex) && previousSourceIndex >= 0) {
+      state.plaque.layerDepthsBySourceIndex[String(previousSourceIndex)] = clamped;
+    }
+  });
+
+  currentOverrides.forEach((value, index) => {
+    if (!value) return;
+    const normalized = normalizeHex(value);
+    const previousLayerId = previousStableIds[index];
+    if (previousLayerId) state.plaque.colourOverridesByLayerId[previousLayerId] = normalized;
+    const previousSourceIndex = Number(previousSourceIndices[index]);
+    if (Number.isFinite(previousSourceIndex) && previousSourceIndex >= 0) {
+      state.plaque.colourOverridesBySourceIndex[String(previousSourceIndex)] = normalized;
+    }
+  });
+
+  const processed = state.processed || state.plaque.processed;
+  const processedRegions = getPlaqueRasterRenderRegions(processed) || [];
+  const processedOverrides = Array.isArray(state.plaque.colorOverrides) && state.plaque.colorOverrides.length
+    ? state.plaque.colorOverrides
+    : (Array.isArray(state.colorOverrides) ? state.colorOverrides : []);
+  processedOverrides.forEach((value, sourceIndex) => {
+    if (!value) return;
+    const normalized = normalizeHex(value);
+    state.plaque.colourOverridesBySourceIndex[String(sourceIndex)] = normalized;
+    const original = getPlaqueLayerOriginalIndex(processedRegions[sourceIndex]);
+    if (original !== null) state.plaque.colourOverridesByOriginal[String(original)] = normalized;
+  });
+
   const nextDepthSources = [];
   state.plaque.layerDepths = layers.map((layer, index) => {
-    if (resetUploadedLayerState) {
-      nextDepthSources[index] = 'initialized-default';
-      return getDefaultPlaqueLayerDepth(index, layer);
-    }
-    const sourceIndex = sourceIndices[index];
-    if (!keepDepthsLayerAligned && !valuesAreAlreadyLayerAligned && Number.isFinite(sourceIndex) && sourceIndex !== index) {
-      const sourceCurrent = Number(currentDepths[sourceIndex]);
-      if (Number.isFinite(sourceCurrent)) {
-        nextDepthSources[index] = currentDepthSources[sourceIndex] || 'source-index-state';
-        return clamp(sourceCurrent, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
-      }
-    }
-    const current = Number(currentDepths[index]);
-    if (Number.isFinite(current)) {
-      nextDepthSources[index] = currentDepthSources[index] || 'existing-state';
-      return clamp(current, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
-    }
-    nextDepthSources[index] = 'initialized-default';
-    return getDefaultPlaqueLayerDepth(index, layer);
+    const stored = getPlaqueStoredLayerDepth(index, layer);
+    const depth = stored !== null ? stored : getDefaultPlaqueLayerDepth(index, layer);
+    const source = stored !== null ? (currentDepthSources[index] || 'stable-layer-state') : 'initialized-default';
+    nextDepthSources[index] = source;
+    return setPlaqueStoredLayerDepth(index, layer, depth, source);
   });
   state.plaque.layerDepthSources = nextDepthSources;
-  const currentOverrides = Array.isArray(state.plaque.colourOverrides) ? state.plaque.colourOverrides : [];
-  state.plaque.colourOverrides = layers.map((_, index) => {
-    if (resetUploadedLayerState) return '';
-    const sourceIndex = sourceIndices[index];
-    const current = (!keepDepthsLayerAligned && !valuesAreAlreadyLayerAligned && Number.isFinite(sourceIndex) && sourceIndex !== index ? currentOverrides[sourceIndex] : '') || currentOverrides[index];
-    return current ? normalizeHex(current) : '';
+  state.plaque.colourOverrides = layers.map((layer, index) => {
+    const override = getPlaqueStoredLayerColourOverride(layer, index);
+    if (override) {
+      setPlaqueStoredLayerColourOverride(index, layer, override);
+      return override;
+    }
+    state.plaque.layerStableIds[index] = stableIds[index];
+    state.plaque.layerSourceIndices[index] = sourceIndices[index];
+    return '';
   });
   state.plaque.layerSourceIndices = sourceIndices;
+  state.plaque.layerStableIds = stableIds;
   if (!layers.length) state.plaque.selectedLayer = 0;
   else state.plaque.selectedLayer = clamp(Number(state.plaque.selectedLayer) || 0, 0, layers.length - 1);
+  if (uploadedRasterLayers) {
+    console.info('[3D Plaque stable layer identity]', {
+      layers: layers.map((layer, index) => ({
+        index,
+        layerId: stableIds[index],
+        sourceIndex: sourceIndices[index],
+        original: getPlaqueLayerOriginalIndex(layer),
+        sourceHex: normalizeHex(layer?.hex || layer?.region?.hex || layer?.sourceRegion?.hex || '#ffffff'),
+        displayHex: getPlaqueLayerDisplayHex(layer, index),
+        depth: getPlaqueStoredLayerDepth(index, layer),
+        depthSource: state.plaque.layerDepthSources[index],
+      })),
+    });
+  }
 }
 
 function getPlaqueLayerSourceIndices(layers) {
-  return (layers || []).map((layer, index) => {
-    const sourceIndex = Number(layer?.sourceIndex);
-    return Number.isFinite(sourceIndex) ? sourceIndex : index;
-  });
+  return (layers || []).map((layer, index) => getPlaqueLayerSourceIndex(layer, index));
 }
 
 function renderPlaqueLayerControls() {
@@ -5576,13 +5996,15 @@ function renderPlaqueDiagnostics() {
   const warnings = [...(state.processed.warnings || [])];
   warnings.unshift({
     level: 'ok',
-    text: state.artwork?.type === 'svg'
-      ? '3D Plaque preview is using a locked 2.5D SVG layer stack.'
-      : (normalizePlaqueTraceQuality(state.plaque.traceQuality) === 'smooth'
-        ? '3D Plaque preview is using the Smooth raster cleanup stack.'
-        : (normalizePlaqueTraceQuality(state.plaque.traceQuality) === 'raw'
-          ? '3D Plaque preview is using the Raw Pixel Trace labelled-map PNG stack.'
-          : '3D Plaque preview is using the Clean Plaque labelled-map PNG stack.')),
+    text: shouldUseProcessedRasterPlaqueForSvgSupport(state.processed)
+      ? '3D Plaque preview is using processed SVG support from the vectorized result.'
+      : (state.artwork?.type === 'svg'
+        ? '3D Plaque preview is using a locked 2.5D SVG layer stack.'
+        : (normalizePlaqueTraceQuality(state.plaque.traceQuality) === 'smooth'
+          ? '3D Plaque preview is using the Smooth raster cleanup stack.'
+          : (normalizePlaqueTraceQuality(state.plaque.traceQuality) === 'raw'
+            ? '3D Plaque preview is using the Raw Pixel Trace labelled-map PNG stack.'
+            : '3D Plaque preview is using the Clean Plaque labelled-map PNG stack.'))),
   });
   if (state.artwork?.type !== 'svg' && normalizePlaqueTraceQuality(state.plaque.traceQuality) !== 'smooth' && state.processed.plaqueLabelledMap) {
     const map = state.processed.plaqueLabelledMap;
@@ -5609,7 +6031,7 @@ function renderPlaqueDiagnostics() {
 }
 
 function getPlaqueLayerDescriptors() {
-  const svgLayers = getSvgPlaqueLayers();
+  const svgLayers = shouldUseProcessedRasterPlaqueForSvgSupport(state.processed) ? [] : getSvgPlaqueLayers();
   if (svgLayers.length) return svgLayers;
   return getPlaqueRaisedRasterRenderRegions(state.processed).map((region, index) => ({
     type: 'raster',
@@ -5652,6 +6074,7 @@ function getPlaqueBackingRenderRegionIndex(processed, regions = getPlaqueRasterR
       const count = Number(region?.count) || 0;
       return {
         index,
+        region,
         hex,
         rgb,
         luma: colourLuma(rgb),
@@ -5687,7 +6110,11 @@ function getPlaqueRaisedRasterRenderRegions(processed) {
   return mappedRegions.filter((region) => region.sourceIndex !== backingIndex);
 }
 
-function shouldUseUploadedRasterPlaqueHierarchy(processed = state.processed || state.plaque.processed) {
+function hasProcessedFloatingSupportRegion(processed = state.processed || state.plaque.processed) {
+  return Boolean((processed?.colours || []).some((region) => region?.isFloatingSupport));
+}
+
+function shouldUseProcessedRasterPlaqueForSvgSupport(processed = state.processed || state.plaque.processed) {
   const artwork = state.artwork || state.plaque.artwork;
   const hasProcessedRasterArtwork = Boolean(
     processed?.regionIndex
@@ -5698,7 +6125,28 @@ function shouldUseUploadedRasterPlaqueHierarchy(processed = state.processed || s
   );
   return Boolean(
     state.productType === 'plaque'
-    && artwork?.type !== 'svg'
+    && artwork?.type === 'svg'
+    && !state.isDefaultPreview
+    && !state.plaque.isDefaultPreview
+    && !state.plaque.isExampleProject
+    && hasProcessedRasterArtwork
+    && hasProcessedFloatingSupportRegion(processed)
+  );
+}
+
+function shouldUseUploadedRasterPlaqueHierarchy(processed = state.processed || state.plaque.processed) {
+  const artwork = state.artwork || state.plaque.artwork;
+  const useProcessedSvgSupport = shouldUseProcessedRasterPlaqueForSvgSupport(processed);
+  const hasProcessedRasterArtwork = Boolean(
+    processed?.regionIndex
+    && processed?.alphaMask
+    && processed?.width
+    && processed?.height
+    && processed?.colours?.length
+  );
+  return Boolean(
+    state.productType === 'plaque'
+    && (artwork?.type !== 'svg' || useProcessedSvgSupport)
     && !state.isDefaultPreview
     && !state.plaque.isDefaultPreview
     && !state.plaque.isExampleProject
@@ -5727,10 +6175,31 @@ function getUploadedRasterPlaqueHierarchy(processed, regions) {
       isEdge: index === edgeIndex,
       isNearWhite: isNearWhiteHex(hex),
       isNearBlack: isNearBlackHex(hex),
+      ...getUploadedPlaqueRegionBoundaryStats(region, processed),
     };
   });
-  const candidates = infos.filter((info) => info.count > 0);
+  const backingIndex = getUploadedRasterBackingRegionIndex(infos);
+  const printableCandidates = infos.filter((info) => info.count > 0 && !isUploadedPlaqueGeneratedSupportRegion(info.region));
+  const excludedBaseCandidates = printableCandidates.filter((info) => isUploadedPlaqueBackingSurfaceInfo(info, backingIndex));
+  let candidates = printableCandidates.filter((info) => !isUploadedPlaqueBackingSurfaceInfo(info, backingIndex));
+  if (!candidates.length) candidates = printableCandidates;
   if (!candidates.length) return [];
+  console.info('[3D Plaque raised layer selection]', {
+    backingIndex,
+    raisedLayers: candidates.map((info) => ({
+      index: info.index,
+      hex: info.hex,
+      share: Number(info.share.toFixed(4)),
+      alphaBoundaryShare: Number((info.alphaBoundaryShare || 0).toFixed(4)),
+    })),
+    excludedBaseLayers: excludedBaseCandidates.map((info) => ({
+      index: info.index,
+      hex: info.hex,
+      share: Number(info.share.toFixed(4)),
+      alphaBoundaryShare: Number((info.alphaBoundaryShare || 0).toFixed(4)),
+      generatedSupport: isUploadedPlaqueGeneratedSupportRegion(info.region),
+    })),
+  });
   const roleRank = {
     detail: 0,
     accent: 1,
@@ -5746,6 +6215,8 @@ function getUploadedRasterPlaqueHierarchy(processed, regions) {
         sourceRegion: info.region.sourceRegion || info.region,
         plaqueRole: role,
         plaqueRoleRank: roleRank[role] ?? 2,
+        renderRole: 'artwork',
+        renderSource: 'uploadedPixel',
       };
     })
     .sort((a, b) => {
@@ -5753,8 +6224,64 @@ function getUploadedRasterPlaqueHierarchy(processed, regions) {
     });
 }
 
+function getUploadedPlaqueRegionBoundaryStats(layer, processed = state.processed || state.plaque.processed) {
+  const region = getUploadedPlaqueLayerRegion(layer) || layer;
+  const mask = region?.mask;
+  const labelled = processed?.plaqueLabelledMap || null;
+  const alphaMask = labelled?.alphaMask || processed?.alphaMask;
+  const width = Number(labelled?.width) || Number(processed?.width) || 0;
+  const height = Number(labelled?.height) || Number(processed?.height) || 0;
+  const length = width * height;
+  if (!mask || !alphaMask || !width || !height || mask.length < length || alphaMask.length < length) {
+    return {
+      alphaBoundaryPixels: 0,
+      alphaBoundaryShare: 0,
+      canvasBoundaryPixels: 0,
+      canvasBoundaryShare: 0,
+      touchesAlphaBoundary: false,
+      touchesCanvasBoundary: false,
+    };
+  }
+  let pixels = 0;
+  let alphaBoundaryPixels = 0;
+  let canvasBoundaryPixels = 0;
+  for (let y = 0; y < height; y += 1) {
+    const row = y * width;
+    for (let x = 0; x < width; x += 1) {
+      const index = row + x;
+      if (!mask[index]) continue;
+      pixels += 1;
+      const onCanvasBoundary = x === 0 || y === 0 || x === width - 1 || y === height - 1;
+      if (onCanvasBoundary) canvasBoundaryPixels += 1;
+      const touchesTransparentNeighbour = onCanvasBoundary
+        || !alphaMask[index - 1]
+        || !alphaMask[index + 1]
+        || !alphaMask[index - width]
+        || !alphaMask[index + width];
+      if (touchesTransparentNeighbour) alphaBoundaryPixels += 1;
+    }
+  }
+  const safePixels = Math.max(1, pixels);
+  return {
+    alphaBoundaryPixels,
+    alphaBoundaryShare: alphaBoundaryPixels / safePixels,
+    canvasBoundaryPixels,
+    canvasBoundaryShare: canvasBoundaryPixels / safePixels,
+    touchesAlphaBoundary: alphaBoundaryPixels > 0,
+    touchesCanvasBoundary: canvasBoundaryPixels > 0,
+  };
+}
+
 function getUploadedRasterBackingRegionIndex(infos) {
   if (!infos?.length) return -1;
+  const generatedSupport = infos
+    .filter((info) => isUploadedPlaqueGeneratedSupportRegion(info.region))
+    .sort((a, b) => b.share - a.share)[0];
+  if (generatedSupport) return generatedSupport.index;
+  const supportSurface = infos
+    .filter((info) => isUploadedPlaqueSupportSurfaceInfo(info))
+    .sort((a, b) => b.share - a.share)[0];
+  if (supportSurface) return supportSurface.index;
   const hasLogoColour = infos.some((info) => !info.isNearWhite && info.chroma >= 42 && info.share >= 0.03);
   const backing = infos
     .filter((info) => (
@@ -5771,11 +6298,302 @@ function getUploadedRasterBackingRegionIndex(infos) {
   return edgeBody ? edgeBody.index : -1;
 }
 
+function isUploadedPlaqueSupportSurfaceInfo(info) {
+  if (!info || isUploadedPlaqueGeneratedSupportRegion(info.region)) return Boolean(info);
+  const lightOrNeutral = info.isNearWhite || info.luma >= 232 || info.chroma <= 24;
+  if (!lightOrNeutral) return false;
+  const share = Number(info.share) || 0;
+  const alphaBoundaryShare = Number(info.alphaBoundaryShare) || 0;
+  const boundaryLinked = Boolean(info.isEdge || info.touchesAlphaBoundary || info.touchesCanvasBoundary);
+  const broadBoundarySurface = boundaryLinked && (share >= 0.32 || (share >= 0.18 && alphaBoundaryShare >= 0.018));
+  const broadWhiteSheet = info.isNearWhite && share >= 0.44;
+  return Boolean(broadBoundarySurface || broadWhiteSheet);
+}
+
 function getUploadedRasterPlaqueRegionRole(info) {
   if (info.isNearWhite || (info.luma >= 222 && info.chroma <= 48)) return 'light-detail';
   if (info.isNearBlack || (info.luma <= 58 && info.chroma <= 58)) return 'dark-detail';
   if (info.chroma >= 88 && info.share < 0.38) return 'accent';
   return 'detail';
+}
+
+function isUploadedPlaqueGeneratedSupportRegion(layer) {
+  const region = getUploadedPlaqueLayerRegion(layer);
+  const original = Number(
+    layer?.original
+    ?? layer?.region?.original
+    ?? layer?.sourceRegion?.original
+    ?? region?.original,
+  );
+  return Boolean(
+    layer?.isFloatingSupport
+    || layer?.region?.isFloatingSupport
+    || layer?.sourceRegion?.isFloatingSupport
+    || region?.isFloatingSupport
+    || original === PLAQUE_FLOATING_SUPPORT_ORIGINAL
+  );
+}
+
+function isUploadedPlaqueBackingSurfaceInfo(info, backingIndex) {
+  if (!info || isUploadedPlaqueGeneratedSupportRegion(info.region)) return true;
+  if (isUploadedPlaqueSupportSurfaceInfo(info)) return true;
+  if (info.index !== backingIndex) return false;
+  const lightOrNeutral = info.isNearWhite || info.luma >= 222 || info.chroma <= 44;
+  return Boolean(lightOrNeutral && (info.isEdge || info.share >= 0.16));
+}
+
+function getUploadedPlaqueLayerRegion(layer) {
+  return layer?.sourceRegion || layer?.region || layer;
+}
+
+function getUploadedPlaqueLayerSourceIndex(layer) {
+  const region = getUploadedPlaqueLayerRegion(layer);
+  const sourceIndex = Number(layer?.sourceIndex ?? region?.sourceIndex ?? region?.id);
+  return Number.isFinite(sourceIndex) ? sourceIndex : -1;
+}
+
+function ensurePlaqueLayerIdentityState() {
+  if (!Array.isArray(state.plaque.layerStableIds)) state.plaque.layerStableIds = [];
+  if (!Array.isArray(state.plaque.layerSourceIndices)) state.plaque.layerSourceIndices = [];
+  if (!Array.isArray(state.plaque.colourOverrides)) state.plaque.colourOverrides = [];
+  if (!Array.isArray(state.plaque.layerDepths)) state.plaque.layerDepths = [];
+  if (!Array.isArray(state.plaque.layerDepthSources)) state.plaque.layerDepthSources = [];
+  if (!state.plaque.colourOverridesByLayerId || typeof state.plaque.colourOverridesByLayerId !== 'object') {
+    state.plaque.colourOverridesByLayerId = {};
+  }
+  if (!state.plaque.colourOverridesBySourceIndex || typeof state.plaque.colourOverridesBySourceIndex !== 'object') {
+    state.plaque.colourOverridesBySourceIndex = {};
+  }
+  if (!state.plaque.colourOverridesByOriginal || typeof state.plaque.colourOverridesByOriginal !== 'object') {
+    state.plaque.colourOverridesByOriginal = {};
+  }
+  if (!state.plaque.layerDepthsByLayerId || typeof state.plaque.layerDepthsByLayerId !== 'object') {
+    state.plaque.layerDepthsByLayerId = {};
+  }
+  if (!state.plaque.layerDepthsBySourceIndex || typeof state.plaque.layerDepthsBySourceIndex !== 'object') {
+    state.plaque.layerDepthsBySourceIndex = {};
+  }
+  if (!state.plaque.layerDepthsByOriginal || typeof state.plaque.layerDepthsByOriginal !== 'object') {
+    state.plaque.layerDepthsByOriginal = {};
+  }
+}
+
+function getPlaqueLayerSourceIndex(layer, fallbackIndex = -1) {
+  const uploadedSourceIndex = getUploadedPlaqueLayerSourceIndex(layer);
+  if (uploadedSourceIndex >= 0) return uploadedSourceIndex;
+  const region = layer?.region || layer?.sourceRegion || layer;
+  const sourceIndex = Number(layer?.sourceIndex ?? region?.sourceIndex ?? layer?.index ?? region?.id);
+  return Number.isFinite(sourceIndex) ? sourceIndex : fallbackIndex;
+}
+
+function getPlaqueLayerOriginalIndex(layer) {
+  const region = getUploadedPlaqueLayerRegion(layer);
+  const original = Number(
+    layer?.original
+    ?? layer?.region?.original
+    ?? layer?.sourceRegion?.original
+    ?? region?.original,
+  );
+  return Number.isFinite(original) && original !== PLAQUE_FLOATING_SUPPORT_ORIGINAL ? original : null;
+}
+
+function getPlaqueLayerStableId(layer, fallbackIndex = -1) {
+  const hex = normalizeHex(layer?.hex || layer?.region?.hex || layer?.sourceRegion?.hex || '#ffffff');
+  const original = getPlaqueLayerOriginalIndex(layer);
+  const sourceIndex = getPlaqueLayerSourceIndex(layer, fallbackIndex);
+  const uploadKey = String(
+    state.plaque.uploadFingerprint
+    || state.processed?.uploadFingerprint
+    || state.plaque.processed?.uploadFingerprint
+    || state.plaque.fileName
+    || state.fileName
+    || 'plaque',
+  );
+  if (original !== null) return `${uploadKey}|original:${original}|${hex}`;
+  if (Number.isFinite(sourceIndex) && sourceIndex >= 0) return `${uploadKey}|source:${sourceIndex}|${hex}`;
+  if (layer?.type === 'svg' && Array.isArray(layer.pathIndices) && layer.pathIndices.length) {
+    return `${uploadKey}|svg:${hex}:${layer.pathIndices.join('.')}`;
+  }
+  return `${uploadKey}|visible:${fallbackIndex}|${hex}`;
+}
+
+function getPlaqueStoredLayerColourOverride(layer, index) {
+  ensurePlaqueLayerIdentityState();
+  const layerId = getPlaqueLayerStableId(layer, index);
+  const sourceIndex = getPlaqueLayerSourceIndex(layer, index);
+  const original = getPlaqueLayerOriginalIndex(layer);
+  const byLayer = state.plaque.colourOverridesByLayerId[layerId];
+  if (byLayer) return normalizeHex(byLayer);
+  if (original !== null) {
+    const byOriginal = state.plaque.colourOverridesByOriginal[String(original)];
+    if (byOriginal) return normalizeHex(byOriginal);
+  }
+  if (Number.isFinite(sourceIndex) && sourceIndex >= 0) {
+    const bySource = state.plaque.colourOverridesBySourceIndex[String(sourceIndex)];
+    if (bySource) return normalizeHex(bySource);
+  }
+  const positionalSourceIndex = Number(state.plaque.layerSourceIndices?.[index]);
+  const positionalLayerId = state.plaque.layerStableIds?.[index];
+  const canUsePositional = !shouldUseUploadedRasterPlaqueHierarchy(state.processed)
+    || (
+      positionalLayerId === layerId
+      && Number.isFinite(positionalSourceIndex)
+      && positionalSourceIndex === sourceIndex
+    );
+  const positional = canUsePositional ? state.plaque.colourOverrides?.[index] : '';
+  return positional ? normalizeHex(positional) : '';
+}
+
+function setPlaqueStoredLayerColourOverride(index, layer, hex) {
+  ensurePlaqueLayerIdentityState();
+  const normalized = normalizeHex(hex);
+  const layerId = getPlaqueLayerStableId(layer, index);
+  const sourceIndex = getPlaqueLayerSourceIndex(layer, index);
+  const original = getPlaqueLayerOriginalIndex(layer);
+  state.plaque.colourOverridesByLayerId[layerId] = normalized;
+  if (original !== null) state.plaque.colourOverridesByOriginal[String(original)] = normalized;
+  if (Number.isFinite(sourceIndex) && sourceIndex >= 0) {
+    state.plaque.colourOverridesBySourceIndex[String(sourceIndex)] = normalized;
+    if (Array.isArray(state.plaque.colorOverrides)) state.plaque.colorOverrides[sourceIndex] = normalized;
+    if (Array.isArray(state.colorOverrides)) state.colorOverrides[sourceIndex] = normalized;
+  }
+  state.plaque.colourOverrides[index] = normalized;
+  state.plaque.layerStableIds[index] = layerId;
+  state.plaque.layerSourceIndices[index] = sourceIndex;
+}
+
+function getPlaqueStoredLayerDepth(index, layer) {
+  ensurePlaqueLayerIdentityState();
+  const layerId = getPlaqueLayerStableId(layer, index);
+  const sourceIndex = getPlaqueLayerSourceIndex(layer, index);
+  const original = getPlaqueLayerOriginalIndex(layer);
+  const byLayer = Number(state.plaque.layerDepthsByLayerId[layerId]);
+  if (Number.isFinite(byLayer)) return clamp(byLayer, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
+  if (original !== null) {
+    const byOriginal = Number(state.plaque.layerDepthsByOriginal[String(original)]);
+    if (Number.isFinite(byOriginal)) return clamp(byOriginal, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
+  }
+  if (Number.isFinite(sourceIndex) && sourceIndex >= 0) {
+    const bySource = Number(state.plaque.layerDepthsBySourceIndex[String(sourceIndex)]);
+    if (Number.isFinite(bySource)) return clamp(bySource, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
+  }
+  const positionalSourceIndex = Number(state.plaque.layerSourceIndices?.[index]);
+  const positionalLayerId = state.plaque.layerStableIds?.[index];
+  const canUsePositional = !shouldUseUploadedRasterPlaqueHierarchy(state.processed)
+    || (
+      positionalLayerId === layerId
+      && Number.isFinite(positionalSourceIndex)
+      && positionalSourceIndex === sourceIndex
+    );
+  const positional = Number(canUsePositional ? state.plaque.layerDepths?.[index] : NaN);
+  return Number.isFinite(positional) ? clamp(positional, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX) : null;
+}
+
+function setPlaqueStoredLayerDepth(index, layer, depth, source = 'state') {
+  ensurePlaqueLayerIdentityState();
+  const next = clamp(Number(depth), PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
+  const layerId = getPlaqueLayerStableId(layer, index);
+  const sourceIndex = getPlaqueLayerSourceIndex(layer, index);
+  const original = getPlaqueLayerOriginalIndex(layer);
+  state.plaque.layerDepthsByLayerId[layerId] = next;
+  if (original !== null) state.plaque.layerDepthsByOriginal[String(original)] = next;
+  if (Number.isFinite(sourceIndex) && sourceIndex >= 0) {
+    state.plaque.layerDepthsBySourceIndex[String(sourceIndex)] = next;
+  }
+  state.plaque.layerDepths[index] = next;
+  state.plaque.layerDepthSources[index] = source;
+  state.plaque.layerStableIds[index] = layerId;
+  state.plaque.layerSourceIndices[index] = sourceIndex;
+  return next;
+}
+
+function syncPlaqueColourOverridesFromProcessed() {
+  ensurePlaqueLayerIdentityState();
+  const processed = state.processed || state.plaque.processed;
+  const regions = getPlaqueRasterRenderRegions(processed) || [];
+  const overrides = Array.isArray(state.colorOverrides) && state.colorOverrides.length
+    ? state.colorOverrides
+    : (Array.isArray(state.plaque.colorOverrides) ? state.plaque.colorOverrides : []);
+  overrides.forEach((hex, sourceIndex) => {
+    if (!hex) return;
+    const normalized = normalizeHex(hex);
+    state.plaque.colourOverridesBySourceIndex[String(sourceIndex)] = normalized;
+    const original = getPlaqueLayerOriginalIndex(regions[sourceIndex]);
+    if (original !== null) state.plaque.colourOverridesByOriginal[String(original)] = normalized;
+  });
+  const layers = getPlaqueLayerDescriptors();
+  state.plaque.layerStableIds = layers.map((layer, index) => getPlaqueLayerStableId(layer, index));
+  state.plaque.layerSourceIndices = getPlaqueLayerSourceIndices(layers);
+  state.plaque.colourOverrides = layers.map((layer, index) => getPlaqueStoredLayerColourOverride(layer, index) || '');
+}
+
+function getUploadedPlaqueLayerShare(layer, processed = state.processed || state.plaque.processed) {
+  const region = getUploadedPlaqueLayerRegion(layer);
+  const regions = getPlaqueRasterRenderRegions(processed) || [];
+  const total = Math.max(1, regions.reduce((sum, item) => sum + (Number(item?.count) || 0), 0));
+  const count = Number(region?.count) || 0;
+  return count / total;
+}
+
+function getUploadedPlaqueLayerCountRank(layer, processed = state.processed || state.plaque.processed) {
+  const sourceIndex = getUploadedPlaqueLayerSourceIndex(layer);
+  const regions = getPlaqueRasterRenderRegions(processed) || [];
+  const ranked = regions
+    .map((region, index) => ({
+      index,
+      count: Number(region?.count) || 0,
+      isFloatingSupport: Boolean(region?.isFloatingSupport),
+    }))
+    .filter((item) => !item.isFloatingSupport && item.count > 0)
+    .sort((a, b) => b.count - a.count);
+  const rank = ranked.findIndex((item) => item.index === sourceIndex);
+  return rank >= 0 ? rank : Number.POSITIVE_INFINITY;
+}
+
+function shouldTreatUploadedLightLayerAsBackingSurface(layer) {
+  if (isUploadedPlaqueGeneratedSupportRegion(layer)) return true;
+  const processed = state.processed || state.plaque.processed;
+  const regions = getPlaqueRasterRenderRegions(processed) || [];
+  const sourceIndex = getUploadedPlaqueLayerSourceIndex(layer);
+  const backingIndex = getPlaqueBackingRenderRegionIndex(processed, regions);
+  const sourceRegion = sourceIndex >= 0 ? regions[sourceIndex] : getUploadedPlaqueLayerRegion(layer);
+  if (sourceIndex >= 0 && sourceIndex === backingIndex) {
+    const hex = normalizeHex(sourceRegion?.hex || layer?.hex || '#ffffff');
+    const rgb = hexToRgb(hex);
+    const total = Math.max(1, regions.reduce((sum, region) => sum + (Number(region?.count) || 0), 0));
+    const info = {
+      index: sourceIndex,
+      region: sourceRegion,
+      hex,
+      rgb,
+      luma: colourLuma(rgb),
+      chroma: colourChroma(rgb),
+      count: Number(sourceRegion?.count) || 0,
+      share: (Number(sourceRegion?.count) || 0) / total,
+      isEdge: sourceIndex === getPlaqueOuterEdgeColourIndex(processed),
+      isNearWhite: isNearWhiteHex(hex),
+      isNearBlack: isNearBlackHex(hex),
+      ...getUploadedPlaqueRegionBoundaryStats(sourceRegion, processed),
+    };
+    if (isUploadedPlaqueBackingSurfaceInfo(info, backingIndex)) return true;
+  }
+  return false;
+}
+
+function getUploadedPlaqueLayerRenderSource(layer) {
+  if (isUploadedPlaqueGeneratedSupportRegion(layer)) {
+    return 'floatingRegionSupport';
+  }
+  return layer?.renderSource || layer?.region?.renderSource || layer?.sourceRegion?.renderSource || 'uploadedPixel';
+}
+
+function getUploadedPlaqueLayerRenderRole(layer) {
+  if (getUploadedPlaqueLayerRenderSource(layer) !== 'uploadedPixel') return 'generatedSupport';
+  const hex = normalizeHex(layer?.hex || layer?.region?.hex || layer?.sourceRegion?.hex || '#ffffff');
+  const rgb = hexToRgb(hex);
+  const isLight = isNearWhiteHex(hex) || (colourLuma(rgb) >= 222 && colourChroma(rgb) <= 48);
+  if (isLight && shouldTreatUploadedLightLayerAsBackingSurface(layer)) return 'basePlate';
+  return 'artwork';
 }
 
 function getPlaqueRasterRegionDisplayHex(processed, regions, sourceIndex, backingIndex = getPlaqueBackingRenderRegionIndex(processed, regions)) {
@@ -5787,7 +6605,7 @@ function getPlaqueRasterRegionDisplayHex(processed, regions, sourceIndex, backin
 }
 
 function getPlaqueLayerDisplayHex(layer, index) {
-  const override = state.plaque.colourOverrides?.[index];
+  const override = getPlaqueStoredLayerColourOverride(layer, index);
   if (override) return normalizeHex(override);
   return normalizeHex(layer?.hex || '#ffffff');
 }
@@ -5795,9 +6613,8 @@ function getPlaqueLayerDisplayHex(layer, index) {
 function setPlaqueLayerColour(index, hex) {
   const layers = getPlaqueLayerDescriptors();
   if (!layers.length || !layers[index]) return false;
-  if (!Array.isArray(state.plaque.colourOverrides)) state.plaque.colourOverrides = [];
   const normalized = normalizeHex(hex);
-  state.plaque.colourOverrides[index] = normalized;
+  setPlaqueStoredLayerColourOverride(index, layers[index], normalized);
   state.plaque.selectedLayer = clamp(index, 0, layers.length - 1);
   const updatedLive = updateRenderedPlaqueLayerColour(index, normalized);
   updatePlaqueLayerHighlight();
@@ -5975,15 +6792,16 @@ function updateRenderedPlaqueLayerDepth(index, nextDepth) {
 }
 
 function getPlaqueLayerDepthForIndex(index) {
-  const current = Number(state.plaque.layerDepths[index]);
-  if (Number.isFinite(current)) return clamp(current, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
-  return getDefaultPlaqueLayerDepth(index, getPlaqueLayerDescriptors()[index]);
+  const layer = getPlaqueLayerDescriptors()[index];
+  const current = getPlaqueStoredLayerDepth(index, layer);
+  if (current !== null) return current;
+  return getDefaultPlaqueLayerDepth(index, layer);
 }
 
 function getPlaqueLayerDepthState(index, layer) {
   const defaultDepth = getDefaultPlaqueLayerDepth(index, layer);
-  const current = Number(state.plaque.layerDepths?.[index]);
-  const hasStateDepth = Number.isFinite(current);
+  const current = getPlaqueStoredLayerDepth(index, layer);
+  const hasStateDepth = current !== null;
   const depth = clamp(hasStateDepth ? current : defaultDepth, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX);
   return {
     depth,
@@ -5999,15 +6817,27 @@ function getUploadedPlaqueDefaultColourDepth(layer) {
   const rgb = hexToRgb(hex);
   const luma = colourLuma(rgb);
   const chroma = colourChroma(rgb);
+  const isFloatingSupport = Boolean(layer?.isFloatingSupport || layer?.region?.isFloatingSupport || layer?.sourceRegion?.isFloatingSupport);
+  const lightDepth = typeof PLAQUE_UPLOADED_LIGHT_LAYER_DEPTH === 'undefined' ? 1.7 : Number(PLAQUE_UPLOADED_LIGHT_LAYER_DEPTH);
+  const lightArtworkDepth = typeof PLAQUE_UPLOADED_LIGHT_ARTWORK_LAYER_DEPTH === 'undefined' ? 5.4 : Number(PLAQUE_UPLOADED_LIGHT_ARTWORK_LAYER_DEPTH);
+  const darkDepth = typeof PLAQUE_UPLOADED_DARK_LAYER_DEPTH === 'undefined' ? 1.1 : Number(PLAQUE_UPLOADED_DARK_LAYER_DEPTH);
+  const darkArtworkDepth = typeof PLAQUE_UPLOADED_DARK_ARTWORK_LAYER_DEPTH === 'undefined' ? 4.8 : Number(PLAQUE_UPLOADED_DARK_ARTWORK_LAYER_DEPTH);
+  const chromaticDepth = typeof PLAQUE_UPLOADED_CHROMATIC_LAYER_DEPTH === 'undefined' ? 4.6 : Number(PLAQUE_UPLOADED_CHROMATIC_LAYER_DEPTH);
   let configured;
-  if (isNearWhiteHex(hex) || (luma >= 222 && chroma <= 48)) {
-    configured = typeof PLAQUE_UPLOADED_LIGHT_LAYER_DEPTH === 'undefined' ? 1.7 : Number(PLAQUE_UPLOADED_LIGHT_LAYER_DEPTH);
+  if (isFloatingSupport) {
+    configured = lightDepth;
+  } else if (isNearWhiteHex(hex) || (luma >= 222 && chroma <= 48)) {
+    configured = shouldTreatUploadedLightLayerAsBackingSurface(layer)
+      ? lightDepth
+      : Math.max(lightDepth, lightArtworkDepth, chromaticDepth + 0.3);
   } else if (isNearBlackHex(hex) || (luma <= 58 && chroma <= 58)) {
-    configured = typeof PLAQUE_UPLOADED_DARK_LAYER_DEPTH === 'undefined' ? 1.1 : Number(PLAQUE_UPLOADED_DARK_LAYER_DEPTH);
+    configured = Math.max(darkDepth, darkArtworkDepth);
   } else if (chroma >= 42) {
-    configured = typeof PLAQUE_UPLOADED_CHROMATIC_LAYER_DEPTH === 'undefined' ? 4.6 : Number(PLAQUE_UPLOADED_CHROMATIC_LAYER_DEPTH);
+    configured = chromaticDepth;
   } else {
-    configured = PLAQUE_DEFAULT_LAYER_DEPTH;
+    configured = getUploadedPlaqueLayerRenderSource(layer) === 'uploadedPixel'
+      ? chromaticDepth
+      : PLAQUE_DEFAULT_LAYER_DEPTH;
   }
   return clamp(
     Number.isFinite(configured) ? configured : PLAQUE_DEFAULT_LAYER_DEPTH,
@@ -6112,22 +6942,35 @@ function selectPlaqueLayer(index, options = {}) {
 
 function setPlaqueLayerDepth(index, value, options = {}) {
   syncPlaqueLayers();
+  const layers = getPlaqueLayerDescriptors();
+  const layer = layers[index];
+  const beforeDepth = getPlaqueStoredLayerDepth(index, layer);
+  const beforeBox = getRenderedPlaqueLayerBox(index);
+  const beforeSupportZMax = getUploadedPlaqueCurrentSupportZMax(index);
   const numericValue = Number(value);
   const next = clamp(
     Number.isFinite(numericValue)
       ? numericValue
-      : getDefaultPlaqueLayerDepth(index, getPlaqueLayerDescriptors()[index]),
+      : getDefaultPlaqueLayerDepth(index, layer),
     PLAQUE_LAYER_DEPTH_MIN,
     PLAQUE_LAYER_DEPTH_MAX,
   );
-  state.plaque.layerDepths[index] = next;
-  if (!Array.isArray(state.plaque.layerDepthSources)) state.plaque.layerDepthSources = [];
-  state.plaque.layerDepthSources[index] = options.depthSource || 'slider-change';
+  setPlaqueStoredLayerDepth(index, layer, next, options.depthSource || 'slider-change');
   state.plaque.selectedLayer = clamp(Number(index) || 0, 0, Math.max(0, (getPlaqueLayerDescriptors().length || 1) - 1));
   const updatedLive = updateRenderedPlaqueLayerDepth(index, next);
+  const afterBox = getRenderedPlaqueLayerBox(index);
   if (options.renderControls !== false) renderPlaqueLayerControls();
   else syncPlaqueLayerControlState(index, next);
   if (options.logDepths !== false) {
+    const afterSupportZMax = getUploadedPlaqueCurrentSupportZMax(index);
+    logUploadedRasterPlaqueLayerDepthChange(index, layer, {
+      beforeDepth,
+      afterDepth: next,
+      beforeBox,
+      afterBox,
+      wasHiddenBefore: Boolean(beforeBox && Number.isFinite(beforeBox.max.z) && beforeBox.max.z <= beforeSupportZMax + 0.01),
+      visibleAfter: Boolean(afterBox && Number.isFinite(afterBox.max.z) && afterBox.max.z > afterSupportZMax + 0.01),
+    });
     logUploadedRasterPlaqueDepthUpdate(index, options.depthSource || 'slider-change');
   }
   if (options.rebuild === true || !updatedLive) {
@@ -6208,7 +7051,16 @@ function getSerializablePlaqueConfig() {
     basePadding: clamp(Number(state.plaque.basePadding) || PLAQUE_DEFAULT_BASE_PADDING, 0, 6),
     backingColourOverride: state.plaque.backingColourOverride ? normalizeHex(state.plaque.backingColourOverride) : '',
     layerDepths: [...state.plaque.layerDepths],
+    layerDepthSources: [...(state.plaque.layerDepthSources || [])],
+    layerDepthsByLayerId: { ...(state.plaque.layerDepthsByLayerId || {}) },
+    layerDepthsBySourceIndex: { ...(state.plaque.layerDepthsBySourceIndex || {}) },
+    layerDepthsByOriginal: { ...(state.plaque.layerDepthsByOriginal || {}) },
     colourOverrides: [...(state.plaque.colourOverrides || [])],
+    colourOverridesByLayerId: { ...(state.plaque.colourOverridesByLayerId || {}) },
+    colourOverridesBySourceIndex: { ...(state.plaque.colourOverridesBySourceIndex || {}) },
+    colourOverridesByOriginal: { ...(state.plaque.colourOverridesByOriginal || {}) },
+    layerSourceIndices: [...(state.plaque.layerSourceIndices || [])],
+    layerStableIds: [...(state.plaque.layerStableIds || [])],
     selectedLayer: Number(state.plaque.selectedLayer) || 0,
     traceQuality: normalizePlaqueTraceQuality(state.plaque.traceQuality),
     zeroGapColourLayers: state.plaque.zeroGapColourLayers !== false,

@@ -146,7 +146,10 @@ function processPlaqueRasterArtwork(message) {
   const plaqueAutoColourLimit = plaqueRasterAutoPalette
     ? getPlaqueAutoPaletteLimit(activeColourCandidates.filter((cluster) => cluster.original !== FLOATING_SUPPORT_CLUSTER_ORIGINAL), printableWeight)
     : null;
-  const colourLimit = config?.frontColoursCustomized ? requestedColourCount : (plaqueAutoColourLimit || naturalColourCount);
+  const essentialPlaqueColourCount = plaqueDominantClusters?.filter((cluster) => cluster.original !== FLOATING_SUPPORT_CLUSTER_ORIGINAL).length || 0;
+  const colourLimit = config?.frontColoursCustomized
+    ? requestedColourCount
+    : Math.max(plaqueAutoColourLimit || naturalColourCount, essentialPlaqueColourCount);
   const main = activeColourCandidates
     .filter((cluster) => cluster.original !== FLOATING_SUPPORT_CLUSTER_ORIGINAL)
     .slice(0, Math.max(0, colourLimit - (floatingSupportCluster ? 1 : 0)));
@@ -185,6 +188,14 @@ function processPlaqueRasterArtwork(message) {
       includeRemoved: Boolean(config?.includeDebugPayload),
     });
   }
+  let plaqueComplexity = analyzeComplexPlaqueRasterLogo(regionIndex, alphaMask, main, width, height);
+  if (plaqueTraceQuality !== 'raw' && plaqueComplexity.mode === 'complex-simplified') {
+    const simplification = simplifyComplexPlaqueRasterLogo(regionIndex, alphaMask, alphaValues, data, main, width, height);
+    if (simplification.changedPixels > 0) {
+      refinePlaqueRasterPaletteFromAssignedPixels(regionIndex, alphaMask, alphaValues, data, main);
+    }
+    plaqueComplexity = analyzeComplexPlaqueRasterLogo(regionIndex, alphaMask, main, width, height, simplification);
+  }
 
   postProgress(message.id, 78, 'Tracing plaque layers');
   const plaqueLabelledMap = buildPlaqueExactLabelledMap(main, regionIndex, alphaMask, alphaValues, width, height);
@@ -198,6 +209,15 @@ function processPlaqueRasterArtwork(message) {
   const islands = regionPaths.reduce((sum, region) => sum + Math.max(0, region.components - 1), 0);
   const opaqueCount = alphaMask.reduce((sum, value) => sum + value, 0);
   const tinyShapes = regionPaths.filter((region) => region.count / Math.max(opaqueCount, 1) < 0.012).length;
+  const plaqueVectorizeState = buildPlaqueVectorizeState({
+    sourceClusters,
+    mappedClusters: regionPaths,
+    alphaMask,
+    width,
+    height,
+    removeBackground: Boolean(config?.removeBg),
+    fixFloatingRegions: Boolean(config?.fixFloatingRegions),
+  });
 
   return {
     sourceWidth: srcW,
@@ -219,6 +239,8 @@ function processPlaqueRasterArtwork(message) {
     regionIndex,
     colours: regionPaths,
     plaqueLabelledMap,
+    plaqueComplexity,
+    plaqueVectorizeState,
     silhouette,
     warnings: buildWarnings({ artworkType, clusters: sourceClusters, main, islands, tinyShapes, opaqueCount, width, height }).concat(
       plaqueLabelledMap?.warnings || [],
@@ -531,7 +553,12 @@ function shouldMergeColourClusters(a, b, tolerance) {
   const chromaA = colourChroma(a.rgb);
   const chromaB = colourChroma(b.rgb);
   if (lumaA <= 58 && lumaB <= 58 && chromaA <= 30 && chromaB <= 30) return true;
-  if (lumaA >= 218 && lumaB >= 218 && chromaA <= 30 && chromaB <= 30) return true;
+  if (lumaA >= 218 && lumaB >= 218 && chromaA <= 30 && chromaB <= 30) {
+    const aTrueWhite = lumaA >= 238 && chromaA <= 24;
+    const bTrueWhite = lumaB >= 238 && chromaB <= 24;
+    if (aTrueWhite !== bTrueWhite) return distance <= Math.min(18, tolerance * 0.45);
+    return true;
+  }
   if (distance > tolerance) return false;
   const hueA = colourHue(a.rgb);
   const hueB = colourHue(b.rgb);
@@ -631,7 +658,41 @@ function selectPlaqueDominantRasterColourClusters(activeClusters, stableClusters
     if (similar) return;
     selected.push(cluster);
   });
-  return selected.length ? selected.slice(0, 8) : active.slice(0, 8);
+  const essential = ensurePlaqueEssentialRasterColourClusters(selected.length ? selected : active, active, totalWeight);
+  return essential.length ? essential.slice(0, 8) : active.slice(0, 8);
+}
+
+function ensurePlaqueEssentialRasterColourClusters(selectedClusters, activeClusters, totalWeight = 0) {
+  const selected = [...(selectedClusters || [])];
+  const selectedOriginals = new Set(selected.map((cluster) => cluster.original));
+  const active = (activeClusters || [])
+    .filter((cluster) => cluster?.original !== FLOATING_SUPPORT_CLUSTER_ORIGINAL && cluster.count > 0);
+  const minArtworkPixels = Math.max(8, totalWeight * 0.0015);
+  const whiteArtwork = active
+    .filter((cluster) => {
+      const rgb = Array.isArray(cluster.rgb) ? cluster.rgb : [0, 0, 0];
+      return colourLuma(rgb) >= 232 && colourChroma(rgb) <= 48 && cluster.count >= minArtworkPixels;
+    })
+    .sort((a, b) => b.count - a.count)[0];
+  if (whiteArtwork && !selectedOriginals.has(whiteArtwork.original)) {
+    selected.push(whiteArtwork);
+    selectedOriginals.add(whiteArtwork.original);
+  }
+  if (selected.length <= 8) return selected;
+  const scoreCluster = (cluster) => {
+    const rgb = Array.isArray(cluster.rgb) ? cluster.rgb : [0, 0, 0];
+    const luma = colourLuma(rgb);
+    const chroma = colourChroma(rgb);
+    const share = cluster.count / Math.max(totalWeight, 1);
+    const isWhite = luma >= 232 && chroma <= 48;
+    const isDark = luma <= 54 && chroma <= 58;
+    const isStrongColour = chroma >= 62;
+    return (share * 1000) + (isWhite ? 120 : 0) + (isDark ? 110 : 0) + (isStrongColour ? 60 : 0);
+  };
+  return selected
+    .slice()
+    .sort((a, b) => scoreCluster(b) - scoreCluster(a))
+    .slice(0, 8);
 }
 
 function shouldMergePlaqueDominantRasterCluster(a, b, totalWeight = 0) {
@@ -645,7 +706,12 @@ function shouldMergePlaqueDominantRasterCluster(a, b, totalWeight = 0) {
   const chromaB = colourChroma(rgbB);
   const shareA = a.count / Math.max(totalWeight, 1);
   const shareB = b.count / Math.max(totalWeight, 1);
-  if (lumaA >= 214 && lumaB >= 214 && chromaA <= 62 && chromaB <= 62) return true;
+  const aTrueWhite = lumaA >= 232 && chromaA <= 48 && shareA >= 0.0015;
+  const bTrueWhite = lumaB >= 232 && chromaB <= 48 && shareB >= 0.0015;
+  if (aTrueWhite !== bTrueWhite) return false;
+  if (lumaA >= 214 && lumaB >= 214 && chromaA <= 62 && chromaB <= 62) {
+    return Math.abs(lumaA - lumaB) <= 18 || Math.min(shareA, shareB) <= 0.0015;
+  }
   if (lumaA >= 170 && lumaB >= 170 && Math.max(lumaA, lumaB) >= 198 && chromaA <= 70 && chromaB <= 70 && Math.min(shareA, shareB) <= 0.12) return true;
   if (lumaA <= 62 && lumaB <= 62 && chromaA <= 62 && chromaB <= 62) return true;
   if (chromaA <= 46 && chromaB <= 46 && distance <= 74 && Math.min(shareA, shareB) <= 0.08) return true;
@@ -1183,6 +1249,307 @@ function getNearestPlaqueMaskRegion(regions, index, width, height) {
   return -1;
 }
 
+function getComplexPlaqueRegionInfo(main) {
+  return (main || []).map((cluster) => {
+    const rgb = Array.isArray(cluster.rgb) ? cluster.rgb : hexToRgb(cluster.hex || '#ffffff');
+    const luma = colourLuma(rgb);
+    const chroma = colourChroma(rgb);
+    return {
+      rgb,
+      luma,
+      chroma,
+      isWhite: luma >= 222 && chroma <= 42,
+      isDark: luma <= 60 && chroma <= 64,
+      isGrey: luma >= 64 && luma <= 190 && chroma <= 54,
+    };
+  });
+}
+
+function buildPlaqueVectorizeState({
+  sourceClusters = [],
+  mappedClusters = [],
+  alphaMask = null,
+  width = 0,
+  height = 0,
+  removeBackground = false,
+  fixFloatingRegions = false,
+} = {}) {
+  const sourceWeight = sourceClusters.reduce((sum, cluster) => sum + (Number(cluster?.count) || 0), 0);
+  const mappedWeight = mappedClusters.reduce((sum, cluster) => sum + getPlaqueClusterPixelCount(cluster), 0);
+  const whiteSourceDetected = sourceClusters.some((cluster) => isPlaqueWhiteArtworkCluster(cluster, sourceWeight));
+  const whiteDetectedAsArtwork = mappedClusters.some((cluster) => isPlaqueWhiteArtworkCluster(cluster, mappedWeight));
+  const componentStats = getPlaqueVectorizeComponentStats(mappedClusters, alphaMask, width, height);
+  return {
+    fixFloatingRegions: Boolean(fixFloatingRegions),
+    removeBackground: Boolean(removeBackground),
+    detectedColoursBeforeMapping: sourceClusters
+      .filter((cluster) => cluster?.original !== FLOATING_SUPPORT_CLUSTER_ORIGINAL)
+      .slice()
+      .sort((a, b) => (Number(b?.count) || 0) - (Number(a?.count) || 0))
+      .slice(0, 16)
+      .map((cluster) => makePlaqueVectorizeColourRow(cluster, sourceWeight)),
+    mappedColours: mappedClusters
+      .filter((cluster) => cluster?.original !== FLOATING_SUPPORT_CLUSTER_ORIGINAL && !cluster?.isFloatingSupport)
+      .map((cluster, index) => makePlaqueVectorizeColourRow(cluster, mappedWeight, index)),
+    whiteDetectedAsArtwork,
+    whiteSourceDetected,
+    whiteTreatment: whiteDetectedAsArtwork
+      ? 'artwork'
+      : (whiteSourceDetected ? 'detected-but-not-mapped' : 'not-detected'),
+    floatingComponentCount: componentStats.floatingComponentCount,
+    preservedFloatingComponentCount: componentStats.preservedFloatingComponentCount,
+    discardedComponentCount: componentStats.discardedComponentCount,
+    componentCount: componentStats.componentCount,
+    supportPixelCount: 0,
+  };
+}
+
+function makePlaqueVectorizeColourRow(cluster, totalWeight = 0, index = null) {
+  const rgb = Array.isArray(cluster?.rgb) ? cluster.rgb : hexToRgb(cluster?.hex || '#ffffff');
+  const count = getPlaqueClusterPixelCount(cluster);
+  const row = {
+    hex: normalizeHex(cluster?.hex || rgbToHex(rgb)),
+    count: Math.round(count),
+    share: Number((count / Math.max(totalWeight, 1)).toFixed(5)),
+    luma: Number(colourLuma(rgb).toFixed(1)),
+    chroma: Number(colourChroma(rgb).toFixed(1)),
+    whiteArtwork: isPlaqueWhiteArtworkCluster({ ...cluster, rgb, count }, totalWeight),
+  };
+  if (Number.isFinite(index)) row.index = index;
+  return row;
+}
+
+function getPlaqueClusterPixelCount(cluster) {
+  if (!cluster) return 0;
+  if (cluster.mask?.length) {
+    let pixels = 0;
+    for (let i = 0; i < cluster.mask.length; i += 1) pixels += cluster.mask[i] ? 1 : 0;
+    return pixels || Number(cluster.count) || 0;
+  }
+  return Number(cluster.count) || 0;
+}
+
+function isPlaqueWhiteArtworkCluster(cluster, totalWeight = 0) {
+  if (!cluster) return false;
+  const rgb = Array.isArray(cluster.rgb) ? cluster.rgb : hexToRgb(cluster.hex || '#ffffff');
+  const count = getPlaqueClusterPixelCount(cluster);
+  const minArtworkPixels = Math.max(8, totalWeight * 0.0015);
+  return colourLuma(rgb) >= 232 && colourChroma(rgb) <= 48 && count >= minArtworkPixels;
+}
+
+function getPlaqueVectorizeComponentStats(mappedClusters = [], alphaMask = null, width = 0, height = 0) {
+  const safeWidth = Number(width) || 0;
+  const safeHeight = Number(height) || 0;
+  let componentCount = 0;
+  let floatingComponentCount = 0;
+  let discardedComponentCount = 0;
+  mappedClusters.forEach((cluster) => {
+    if (!cluster?.mask?.length || !safeWidth || !safeHeight) return;
+    const components = countComponents(cluster.mask, safeWidth, safeHeight, 1);
+    componentCount += components;
+    floatingComponentCount += Math.max(0, components - 1);
+    if (cluster.removedMask?.length) {
+      discardedComponentCount += countComponents(cluster.removedMask, safeWidth, safeHeight, 1);
+    }
+  });
+  const silhouetteComponents = alphaMask?.length && safeWidth && safeHeight
+    ? countComponents(alphaMask, safeWidth, safeHeight, 1)
+    : 0;
+  return {
+    componentCount,
+    silhouetteComponentCount: silhouetteComponents,
+    floatingComponentCount: Math.max(floatingComponentCount, Math.max(0, silhouetteComponents - 1)),
+    preservedFloatingComponentCount: Math.max(0, componentCount - mappedClusters.length),
+    discardedComponentCount,
+  };
+}
+
+function analyzeComplexPlaqueRasterLogo(regionIndex, alphaMask, main, width, height, simplification = null) {
+  if (!regionIndex || !alphaMask || !main?.length || !width || !height) {
+    return {
+      colourGroupCount: main?.length || 0,
+      componentCount: 0,
+      tinyComponentCount: 0,
+      contourPointCount: 0,
+      complexityScore: 0,
+      mode: 'simple',
+    };
+  }
+  const visited = new Uint8Array(regionIndex.length);
+  const queue = [];
+  const opaquePixels = alphaMask.reduce((sum, value) => sum + value, 0);
+  const tinyArea = clamp(Math.round(opaquePixels * 0.000028), 12, 260);
+  const narrowLimit = clamp(Math.round(Math.max(width, height) * 0.0045), 4, 12);
+  let componentCount = 0;
+  let tinyComponentCount = 0;
+  let contourPointCount = 0;
+  for (let start = 0; start < regionIndex.length; start += 1) {
+    if (visited[start] || !alphaMask[start] || regionIndex[start] < 0) continue;
+    const region = regionIndex[start];
+    let pixels = 0;
+    let minX = width;
+    let maxX = 0;
+    let minY = height;
+    let maxY = 0;
+    let boundaryEdges = 0;
+    queue.length = 0;
+    queue.push(start);
+    visited[start] = 1;
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      const index = queue[cursor];
+      pixels += 1;
+      const x = index % width;
+      const y = Math.floor(index / width);
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+      const cardinals = [
+        x > 0 ? index - 1 : -1,
+        x + 1 < width ? index + 1 : -1,
+        y > 0 ? index - width : -1,
+        y + 1 < height ? index + width : -1,
+      ];
+      cardinals.forEach((next) => {
+        if (next < 0 || !alphaMask[next] || regionIndex[next] !== region) {
+          boundaryEdges += 1;
+          return;
+        }
+        if (!visited[next]) {
+          visited[next] = 1;
+          queue.push(next);
+        }
+      });
+    }
+    componentCount += 1;
+    contourPointCount += boundaryEdges;
+    const componentWidth = maxX - minX + 1;
+    const componentHeight = maxY - minY + 1;
+    if (pixels <= tinyArea || Math.min(componentWidth, componentHeight) <= narrowLimit) tinyComponentCount += 1;
+  }
+  const colourGroupCount = main.length;
+  const complexityScore = Math.round((colourGroupCount * 8) + componentCount + (tinyComponentCount * 2) + (contourPointCount / 900));
+  const complex = (
+    (colourGroupCount >= 6 && (componentCount >= 55 || tinyComponentCount >= 24 || contourPointCount >= 36000))
+    || componentCount >= 120
+    || tinyComponentCount >= 60
+  );
+  return {
+    colourGroupCount,
+    componentCount,
+    tinyComponentCount,
+    contourPointCount,
+    complexityScore,
+    mode: complex ? 'complex-simplified' : 'simple',
+    simplifiedPixels: Number(simplification?.changedPixels) || 0,
+    mergedComponents: Number(simplification?.mergedComponents) || 0,
+  };
+}
+
+function simplifyComplexPlaqueRasterLogo(regionIndex, alphaMask, alphaValues, data, main, width, height) {
+  if (!regionIndex || !alphaMask || !main?.length || !width || !height) {
+    return { changedPixels: 0, mergedComponents: 0 };
+  }
+  const regionInfo = getComplexPlaqueRegionInfo(main);
+  const visited = new Uint8Array(regionIndex.length);
+  const queue = [];
+  const component = [];
+  const opaquePixels = alphaMask.reduce((sum, value) => sum + value, 0);
+  const tinyArea = clamp(Math.round(opaquePixels * 0.000028), 12, 260);
+  const speckArea = clamp(Math.round(opaquePixels * 0.000012), 8, 120);
+  const maxMergeArea = clamp(Math.round(opaquePixels * 0.00022), 90, 1800);
+  const narrowLimit = clamp(Math.round(Math.max(width, height) * 0.0045), 4, 12);
+  let changedPixels = 0;
+  let mergedComponents = 0;
+  for (let start = 0; start < regionIndex.length; start += 1) {
+    if (visited[start] || !alphaMask[start] || regionIndex[start] < 0) continue;
+    const region = regionIndex[start];
+    const neighborCounts = new Map();
+    let minX = width;
+    let maxX = 0;
+    let minY = height;
+    let maxY = 0;
+    queue.length = 0;
+    component.length = 0;
+    queue.push(start);
+    visited[start] = 1;
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      const index = queue[cursor];
+      component.push(index);
+      const x = index % width;
+      const y = Math.floor(index / width);
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+      for (let oy = -1; oy <= 1; oy += 1) {
+        for (let ox = -1; ox <= 1; ox += 1) {
+          if (!ox && !oy) continue;
+          const nx = x + ox;
+          const ny = y + oy;
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+          const neighborIndex = ny * width + nx;
+          if (!alphaMask[neighborIndex]) continue;
+          const nextRegion = regionIndex[neighborIndex];
+          if (nextRegion === region && Math.abs(ox) + Math.abs(oy) === 1 && !visited[neighborIndex]) {
+            visited[neighborIndex] = 1;
+            queue.push(neighborIndex);
+          } else if (nextRegion >= 0 && nextRegion !== region) {
+            const weight = Math.abs(ox) + Math.abs(oy) === 1 ? 2 : 1;
+            neighborCounts.set(nextRegion, (neighborCounts.get(nextRegion) || 0) + weight);
+          }
+        }
+      }
+    }
+    if (!neighborCounts.size) continue;
+    let replacement = -1;
+    let bestCount = 0;
+    let totalNeighborCount = 0;
+    let bestNonGreyReplacement = -1;
+    let bestNonGreyCount = 0;
+    neighborCounts.forEach((count, nextRegion) => {
+      totalNeighborCount += count;
+      if (count > bestCount) {
+        bestCount = count;
+        replacement = nextRegion;
+      }
+      if (!regionInfo[nextRegion]?.isGrey && count > bestNonGreyCount) {
+        bestNonGreyCount = count;
+        bestNonGreyReplacement = nextRegion;
+      }
+    });
+    if (replacement < 0) continue;
+    const info = regionInfo[region] || {};
+    const componentWidth = maxX - minX + 1;
+    const componentHeight = maxY - minY + 1;
+    const bboxArea = Math.max(1, componentWidth * componentHeight);
+    const fillRatio = component.length / bboxArea;
+    const dominantNeighborRatio = bestCount / Math.max(totalNeighborCount, 1);
+    const isTiny = component.length <= tinyArea;
+    const isVeryTiny = component.length <= speckArea;
+    const isNarrow = Math.min(componentWidth, componentHeight) <= narrowLimit;
+    const isSparse = fillRatio <= 0.42;
+    const greyStripe = info.isGrey && (isNarrow || isSparse) && component.length <= maxMergeArea * 2 && dominantNeighborRatio >= 0.34;
+    let shouldMerge = (
+      (isTiny && dominantNeighborRatio >= 0.45)
+      || (isNarrow && component.length <= maxMergeArea && dominantNeighborRatio >= 0.52)
+      || greyStripe
+    );
+    if (info.isDark) {
+      shouldMerge = isVeryTiny && dominantNeighborRatio >= 0.64;
+    }
+    if (info.isWhite && !isVeryTiny && !greyStripe) shouldMerge = false;
+    if (!shouldMerge) continue;
+    if (greyStripe && bestNonGreyReplacement >= 0) replacement = bestNonGreyReplacement;
+    component.forEach((index) => {
+      regionIndex[index] = replacement;
+      changedPixels += 1;
+    });
+    mergedComponents += 1;
+  }
+  return { changedPixels, mergedComponents };
+}
+
 function buildPlaqueExactLabelledMap(regions, regionIndex, alphaMask, alphaValues, width, height) {
   if (!regions?.length || !regionIndex || !alphaMask || !width || !height) return null;
   const masks = regions.map(() => new Uint8Array(width * height));
@@ -1212,6 +1579,11 @@ function buildPlaqueExactLabelledMap(regions, regionIndex, alphaMask, alphaValue
     rgb: Array.isArray(region.rgb) ? [...region.rgb] : hexToRgb(region.hex || '#ffffff'),
     count: region.count,
     mask: masks[index],
+    original: Number.isFinite(Number(region.original)) ? Number(region.original) : index,
+    isFloatingSupport: Boolean(region.isFloatingSupport || Number(region.original) === FLOATING_SUPPORT_CLUSTER_ORIGINAL),
+    renderSource: (region.isFloatingSupport || Number(region.original) === FLOATING_SUPPORT_CLUSTER_ORIGINAL)
+      ? 'floatingRegionSupport'
+      : 'uploadedPixel',
     originalRegion: null,
   }));
   const warnings = [];

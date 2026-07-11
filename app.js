@@ -168,6 +168,10 @@ const DEFAULT_CROP_OUTER_MARGIN = 0.2;
 const CROP_EXTEND_LIMIT = 0.75;
 const FLOATING_SUPPORT_CLUSTER_ORIGINAL = -7777;
 const DEFAULT_FLOATING_SUPPORT_COLOUR = '#fdfdfd';
+const FLOATING_REGION_REPAIR_PAD_RATIO = 0.14;
+const FLOATING_REGION_REPAIR_MIN_PAD = 56;
+const FLOATING_REGION_REPAIR_FINAL_PAD_RATIO = 0.055;
+const FLOATING_REGION_REPAIR_FINAL_MIN_PAD = 24;
 const PLAQUE_DEFAULT_BASE_THICKNESS = 8;
 const PLAQUE_BASE_THICKNESS_MIN = 4;
 const PLAQUE_BASE_THICKNESS_MAX = 8;
@@ -175,7 +179,9 @@ const PLAQUE_DEFAULT_BASE_PADDING = 2.5;
 const PLAQUE_DEFAULT_LAYER_DEPTH = 1.4;
 const PLAQUE_UPLOADED_CHROMATIC_LAYER_DEPTH = 4.6;
 const PLAQUE_UPLOADED_LIGHT_LAYER_DEPTH = 1.7;
+const PLAQUE_UPLOADED_LIGHT_ARTWORK_LAYER_DEPTH = 5.4;
 const PLAQUE_UPLOADED_DARK_LAYER_DEPTH = 1.1;
+const PLAQUE_UPLOADED_DARK_ARTWORK_LAYER_DEPTH = 4.8;
 const PLAQUE_BASE_LAYER_DEPTH = 1;
 const PLAQUE_LAYER_DEPTH_MIN = 0.2;
 const PLAQUE_LAYER_DEPTH_MAX = 8;
@@ -183,12 +189,12 @@ const PLAQUE_DEFAULT_TRACE_QUALITY = 'smooth';
 const PLAQUE_SVG_LAYER_SHAPE_LIMIT = 420;
 const DEFAULT_PLAQUE_PROCESSED_CACHE_VERSION = 1;
 const DEFAULT_PLAQUE_PROCESSED_CACHE_KEY = 'default-sign-guy-plaque:v20260526-04';
-const PLAQUE_UPLOAD_PROCESSED_CACHE_VERSION = 14;
+const PLAQUE_UPLOAD_PROCESSED_CACHE_VERSION = 27;
 const PLAQUE_UPLOAD_PROCESSED_CACHE_PREFIX = 'uploaded-plaque:';
 const PLAQUE_UPLOAD_PROCESSED_CACHE_LIMIT = 18;
-const PLAQUE_CONTOUR_CACHE_VERSION = 14;
+const PLAQUE_CONTOUR_CACHE_VERSION = 27;
 const PLAQUE_BASE_SILHOUETTE_CACHE_VERSION = 8;
-const PLAQUE_PROCESSING_WORKER_SRC = './assets/plaque/plaque-processing-worker.js?v=20260705-uploaded-trace-quality-01';
+const PLAQUE_PROCESSING_WORKER_SRC = './assets/plaque/plaque-processing-worker.js?v=20260707-stable-layer-ids-01';
 const PLAQUE_PROCESSING_WORKER_TIMEOUT_MS = 90000;
 const LED_THREE_UPGRADE_DELAY_MS = 80;
 const LED_THREE_CANVAS_SAMPLE_SIZE = 48;
@@ -326,6 +332,8 @@ const state = {
     artwork: null,
     uploadedFile: null,
     uploadFingerprint: '',
+    uploadRequestId: 0,
+    uploadLifecycleLog: null,
     processed: null,
     fileName: '',
     isDefaultPreview: false,
@@ -336,6 +344,7 @@ const state = {
     usage: 'indoor',
     removeBg: true,
     fixFloatingRegions: false,
+    lastVectorizeOptionChange: '',
     floatingSupportColour: DEFAULT_FLOATING_SUPPORT_COLOUR,
     targetColorCount: 8,
     colorOverrides: [],
@@ -356,8 +365,15 @@ const state = {
     backingColourOverride: '',
     layerDepths: [],
     layerDepthSources: [],
+    layerDepthsByLayerId: {},
+    layerDepthsBySourceIndex: {},
+    layerDepthsByOriginal: {},
     colourOverrides: [],
+    colourOverridesByLayerId: {},
+    colourOverridesBySourceIndex: {},
+    colourOverridesByOriginal: {},
     layerSourceIndices: [],
+    layerStableIds: [],
     selectedLayer: 0,
     visualLayerTrayCollapsed: false,
     visualLayerEditorOpen: false,
@@ -2939,6 +2955,14 @@ async function handleFiles(fileList, options = {}) {
     state.targetColorCount = 8;
     state.colorOverrides = [];
     state.plaque.colourOverrides = [];
+    state.plaque.colourOverridesByLayerId = {};
+    state.plaque.colourOverridesBySourceIndex = {};
+    state.plaque.colourOverridesByOriginal = {};
+    state.plaque.layerDepthsByLayerId = {};
+    state.plaque.layerDepthsBySourceIndex = {};
+    state.plaque.layerDepthsByOriginal = {};
+    state.plaque.layerStableIds = [];
+    state.plaque.layerSourceIndices = [];
     state.plaque.backingColourOverride = '';
     state.plaque.svgLayerCache = null;
     state.plaque.fastPreviewOnly = false;
@@ -3843,21 +3867,25 @@ function renderEditedArtworkCanvas(artwork, crop, maxSide) {
   const srcW = Math.max(1, Math.round(getArtworkImageWidth(artwork.image) * crop.w));
   const srcH = Math.max(1, Math.round(getArtworkImageHeight(artwork.image) * crop.h));
   const scale = maxSide / Math.max(srcW, srcH);
-  const width = Math.max(12, Math.round(srcW * scale));
-  const height = Math.max(12, Math.round(srcH * scale));
-  const canvas = document.createElement('canvas');
+  let width = Math.max(12, Math.round(srcW * scale));
+  let height = Math.max(12, Math.round(srcH * scale));
+  let canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  let ctx = canvas.getContext('2d', { willReadFrequently: true });
   ctx.clearRect(0, 0, width, height);
   drawArtworkIntoExpandedCrop(ctx, artwork, crop, scale);
+  let img = ctx.getImageData(0, 0, width, height);
+  let data = img.data;
   if (state.removeBg) {
-    const img = ctx.getImageData(0, 0, width, height);
-    removeConnectedBackgroundFromImageData(img.data, width, height);
+    removeConnectedBackgroundFromImageData(data, width, height);
     ctx.putImageData(img, 0, 0);
   }
   if (state.fixFloatingRegions) {
-    connectFloatingRegionsOnCanvas(canvas, ctx, hexToRgb(state.floatingSupportColour || DEFAULT_FLOATING_SUPPORT_COLOUR));
+    ({ canvas, ctx, img, data, width, height } = applyPaddedFloatingRegionRepair(canvas, ctx, img, width, height, {
+      supportRgb: hexToRgb(state.floatingSupportColour || DEFAULT_FLOATING_SUPPORT_COLOUR),
+      source: 'edit-preview',
+    }));
   }
   return canvas;
 }
@@ -4024,6 +4052,16 @@ function bindMappingControls() {
     if (state.productType === 'plaque') {
       state.plaque.colorOverrides = [];
       state.plaque.colourOverrides = [];
+      state.plaque.colourOverridesByLayerId = {};
+      state.plaque.colourOverridesBySourceIndex = {};
+      state.plaque.colourOverridesByOriginal = {};
+      state.plaque.layerDepths = [];
+      state.plaque.layerDepthSources = [];
+      state.plaque.layerDepthsByLayerId = {};
+      state.plaque.layerDepthsBySourceIndex = {};
+      state.plaque.layerDepthsByOriginal = {};
+      state.plaque.layerStableIds = [];
+      state.plaque.layerSourceIndices = [];
       state.plaque.frontColoursCustomized = true;
     }
     await reprocess();
@@ -4103,14 +4141,25 @@ function bindWizardButtons() {
   });
   els.wizardSide.querySelector('#wizardRemoveBg')?.addEventListener('change', async (event) => {
     state.removeBg = event.target.checked;
+    if (state.productType === 'plaque') {
+      state.plaque.removeBg = state.removeBg;
+      state.plaque.processingDirty = true;
+      state.plaque.lastVectorizeOptionChange = 'remove-background-toggle';
+    }
     els.removeBg.checked = state.removeBg;
     state.edit.crop = { x: 0, y: 0, w: 1, h: 1 };
-    await reprocess();
+    await reprocess({ skipWizardRender: true, preserveTargetColorCount: true });
     renderEditStep();
   });
   els.wizardSide.querySelector('#wizardFixFloatingRegions')?.addEventListener('change', async (event) => {
     state.fixFloatingRegions = event.target.checked;
     state.processingDirty = true;
+    if (state.productType === 'plaque') {
+      state.plaque.fixFloatingRegions = state.fixFloatingRegions;
+      state.plaque.processingDirty = true;
+      state.plaque.lastVectorizeOptionChange = 'fix-floating-regions-toggle';
+    }
+    await reprocess({ skipWizardRender: true, preserveTargetColorCount: true });
     renderEditStep();
   });
   [...els.wizardFooter.querySelectorAll('[data-wizard-action]'), ...els.wizardSide.querySelectorAll('[data-wizard-action]')].forEach((button) => {
@@ -4399,7 +4448,11 @@ function syncColorOverrides(previousColourSnapshot = null) {
   state.selectedColor = clamp(state.selectedColor, 0, Math.max(0, state.processed.colours.length - 1));
   if (state.productType === 'plaque') {
     state.plaque.colorOverrides = [...state.colorOverrides];
-    state.plaque.colourOverrides = [...state.colorOverrides];
+    if (typeof syncPlaqueColourOverridesFromProcessed === 'function') {
+      syncPlaqueColourOverridesFromProcessed();
+    } else {
+      state.plaque.colourOverrides = [];
+    }
   }
 }
 
@@ -5723,14 +5776,16 @@ function processArtwork(artwork, options = {}) {
     ctx.putImageData(img, 0, 0);
   }
   ({ canvas, ctx, img, data, width, height } = tightenProcessedCanvasToVisibleArtwork(canvas, ctx, img, width, height));
-  ({ canvas, ctx, img, data, width, height } = addTransparentCanvasPadding(canvas, ctx, width, height));
   let floatingSupportMask = null;
   let floatingSupportRgb = null;
   if (state.fixFloatingRegions) {
     floatingSupportRgb = hexToRgb(state.floatingSupportColour || DEFAULT_FLOATING_SUPPORT_COLOUR);
-    floatingSupportMask = connectFloatingRegionsOnCanvas(canvas, ctx, floatingSupportRgb);
-    img = ctx.getImageData(0, 0, width, height);
-    data = img.data;
+    ({ canvas, ctx, img, data, width, height, supportMask: floatingSupportMask } = applyPaddedFloatingRegionRepair(canvas, ctx, img, width, height, {
+      supportRgb: floatingSupportRgb,
+      source: 'process-artwork',
+    }));
+  } else {
+    ({ canvas, ctx, img, data, width, height } = addTransparentCanvasPadding(canvas, ctx, width, height));
   }
   const paletteClusters = artwork.palette?.length
     ? artwork.palette.map((rgb, idx) => ({ original: idx, rgb: rgb.map(Number), count: 0 }))
@@ -5822,7 +5877,10 @@ function processArtwork(artwork, options = {}) {
   const plaqueAutoColourLimit = plaqueRasterAutoPalette
     ? getPlaqueAutoPaletteLimit(activeColourCandidates.filter((cluster) => cluster.original !== FLOATING_SUPPORT_CLUSTER_ORIGINAL), printableWeight)
     : null;
-  const colourLimit = frontColoursWereCustomized ? effectiveRequestedColourCount : (plaqueAutoColourLimit || naturalColourCount);
+  const essentialPlaqueColourCount = plaqueDominantClusters?.filter((cluster) => cluster.original !== FLOATING_SUPPORT_CLUSTER_ORIGINAL).length || 0;
+  const colourLimit = frontColoursWereCustomized
+    ? effectiveRequestedColourCount
+    : Math.max(plaqueAutoColourLimit || naturalColourCount, essentialPlaqueColourCount);
   const main = activeColourCandidates
     .filter((cluster) => cluster.original !== FLOATING_SUPPORT_CLUSTER_ORIGINAL)
     .slice(0, Math.max(0, colourLimit - (floatingSupportCluster ? 1 : 0)));
@@ -5860,6 +5918,17 @@ function processArtwork(artwork, options = {}) {
       includeRemoved: shouldKeepPlaqueDeferredDebugData(),
     });
   }
+  let plaqueComplexity = null;
+  if (state.productType === 'plaque' && artwork.type !== 'svg') {
+    plaqueComplexity = analyzeComplexPlaqueRasterLogo(regionIndex, alphaMask, main, width, height);
+    if (plaqueTraceQuality !== 'raw' && plaqueComplexity.mode === 'complex-simplified') {
+      const simplification = simplifyComplexPlaqueRasterLogo(regionIndex, alphaMask, alphaValues, data, main, width, height);
+      if (simplification.changedPixels > 0) {
+        refinePlaqueRasterPaletteFromAssignedPixels(regionIndex, alphaMask, alphaValues, data, main);
+      }
+      plaqueComplexity = analyzeComplexPlaqueRasterLogo(regionIndex, alphaMask, main, width, height, simplification);
+    }
+  }
 
   const plaqueLabelledMap = state.productType === 'plaque' && artwork.type !== 'svg'
     ? buildPlaqueExactLabelledMap(main, regionIndex, alphaMask, alphaValues, width, height)
@@ -5874,6 +5943,18 @@ function processArtwork(artwork, options = {}) {
   const islands = regionPaths.reduce((sum, region) => sum + Math.max(0, region.components - 1), 0);
   const opaqueCount = alphaMask.reduce((sum, value) => sum + value, 0);
   const tinyShapes = regionPaths.filter((region) => region.count / Math.max(opaqueCount, 1) < 0.012).length;
+  const plaqueVectorizeState = state.productType === 'plaque' && artwork.type !== 'svg'
+    ? buildPlaqueVectorizeState({
+      sourceClusters,
+      mappedClusters: regionPaths,
+      alphaMask,
+      width,
+      height,
+      removeBackground: state.removeBg,
+      fixFloatingRegions: state.fixFloatingRegions,
+      floatingSupportMask,
+    })
+    : null;
 
   return {
     sourceWidth: srcW,
@@ -5895,11 +5976,320 @@ function processArtwork(artwork, options = {}) {
     regionIndex,
     colours: regionPaths,
     plaqueLabelledMap,
+    plaqueComplexity,
+    plaqueVectorizeState,
     silhouette,
     warnings: buildWarnings({ artwork, clusters: sourceClusters, main, islands, tinyShapes, opaqueCount, width, height }).concat(
       plaqueLabelledMap?.warnings || [],
     ),
   };
+}
+
+function getComplexPlaqueRegionInfo(main) {
+  return (main || []).map((cluster) => {
+    const rgb = Array.isArray(cluster.rgb) ? cluster.rgb : hexToRgb(cluster.hex || '#ffffff');
+    const luma = colourLuma(rgb);
+    const chroma = colourChroma(rgb);
+    return {
+      rgb,
+      luma,
+      chroma,
+      isWhite: luma >= 222 && chroma <= 42,
+      isDark: luma <= 60 && chroma <= 64,
+      isGrey: luma >= 64 && luma <= 190 && chroma <= 54,
+    };
+  });
+}
+
+function buildPlaqueVectorizeState({
+  sourceClusters = [],
+  mappedClusters = [],
+  alphaMask = null,
+  width = 0,
+  height = 0,
+  removeBackground = false,
+  fixFloatingRegions = false,
+  floatingSupportMask = null,
+} = {}) {
+  const sourceWeight = sourceClusters.reduce((sum, cluster) => sum + (Number(cluster?.count) || 0), 0);
+  const mappedWeight = mappedClusters.reduce((sum, cluster) => sum + getPlaqueClusterPixelCount(cluster), 0);
+  const whiteSourceDetected = sourceClusters.some((cluster) => isPlaqueWhiteArtworkCluster(cluster, sourceWeight));
+  const whiteDetectedAsArtwork = mappedClusters.some((cluster) => isPlaqueWhiteArtworkCluster(cluster, mappedWeight));
+  const componentStats = getPlaqueVectorizeComponentStats(mappedClusters, alphaMask, width, height, floatingSupportMask);
+  return {
+    fixFloatingRegions: Boolean(fixFloatingRegions),
+    removeBackground: Boolean(removeBackground),
+    detectedColoursBeforeMapping: sourceClusters
+      .filter((cluster) => cluster?.original !== FLOATING_SUPPORT_CLUSTER_ORIGINAL)
+      .slice()
+      .sort((a, b) => (Number(b?.count) || 0) - (Number(a?.count) || 0))
+      .slice(0, 16)
+      .map((cluster) => makePlaqueVectorizeColourRow(cluster, sourceWeight)),
+    mappedColours: mappedClusters
+      .filter((cluster) => cluster?.original !== FLOATING_SUPPORT_CLUSTER_ORIGINAL && !cluster?.isFloatingSupport)
+      .map((cluster, index) => makePlaqueVectorizeColourRow(cluster, mappedWeight, index)),
+    whiteDetectedAsArtwork,
+    whiteSourceDetected,
+    whiteTreatment: whiteDetectedAsArtwork
+      ? 'artwork'
+      : (whiteSourceDetected ? 'detected-but-not-mapped' : 'not-detected'),
+    floatingComponentCount: componentStats.floatingComponentCount,
+    preservedFloatingComponentCount: componentStats.preservedFloatingComponentCount,
+    discardedComponentCount: componentStats.discardedComponentCount,
+    componentCount: componentStats.componentCount,
+    supportPixelCount: componentStats.supportPixelCount,
+  };
+}
+
+function makePlaqueVectorizeColourRow(cluster, totalWeight = 0, index = null) {
+  const rgb = Array.isArray(cluster?.rgb) ? cluster.rgb : hexToRgb(cluster?.hex || '#ffffff');
+  const count = getPlaqueClusterPixelCount(cluster);
+  const row = {
+    hex: normalizeHex(cluster?.hex || rgbToHex(rgb)),
+    count: Math.round(count),
+    share: Number((count / Math.max(totalWeight, 1)).toFixed(5)),
+    luma: Number(colourLuma(rgb).toFixed(1)),
+    chroma: Number(colourChroma(rgb).toFixed(1)),
+    whiteArtwork: isPlaqueWhiteArtworkCluster({ ...cluster, rgb, count }, totalWeight),
+  };
+  if (Number.isFinite(index)) row.index = index;
+  return row;
+}
+
+function getPlaqueClusterPixelCount(cluster) {
+  if (!cluster) return 0;
+  if (cluster.mask?.length) {
+    let pixels = 0;
+    for (let i = 0; i < cluster.mask.length; i += 1) pixels += cluster.mask[i] ? 1 : 0;
+    return pixels || Number(cluster.count) || 0;
+  }
+  return Number(cluster.count) || 0;
+}
+
+function isPlaqueWhiteArtworkCluster(cluster, totalWeight = 0) {
+  if (!cluster) return false;
+  const rgb = Array.isArray(cluster.rgb) ? cluster.rgb : hexToRgb(cluster.hex || '#ffffff');
+  const count = getPlaqueClusterPixelCount(cluster);
+  const minArtworkPixels = Math.max(8, totalWeight * 0.0015);
+  return colourLuma(rgb) >= 232 && colourChroma(rgb) <= 48 && count >= minArtworkPixels;
+}
+
+function getPlaqueVectorizeComponentStats(mappedClusters = [], alphaMask = null, width = 0, height = 0, floatingSupportMask = null) {
+  const safeWidth = Number(width) || 0;
+  const safeHeight = Number(height) || 0;
+  let componentCount = 0;
+  let floatingComponentCount = 0;
+  let discardedComponentCount = 0;
+  mappedClusters.forEach((cluster) => {
+    if (!cluster?.mask?.length || !safeWidth || !safeHeight) return;
+    const components = countComponents(cluster.mask, safeWidth, safeHeight, 1);
+    componentCount += components;
+    floatingComponentCount += Math.max(0, components - 1);
+    if (cluster.removedMask?.length) {
+      discardedComponentCount += countComponents(cluster.removedMask, safeWidth, safeHeight, 1);
+    }
+  });
+  const silhouetteComponents = alphaMask?.length && safeWidth && safeHeight
+    ? countComponents(alphaMask, safeWidth, safeHeight, 1)
+    : 0;
+  let supportPixelCount = 0;
+  if (floatingSupportMask?.length) {
+    for (let i = 0; i < floatingSupportMask.length; i += 1) supportPixelCount += floatingSupportMask[i] ? 1 : 0;
+  }
+  return {
+    componentCount,
+    silhouetteComponentCount: silhouetteComponents,
+    floatingComponentCount: Math.max(floatingComponentCount, Math.max(0, silhouetteComponents - 1)),
+    preservedFloatingComponentCount: Math.max(0, componentCount - mappedClusters.length),
+    discardedComponentCount,
+    supportPixelCount,
+  };
+}
+
+function analyzeComplexPlaqueRasterLogo(regionIndex, alphaMask, main, width, height, simplification = null) {
+  if (!regionIndex || !alphaMask || !main?.length || !width || !height) {
+    return {
+      colourGroupCount: main?.length || 0,
+      componentCount: 0,
+      tinyComponentCount: 0,
+      contourPointCount: 0,
+      complexityScore: 0,
+      mode: 'simple',
+    };
+  }
+  const visited = new Uint8Array(regionIndex.length);
+  const queue = [];
+  const opaquePixels = alphaMask.reduce((sum, value) => sum + value, 0);
+  const tinyArea = clamp(Math.round(opaquePixels * 0.000028), 12, 260);
+  const narrowLimit = clamp(Math.round(Math.max(width, height) * 0.0045), 4, 12);
+  let componentCount = 0;
+  let tinyComponentCount = 0;
+  let contourPointCount = 0;
+  for (let start = 0; start < regionIndex.length; start += 1) {
+    if (visited[start] || !alphaMask[start] || regionIndex[start] < 0) continue;
+    const region = regionIndex[start];
+    let pixels = 0;
+    let minX = width;
+    let maxX = 0;
+    let minY = height;
+    let maxY = 0;
+    let boundaryEdges = 0;
+    queue.length = 0;
+    queue.push(start);
+    visited[start] = 1;
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      const index = queue[cursor];
+      pixels += 1;
+      const x = index % width;
+      const y = Math.floor(index / width);
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+      const cardinals = [
+        x > 0 ? index - 1 : -1,
+        x + 1 < width ? index + 1 : -1,
+        y > 0 ? index - width : -1,
+        y + 1 < height ? index + width : -1,
+      ];
+      cardinals.forEach((next) => {
+        if (next < 0 || !alphaMask[next] || regionIndex[next] !== region) {
+          boundaryEdges += 1;
+          return;
+        }
+        if (!visited[next]) {
+          visited[next] = 1;
+          queue.push(next);
+        }
+      });
+    }
+    componentCount += 1;
+    contourPointCount += boundaryEdges;
+    const componentWidth = maxX - minX + 1;
+    const componentHeight = maxY - minY + 1;
+    if (pixels <= tinyArea || Math.min(componentWidth, componentHeight) <= narrowLimit) tinyComponentCount += 1;
+  }
+  const colourGroupCount = main.length;
+  const complexityScore = Math.round((colourGroupCount * 8) + componentCount + (tinyComponentCount * 2) + (contourPointCount / 900));
+  const complex = (
+    (colourGroupCount >= 6 && (componentCount >= 55 || tinyComponentCount >= 24 || contourPointCount >= 36000))
+    || componentCount >= 120
+    || tinyComponentCount >= 60
+  );
+  return {
+    colourGroupCount,
+    componentCount,
+    tinyComponentCount,
+    contourPointCount,
+    complexityScore,
+    mode: complex ? 'complex-simplified' : 'simple',
+    simplifiedPixels: Number(simplification?.changedPixels) || 0,
+    mergedComponents: Number(simplification?.mergedComponents) || 0,
+  };
+}
+
+function simplifyComplexPlaqueRasterLogo(regionIndex, alphaMask, alphaValues, data, main, width, height) {
+  if (!regionIndex || !alphaMask || !main?.length || !width || !height) {
+    return { changedPixels: 0, mergedComponents: 0 };
+  }
+  const regionInfo = getComplexPlaqueRegionInfo(main);
+  const visited = new Uint8Array(regionIndex.length);
+  const queue = [];
+  const component = [];
+  const opaquePixels = alphaMask.reduce((sum, value) => sum + value, 0);
+  const tinyArea = clamp(Math.round(opaquePixels * 0.000028), 12, 260);
+  const speckArea = clamp(Math.round(opaquePixels * 0.000012), 8, 120);
+  const maxMergeArea = clamp(Math.round(opaquePixels * 0.00022), 90, 1800);
+  const narrowLimit = clamp(Math.round(Math.max(width, height) * 0.0045), 4, 12);
+  let changedPixels = 0;
+  let mergedComponents = 0;
+  for (let start = 0; start < regionIndex.length; start += 1) {
+    if (visited[start] || !alphaMask[start] || regionIndex[start] < 0) continue;
+    const region = regionIndex[start];
+    const neighborCounts = new Map();
+    let minX = width;
+    let maxX = 0;
+    let minY = height;
+    let maxY = 0;
+    queue.length = 0;
+    component.length = 0;
+    queue.push(start);
+    visited[start] = 1;
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      const index = queue[cursor];
+      component.push(index);
+      const x = index % width;
+      const y = Math.floor(index / width);
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+      for (let oy = -1; oy <= 1; oy += 1) {
+        for (let ox = -1; ox <= 1; ox += 1) {
+          if (!ox && !oy) continue;
+          const nx = x + ox;
+          const ny = y + oy;
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+          const neighborIndex = ny * width + nx;
+          if (!alphaMask[neighborIndex]) continue;
+          const nextRegion = regionIndex[neighborIndex];
+          if (nextRegion === region && Math.abs(ox) + Math.abs(oy) === 1 && !visited[neighborIndex]) {
+            visited[neighborIndex] = 1;
+            queue.push(neighborIndex);
+          } else if (nextRegion >= 0 && nextRegion !== region) {
+            const weight = Math.abs(ox) + Math.abs(oy) === 1 ? 2 : 1;
+            neighborCounts.set(nextRegion, (neighborCounts.get(nextRegion) || 0) + weight);
+          }
+        }
+      }
+    }
+    if (!neighborCounts.size) continue;
+    let replacement = -1;
+    let bestCount = 0;
+    let totalNeighborCount = 0;
+    let bestNonGreyReplacement = -1;
+    let bestNonGreyCount = 0;
+    neighborCounts.forEach((count, nextRegion) => {
+      totalNeighborCount += count;
+      if (count > bestCount) {
+        bestCount = count;
+        replacement = nextRegion;
+      }
+      if (!regionInfo[nextRegion]?.isGrey && count > bestNonGreyCount) {
+        bestNonGreyCount = count;
+        bestNonGreyReplacement = nextRegion;
+      }
+    });
+    if (replacement < 0) continue;
+    const info = regionInfo[region] || {};
+    const componentWidth = maxX - minX + 1;
+    const componentHeight = maxY - minY + 1;
+    const bboxArea = Math.max(1, componentWidth * componentHeight);
+    const fillRatio = component.length / bboxArea;
+    const dominantNeighborRatio = bestCount / Math.max(totalNeighborCount, 1);
+    const isTiny = component.length <= tinyArea;
+    const isVeryTiny = component.length <= speckArea;
+    const isNarrow = Math.min(componentWidth, componentHeight) <= narrowLimit;
+    const isSparse = fillRatio <= 0.42;
+    const greyStripe = info.isGrey && (isNarrow || isSparse) && component.length <= maxMergeArea * 2 && dominantNeighborRatio >= 0.34;
+    let shouldMerge = (
+      (isTiny && dominantNeighborRatio >= 0.45)
+      || (isNarrow && component.length <= maxMergeArea && dominantNeighborRatio >= 0.52)
+      || greyStripe
+    );
+    if (info.isDark) {
+      shouldMerge = isVeryTiny && dominantNeighborRatio >= 0.64;
+    }
+    if (info.isWhite && !isVeryTiny && !greyStripe) shouldMerge = false;
+    if (!shouldMerge) continue;
+    if (greyStripe && bestNonGreyReplacement >= 0) replacement = bestNonGreyReplacement;
+    component.forEach((index) => {
+      regionIndex[index] = replacement;
+      changedPixels += 1;
+    });
+    mergedComponents += 1;
+  }
+  return { changedPixels, mergedComponents };
 }
 
 function getColourClusterTolerance() {
@@ -5964,7 +6354,12 @@ function shouldMergeColourClusters(a, b, tolerance) {
   const chromaA = colourChroma(a.rgb);
   const chromaB = colourChroma(b.rgb);
   if (lumaA <= 58 && lumaB <= 58 && chromaA <= 30 && chromaB <= 30) return true;
-  if (lumaA >= 218 && lumaB >= 218 && chromaA <= 30 && chromaB <= 30) return true;
+  if (lumaA >= 218 && lumaB >= 218 && chromaA <= 30 && chromaB <= 30) {
+    const aTrueWhite = lumaA >= 238 && chromaA <= 24;
+    const bTrueWhite = lumaB >= 238 && chromaB <= 24;
+    if (aTrueWhite !== bTrueWhite) return distance <= Math.min(18, tolerance * 0.45);
+    return true;
+  }
   if (distance > tolerance) return false;
   const hueA = colourHue(a.rgb);
   const hueB = colourHue(b.rgb);
@@ -6071,7 +6466,41 @@ function selectPlaqueDominantRasterColourClusters(activeClusters, stableClusters
     if (similar) return;
     selected.push(cluster);
   });
-  return selected.length ? selected.slice(0, 8) : active.slice(0, 8);
+  const essential = ensurePlaqueEssentialRasterColourClusters(selected.length ? selected : active, active, totalWeight);
+  return essential.length ? essential.slice(0, 8) : active.slice(0, 8);
+}
+
+function ensurePlaqueEssentialRasterColourClusters(selectedClusters, activeClusters, totalWeight = 0) {
+  const selected = [...(selectedClusters || [])];
+  const selectedOriginals = new Set(selected.map((cluster) => cluster.original));
+  const active = (activeClusters || [])
+    .filter((cluster) => cluster?.original !== FLOATING_SUPPORT_CLUSTER_ORIGINAL && cluster.count > 0);
+  const minArtworkPixels = Math.max(8, totalWeight * 0.0015);
+  const whiteArtwork = active
+    .filter((cluster) => {
+      const rgb = Array.isArray(cluster.rgb) ? cluster.rgb : [0, 0, 0];
+      return colourLuma(rgb) >= 232 && colourChroma(rgb) <= 48 && cluster.count >= minArtworkPixels;
+    })
+    .sort((a, b) => b.count - a.count)[0];
+  if (whiteArtwork && !selectedOriginals.has(whiteArtwork.original)) {
+    selected.push(whiteArtwork);
+    selectedOriginals.add(whiteArtwork.original);
+  }
+  if (selected.length <= 8) return selected;
+  const scoreCluster = (cluster) => {
+    const rgb = Array.isArray(cluster.rgb) ? cluster.rgb : [0, 0, 0];
+    const luma = colourLuma(rgb);
+    const chroma = colourChroma(rgb);
+    const share = cluster.count / Math.max(totalWeight, 1);
+    const isWhite = luma >= 232 && chroma <= 48;
+    const isDark = luma <= 54 && chroma <= 58;
+    const isStrongColour = chroma >= 62;
+    return (share * 1000) + (isWhite ? 120 : 0) + (isDark ? 110 : 0) + (isStrongColour ? 60 : 0);
+  };
+  return selected
+    .slice()
+    .sort((a, b) => scoreCluster(b) - scoreCluster(a))
+    .slice(0, 8);
 }
 
 function shouldMergePlaqueDominantRasterCluster(a, b, totalWeight = 0) {
@@ -6085,7 +6514,12 @@ function shouldMergePlaqueDominantRasterCluster(a, b, totalWeight = 0) {
   const chromaB = colourChroma(rgbB);
   const shareA = a.count / Math.max(totalWeight, 1);
   const shareB = b.count / Math.max(totalWeight, 1);
-  if (lumaA >= 214 && lumaB >= 214 && chromaA <= 62 && chromaB <= 62) return true;
+  const aTrueWhite = lumaA >= 232 && chromaA <= 48 && shareA >= 0.0015;
+  const bTrueWhite = lumaB >= 232 && chromaB <= 48 && shareB >= 0.0015;
+  if (aTrueWhite !== bTrueWhite) return false;
+  if (lumaA >= 214 && lumaB >= 214 && chromaA <= 62 && chromaB <= 62) {
+    return Math.abs(lumaA - lumaB) <= 18 || Math.min(shareA, shareB) <= 0.0015;
+  }
   if (lumaA >= 170 && lumaB >= 170 && Math.max(lumaA, lumaB) >= 198 && chromaA <= 70 && chromaB <= 70 && Math.min(shareA, shareB) <= 0.12) return true;
   if (lumaA <= 62 && lumaB <= 62 && chromaA <= 62 && chromaB <= 62) return true;
   if (chromaA <= 46 && chromaB <= 46 && distance <= 74 && Math.min(shareA, shareB) <= 0.08) return true;
@@ -6166,10 +6600,26 @@ function collectBackgroundSeedColours(data, width, height) {
     : [averageCornerColour(data, width, height)];
 }
 
-function tightenProcessedCanvasToVisibleArtwork(canvas, ctx, img, width, height) {
+function tightenProcessedCanvasToVisibleArtwork(canvas, ctx, img, width, height, options = {}) {
   const bounds = getImageDataAlphaBounds(img.data, width, height, 28);
-  if (!bounds) return { canvas, ctx, img, data: img.data, width, height };
-  const pad = Math.max(18, Math.round(Math.max(bounds.w, bounds.h) * 0.075));
+  if (!bounds) {
+    return {
+      canvas,
+      ctx,
+      img,
+      data: img.data,
+      width,
+      height,
+      cropped: false,
+      cropX: 0,
+      cropY: 0,
+      alphaBounds: null,
+      pad: 0,
+    };
+  }
+  const pad = Number.isFinite(options.pad)
+    ? Math.max(0, Math.round(options.pad))
+    : Math.max(18, Math.round(Math.max(bounds.w, bounds.h) * 0.075));
   const x = Math.max(0, bounds.x - pad);
   const y = Math.max(0, bounds.y - pad);
   const right = Math.min(width, bounds.x + bounds.w + pad);
@@ -6177,7 +6627,19 @@ function tightenProcessedCanvasToVisibleArtwork(canvas, ctx, img, width, height)
   const croppedWidth = Math.max(1, right - x);
   const croppedHeight = Math.max(1, bottom - y);
   if (croppedWidth === width && croppedHeight === height) {
-    return { canvas, ctx, img, data: img.data, width, height };
+    return {
+      canvas,
+      ctx,
+      img,
+      data: img.data,
+      width,
+      height,
+      cropped: false,
+      cropX: 0,
+      cropY: 0,
+      alphaBounds: bounds,
+      pad,
+    };
   }
 
   const nextCanvas = document.createElement('canvas');
@@ -6194,11 +6656,18 @@ function tightenProcessedCanvasToVisibleArtwork(canvas, ctx, img, width, height)
     data: nextImg.data,
     width: croppedWidth,
     height: croppedHeight,
+    cropped: true,
+    cropX: x,
+    cropY: y,
+    alphaBounds: bounds,
+    pad,
   };
 }
 
-function addTransparentCanvasPadding(canvas, ctx, width, height) {
-  const pad = Math.max(20, Math.round(Math.max(width, height) * 0.065));
+function addTransparentCanvasPadding(canvas, ctx, width, height, options = {}) {
+  const pad = Number.isFinite(options.pad)
+    ? Math.max(0, Math.round(options.pad))
+    : Math.max(20, Math.round(Math.max(width, height) * 0.065));
   const nextWidth = width + pad * 2;
   const nextHeight = height + pad * 2;
   const nextCanvas = document.createElement('canvas');
@@ -6215,7 +6684,117 @@ function addTransparentCanvasPadding(canvas, ctx, width, height) {
     data: nextImg.data,
     width: nextWidth,
     height: nextHeight,
+    pad,
   };
+}
+
+function applyPaddedFloatingRegionRepair(canvas, ctx, img, width, height, options = {}) {
+  const supportRgb = Array.isArray(options.supportRgb)
+    ? options.supportRgb
+    : hexToRgb(state.floatingSupportColour || DEFAULT_FLOATING_SUPPORT_COLOUR);
+  const source = options.source || 'floating-region-repair';
+  const initialBounds = getImageDataAlphaBounds(img.data, width, height, 28);
+  const initialEdgeMargins = initialBounds ? getAlphaBoundsEdgeMargins(initialBounds, width, height) : null;
+
+  let working = tightenProcessedCanvasToVisibleArtwork(canvas, ctx, img, width, height, {
+    pad: getFloatingRegionFinalTrimPad(width, height),
+  });
+  ({ canvas, ctx, img, width, height } = working);
+
+  const repairPad = getFloatingRegionRepairPad(width, height);
+  ({ canvas, ctx, img, width, height } = addTransparentCanvasPadding(canvas, ctx, width, height, { pad: repairPad }));
+
+  let supportMask = connectFloatingRegionsOnCanvas(canvas, ctx, supportRgb);
+  img = ctx.getImageData(0, 0, width, height);
+  let data = img.data;
+  const supportPixelsBeforeTrim = countMaskPixels(supportMask);
+
+  const oldWidth = width;
+  const oldHeight = height;
+  const finalTrimPad = getFloatingRegionFinalTrimPad(width, height);
+  const trimmed = tightenProcessedCanvasToVisibleArtwork(canvas, ctx, img, width, height, { pad: finalTrimPad });
+  ({ canvas, ctx, img, data, width, height } = trimmed);
+  if (supportMask && trimmed.cropped) {
+    supportMask = cropMaskToBounds(supportMask, oldWidth, oldHeight, trimmed.cropX, trimmed.cropY, width, height);
+  }
+
+  const finalBounds = getImageDataAlphaBounds(data, width, height, 28);
+  const finalEdgeMargins = finalBounds ? getAlphaBoundsEdgeMargins(finalBounds, width, height) : null;
+  const wasNearCropEdge = initialEdgeMargins
+    ? Math.min(initialEdgeMargins.left, initialEdgeMargins.top, initialEdgeMargins.right, initialEdgeMargins.bottom) <= Math.max(4, Math.round(Math.min(width, height) * 0.015))
+    : false;
+  console.info('[3D Plaque floating-region repair]', {
+    source,
+    autoPadded: true,
+    wasNearCropEdge,
+    repairPad,
+    finalTrimPad,
+    initialSize: { width: oldWidth - repairPad * 2, height: oldHeight - repairPad * 2 },
+    paddedSize: { width: oldWidth, height: oldHeight },
+    finalSize: { width, height },
+    supportPixels: countMaskPixels(supportMask) || supportPixelsBeforeTrim,
+    initialEdgeMargins,
+    finalEdgeMargins,
+  });
+
+  return {
+    canvas,
+    ctx,
+    img,
+    data,
+    width,
+    height,
+    supportMask,
+  };
+}
+
+function getFloatingRegionRepairPad(width, height) {
+  const minSide = Math.min(Number(width) || 0, Number(height) || 0);
+  const maxSide = Math.max(Number(width) || 0, Number(height) || 0);
+  return Math.max(
+    FLOATING_REGION_REPAIR_MIN_PAD,
+    Math.round(minSide * FLOATING_REGION_REPAIR_PAD_RATIO),
+    Math.round(maxSide * 0.08),
+  );
+}
+
+function getFloatingRegionFinalTrimPad(width, height) {
+  const maxSide = Math.max(Number(width) || 0, Number(height) || 0);
+  return Math.max(FLOATING_REGION_REPAIR_FINAL_MIN_PAD, Math.round(maxSide * FLOATING_REGION_REPAIR_FINAL_PAD_RATIO));
+}
+
+function getAlphaBoundsEdgeMargins(bounds, width, height) {
+  if (!bounds) return null;
+  return {
+    left: bounds.x,
+    top: bounds.y,
+    right: Math.max(0, width - (bounds.x + bounds.w)),
+    bottom: Math.max(0, height - (bounds.y + bounds.h)),
+  };
+}
+
+function cropMaskToBounds(mask, sourceWidth, sourceHeight, cropX, cropY, width, height) {
+  if (!mask?.length || !sourceWidth || !sourceHeight || !width || !height) return mask;
+  const output = new Uint8Array(width * height);
+  for (let y = 0; y < height; y += 1) {
+    const sy = y + cropY;
+    if (sy < 0 || sy >= sourceHeight) continue;
+    for (let x = 0; x < width; x += 1) {
+      const sx = x + cropX;
+      if (sx < 0 || sx >= sourceWidth) continue;
+      output[y * width + x] = mask[sy * sourceWidth + sx] ? 1 : 0;
+    }
+  }
+  return output;
+}
+
+function countMaskPixels(mask) {
+  if (!mask?.length) return 0;
+  let count = 0;
+  for (let i = 0; i < mask.length; i += 1) {
+    if (mask[i]) count += 1;
+  }
+  return count;
 }
 
 function getImageDataAlphaBounds(data, width, height, alphaThreshold = 1) {
@@ -7773,8 +8352,16 @@ async function restoreSignGuyProject(project, options = {}) {
       basePadding: clamp(Number(config.plaque?.basePadding) || PLAQUE_DEFAULT_BASE_PADDING, 0, 6),
       backingColourOverride: config.plaque?.backingColourOverride ? normalizeHex(config.plaque.backingColourOverride) : '',
       layerDepths: Array.isArray(config.plaque?.layerDepths) ? config.plaque.layerDepths.map((value) => clamp(Number(value) || PLAQUE_DEFAULT_LAYER_DEPTH, PLAQUE_LAYER_DEPTH_MIN, PLAQUE_LAYER_DEPTH_MAX)) : [],
+      layerDepthSources: Array.isArray(config.plaque?.layerDepthSources) ? [...config.plaque.layerDepthSources] : [],
+      layerDepthsByLayerId: config.plaque?.layerDepthsByLayerId && typeof config.plaque.layerDepthsByLayerId === 'object' ? { ...config.plaque.layerDepthsByLayerId } : {},
+      layerDepthsBySourceIndex: config.plaque?.layerDepthsBySourceIndex && typeof config.plaque.layerDepthsBySourceIndex === 'object' ? { ...config.plaque.layerDepthsBySourceIndex } : {},
+      layerDepthsByOriginal: config.plaque?.layerDepthsByOriginal && typeof config.plaque.layerDepthsByOriginal === 'object' ? { ...config.plaque.layerDepthsByOriginal } : {},
       colourOverrides: Array.isArray(config.plaque?.colourOverrides) ? config.plaque.colourOverrides.map((value) => value ? normalizeHex(value) : '') : [],
-      layerSourceIndices: [],
+      colourOverridesByLayerId: config.plaque?.colourOverridesByLayerId && typeof config.plaque.colourOverridesByLayerId === 'object' ? { ...config.plaque.colourOverridesByLayerId } : {},
+      colourOverridesBySourceIndex: config.plaque?.colourOverridesBySourceIndex && typeof config.plaque.colourOverridesBySourceIndex === 'object' ? { ...config.plaque.colourOverridesBySourceIndex } : {},
+      colourOverridesByOriginal: config.plaque?.colourOverridesByOriginal && typeof config.plaque.colourOverridesByOriginal === 'object' ? { ...config.plaque.colourOverridesByOriginal } : {},
+      layerSourceIndices: Array.isArray(config.plaque?.layerSourceIndices) ? [...config.plaque.layerSourceIndices] : [],
+      layerStableIds: Array.isArray(config.plaque?.layerStableIds) ? [...config.plaque.layerStableIds] : [],
       selectedLayer: Number(config.plaque?.selectedLayer) || 0,
       traceQuality: normalizePlaqueTraceQuality(config.plaque?.traceQuality),
       zeroGapColourLayers: config.plaque?.zeroGapColourLayers !== false,
