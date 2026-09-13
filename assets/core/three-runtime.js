@@ -94,7 +94,9 @@ function resizeThree() {
 
 function renderThree() {
   if (!state.three) return;
-  state.three.renderer.render(state.three.scene, state.three.camera);
+  syncLedStudioStage();
+  if (state.productType === 'led' && state.three.group?.userData?.lighting?.ledStudio) renderLedStudio();
+  else state.three.renderer.render(state.three.scene, state.three.camera);
 }
 
 function clearThreeModel() {
@@ -113,6 +115,10 @@ function clearThreeModel() {
 
 function updateThreeModelPosition() {
   if (!state.three?.group) return;
+  if (state.productType === 'led' && state.three.group.userData?.lighting?.ledStudio) {
+    updateLedStudio();
+    return;
+  }
   const bounds = state.three.group.userData?.bounds;
   const pan = getPreviewPan();
   state.three.group.position.x = pan.x * 0.36;

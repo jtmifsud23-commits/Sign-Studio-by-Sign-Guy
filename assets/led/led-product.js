@@ -440,118 +440,19 @@ function buildThreeModel() {
     keyholeY: keyholeAnchor.y,
   };
 
-  const floorGroup = new THREE.Group();
-  floorGroup.userData = {
-    bounds,
-    floorY: group.position.y + bounds.minY,
-  };
-
-  const groundGlowTexture = makeGroundGlowTexture();
-  const groundGlowMaterial = new THREE.MeshBasicMaterial({
-    map: groundGlowTexture,
-    transparent: true,
-    opacity: state.illuminated ? 0.44 : 0.02,
-    depthWrite: false,
-    toneMapped: false,
-  });
-  const groundGlowGeometry = new THREE.PlaneBufferGeometry(bounds.width * 1.42, Math.max(26, bounds.height * 0.28));
-  const groundGlow = new THREE.Mesh(groundGlowGeometry, groundGlowMaterial);
-  groundGlow.name = 'floorGlow';
-  groundGlow.renderOrder = 0;
-  floorGroup.add(groundGlow);
-  resources.push(groundGlowTexture, groundGlowMaterial, groundGlowGeometry);
-
-  const groundHaloTexture = makeGroundHaloTexture();
-  const groundHaloMaterial = new THREE.MeshBasicMaterial({
-    map: groundHaloTexture,
-    transparent: true,
-    opacity: state.illuminated ? 0.2 : 0,
-    depthWrite: false,
-    toneMapped: false,
-  });
-  const groundHaloGeometry = new THREE.PlaneBufferGeometry(bounds.width * 1.72, Math.max(34, bounds.height * 0.34));
-  const groundHalo = new THREE.Mesh(groundHaloGeometry, groundHaloMaterial);
-  groundHalo.name = 'floorHalo';
-  groundHalo.renderOrder = 0;
-  floorGroup.add(groundHalo);
-  resources.push(groundHaloTexture, groundHaloMaterial, groundHaloGeometry);
-
-  const contactShadowTexture = makeProjectedShadowTexture(processed, 0.22, 1.2);
-  const contactShadowMaterial = new THREE.MeshBasicMaterial({
-    map: contactShadowTexture,
-    transparent: true,
-    opacity: 0.48,
-    depthWrite: false,
-    toneMapped: false,
-  });
-  const contactShadowGeometry = new THREE.PlaneBufferGeometry(bounds.width * 1.08, Math.max(18, bounds.height * 0.16));
-  const contactShadow = new THREE.Mesh(contactShadowGeometry, contactShadowMaterial);
-  contactShadow.name = 'contactShadow';
-  contactShadow.renderOrder = 0;
-  floorGroup.add(contactShadow);
-  resources.push(contactShadowTexture, contactShadowMaterial, contactShadowGeometry);
-
-  const castShadowTexture = makeProjectedShadowTexture(processed, 0.28, 1.0);
-  const castShadowMaterial = new THREE.MeshBasicMaterial({
-    map: castShadowTexture,
-    transparent: true,
-    opacity: 0.34,
-    depthWrite: false,
-    toneMapped: false,
-  });
-  const castShadowGeometry = new THREE.PlaneBufferGeometry(bounds.width * 1.75, Math.max(26, bounds.height * 0.28));
-  const castShadow = new THREE.Mesh(castShadowGeometry, castShadowMaterial);
-  castShadow.name = 'castShadow';
-  castShadow.renderOrder = 0;
-  floorGroup.add(castShadow);
-  resources.push(castShadowTexture, castShadowMaterial, castShadowGeometry);
-
-  const wallOcclusionTexture = makeWallOcclusionTexture(processed);
-  const wallOcclusionMaterial = new THREE.MeshBasicMaterial({
-    map: wallOcclusionTexture,
-    transparent: true,
-    opacity: 0.34,
-    depthWrite: false,
-    depthTest: true,
-    toneMapped: false,
-  });
-  const wallOcclusionGeometry = new THREE.PlaneBufferGeometry(bounds.width * 1.42, bounds.height * 1.42);
-  const wallOcclusion = new THREE.Mesh(wallOcclusionGeometry, wallOcclusionMaterial);
-  wallOcclusion.name = 'wallOcclusion';
-  wallOcclusion.renderOrder = -2;
-  floorGroup.add(wallOcclusion);
-  resources.push(wallOcclusionTexture, wallOcclusionMaterial, wallOcclusionGeometry);
-
-  const wallHaloTexture = makeWallHaloTexture(processed);
-  const wallHaloMaterial = new THREE.MeshBasicMaterial({
-    map: wallHaloTexture,
-    transparent: true,
-    opacity: state.illuminated ? 0.16 : 0.01,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    depthTest: true,
-    toneMapped: false,
-  });
-  const wallHaloGeometry = new THREE.PlaneBufferGeometry(bounds.width * 1.5, bounds.height * 1.5);
-  const wallHalo = new THREE.Mesh(wallHaloGeometry, wallHaloMaterial);
-  wallHalo.name = 'wallHalo';
-  wallHalo.renderOrder = -1;
-  floorGroup.add(wallHalo);
-  resources.push(wallHaloTexture, wallHaloMaterial, wallHaloGeometry);
-
-  state.three.floorGroup = floorGroup;
-  state.three.scene.add(floorGroup);
-  updateFloorEffects();
-
-  const shellGeometry = new THREE.ExtrudeBufferGeometry(makeBackPlateShape(shellOuterPoints, keyholeBounds), {
-    depth: shellDepth,
+  // The keyhole belongs to the back plate only. Extruding it through the whole
+  // enclosure creates a second inset rim over the artwork visible inside it.
+  // One continuous side wall reaches the rear; the only side join is the front bezel.
+  const enclosureDepth = shellDepth + 2.8;
+  const shellGeometry = new THREE.ExtrudeBufferGeometry(makeThreeShape(shellOuterPoints), {
+    depth: enclosureDepth,
     bevelEnabled: true,
     bevelSize: 0.22,
     bevelThickness: 0.22,
     bevelSegments: 5,
     curveSegments: 18,
   });
-  shellGeometry.translate(0, 0, -shellDepth);
+  shellGeometry.translate(0, 0, -enclosureDepth);
   shellGeometry.computeVertexNormals();
   const shell = new THREE.Mesh(shellGeometry, [invisibleCapMaterial, sideMaterial]);
   shell.castShadow = true;
@@ -559,22 +460,17 @@ function buildThreeModel() {
   group.add(shell);
   resources.push(shellGeometry);
 
-  const backLipGeometry = new THREE.ExtrudeBufferGeometry(makeBackPlateShape(backPoints, keyholeBounds), {
-    depth: 2.8,
-    bevelEnabled: true,
-    bevelSize: 0.26,
-    bevelThickness: 0.26,
-    bevelSegments: 5,
-    curveSegments: 18,
-  });
-  backLipGeometry.translate(0, 0, -shellDepth - 2.8);
+  const backLipGeometry = new THREE.ShapeBufferGeometry(makeBackPlateShape(backPoints, keyholeBounds), 18);
+  backLipGeometry.translate(0, 0, -enclosureDepth - 0.22);
+  backMaterial.side = THREE.BackSide;
   const backPlate = new THREE.Mesh(backLipGeometry, backMaterial);
   backPlate.castShadow = true;
   backPlate.receiveShadow = true;
   group.add(backPlate);
   resources.push(backLipGeometry);
 
-  const keyholeInteriorGeometry = new THREE.PlaneBufferGeometry(bounds.width, bounds.height);
+  const keyholeInteriorGeometry = new THREE.ShapeBufferGeometry(faceShape);
+  applyExplicitGeometryUvs(keyholeInteriorGeometry, bounds);
   const keyholeInterior = new THREE.Mesh(keyholeInteriorGeometry, keyholeInteriorMaterial);
   keyholeInterior.position.z = 2.72;
   keyholeInterior.name = 'keyholeInteriorLogoPlane';
@@ -633,77 +529,12 @@ function buildThreeModel() {
   group.add(face);
   resources.push(faceGeometry, faceMaterial);
 
-  const illuminatedFaceGeometry = faceGeometry.clone();
-  const illuminatedFaceMaterial = new THREE.MeshBasicMaterial({
-    map: texture,
-    color: 0xfff0bf,
-    transparent: true,
-    opacity: state.illuminated ? 0.006 : 0,
-    alphaTest: 0.03,
-    side: THREE.FrontSide,
-    depthWrite: false,
-    toneMapped: false,
-    blending: THREE.AdditiveBlending,
-  });
-  const illuminatedFace = new THREE.Mesh(illuminatedFaceGeometry, illuminatedFaceMaterial);
-  illuminatedFace.position.z = 3.39;
-  illuminatedFace.renderOrder = 5;
-  group.add(illuminatedFace);
-  resources.push(illuminatedFaceGeometry, illuminatedFaceMaterial);
-
-  const diffusionTexture = makeLedDiffusionTexture(bounds);
-  resources.push(diffusionTexture);
-  const diffusionGeometry = faceGeometry.clone();
-  const diffusionMaterial = new THREE.MeshBasicMaterial({
-    map: diffusionTexture,
-    transparent: true,
-    opacity: state.illuminated ? 0.058 : 0.014,
-    side: THREE.FrontSide,
-    depthWrite: false,
-    toneMapped: false,
-  });
-  const diffusion = new THREE.Mesh(diffusionGeometry, diffusionMaterial);
-  diffusion.position.z = 3.43;
-  diffusion.renderOrder = 6;
-  group.add(diffusion);
-  resources.push(diffusionGeometry, diffusionMaterial);
-
-  const glowGeometry = new THREE.ShapeBufferGeometry(faceShape);
-  const glowMaterial = new THREE.MeshBasicMaterial({
-    color: 0xffe8b0,
-    transparent: true,
-    opacity: state.illuminated ? 0.06 : 0.004,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-  });
-  const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-  glow.position.z = 3.08;
-  glow.scale.set(1.02, 1.02, 1);
-  glow.renderOrder = 3;
-  group.add(glow);
-  resources.push(glowGeometry, glowMaterial);
-
-  const innerLight = new THREE.PointLight(0xffedbd, state.illuminated ? 0.035 : 0.004, 140);
-  innerLight.position.set(0, 0, -8);
-  group.add(innerLight);
-  group.userData.lighting = {
-    faceMaterial,
-    sideMaterial,
-    backMaterial,
-    frontBackerMaterial,
-    illuminatedFaceMaterial,
-    diffusionMaterial,
-    glowMaterial,
-    innerLight,
-    groundGlowMaterial,
-    groundHaloMaterial,
-    wallOcclusionMaterial,
-    wallHaloMaterial,
-    keyholeInteriorMaterial,
-  };
+  group.userData.lighting = { faceMaterial, sideMaterial, backMaterial, frontBackerMaterial, keyholeInteriorMaterial, ledStudio: true };
+  configureLedStudioModel(group, face, artworkCanvas);
 
   state.three.group = group;
   state.three.scene.add(group);
+  applyPreviewZoom({ render: false });
   applyRotation();
   renderThree();
   const activationToken = (Number(state.ledThreeFrameToken) || 0) + 1;

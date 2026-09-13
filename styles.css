@@ -8254,3 +8254,12 @@ body.upload-guide-open { overflow: hidden; overscroll-behavior: none; }
   .upload-guide-footer { flex-direction: column; gap: 6px; padding: 10px 18px max(12px, env(safe-area-inset-bottom)); }
   .upload-guide-footer .primary-button { width: 100%; }
 }
+
+/* LED studio lighting is rendered in world space, including the floor. */
+body.product-led .stage { background: #292b2e; }
+body.product-led .stage::before { display: none; }
+@media (max-width: 768px) {
+  body.product-led .visualizer-light-toggle,
+  body.product-led .visualizer-zoom-controls { bottom: var(--led-mobile-controls-bottom, 190px); }
+  body.product-led .preview-gesture-hint { bottom: calc(var(--led-mobile-controls-bottom, 190px) + 62px); }
+}

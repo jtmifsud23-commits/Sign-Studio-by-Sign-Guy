@@ -4678,6 +4678,11 @@ function applyIllumination() {
   els.stage.classList.toggle('lights-off', !state.illuminated);
   if (els.lightToggleLabel) els.lightToggleLabel.textContent = state.illuminated ? 'lights on' : 'lights off';
   const lighting = state.three?.group?.userData?.lighting;
+  if (lighting?.ledStudio) {
+    updateLedStudio();
+    renderThree();
+    return;
+  }
   if (lighting) {
     lighting.illuminatedFaceMaterial.opacity = state.illuminated ? 0.006 : 0;
     lighting.diffusionMaterial.opacity = state.illuminated ? 0.058 : 0.014;
@@ -4731,6 +4736,7 @@ function applyPreviewZoom(options = {}) {
   if (els.previewZoomReset) els.previewZoomReset.textContent = isMobilePreviewViewport() ? 'Reset View' : `${Math.round(zoom * 100)}%`;
   if (state.three?.camera) {
     let cameraScale = state.productType === 'led' ? (getPreviewEnvironmentSettings().cameraScale || 1) : 1;
+    if (state.productType === 'led') cameraScale *= getLedStudioCameraScale();
     if (state.productType === 'plaque' && typeof getMobilePlaqueCameraDistanceScale === 'function') {
       cameraScale *= getMobilePlaqueCameraDistanceScale();
     }
@@ -5121,6 +5127,10 @@ function pointInPolygon(point, polygon) {
 }
 
 function updateFloorEffects() {
+  if (state.three?.group?.userData?.lighting?.ledStudio) {
+    updateLedStudio();
+    return;
+  }
   if (!state.three?.floorGroup || !window.THREE) return;
   const floorGroup = state.three.floorGroup;
   const bounds = floorGroup.userData?.bounds;
