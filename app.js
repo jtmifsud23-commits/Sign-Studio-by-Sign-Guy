@@ -707,11 +707,7 @@ async function initializeStudioAppOnce() {
   setupPreviewModeControls();
   setupHypeChainControls();
   setupPlaqueControls();
-  els.chooseFile.addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
-    els.fileInput.click();
-  });
+  setupFileButtonKeyboard(els.chooseFile, els.fileInput);
   els.fileInput.addEventListener('change', async () => {
     const files = cloneFileList(els.fileInput.files);
     els.fileInput.value = '';
@@ -2735,11 +2731,46 @@ function setupDropZone(zone = els.dropZone, onDrop = (files) => handleFiles(file
 
 function setupFileButtonKeyboard(label, input) {
   if (!label || !input) return;
-  label.addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
-    input.click();
-  });
+  label.addEventListener('click', () => openUploadGuide(label, input));
+}
+
+function openUploadGuide(trigger, input) {
+  const dialog = document.querySelector('#uploadGuide');
+  if (dialog.open) return;
+  const choose = dialog.querySelector('[data-upload-choose]');
+  const close = dialog.querySelector('[data-upload-close]');
+  const events = new AbortController();
+  const options = { signal: events.signal };
+  choose.addEventListener('click', () => input.click(), options);
+  close.addEventListener('click', () => dialog.close(), options);
+  // Capture before the existing handlers clear the input and open the editor.
+  input.addEventListener('change', () => {
+    if (input.files?.length) dialog.close();
+  }, { ...options, capture: true });
+  dialog.addEventListener('keydown', (event) => {
+    // Keep Escape from also dismissing the mobile controls behind the dialog.
+    if (event.key === 'Escape') event.stopPropagation();
+    if (event.key === 'Tab') {
+      const first = close;
+      const last = choose;
+      if (event.shiftKey && (document.activeElement === first || document.activeElement.id === 'uploadGuideTitle')) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+  }, options);
+  dialog.addEventListener('close', () => {
+    events.abort();
+    document.body.classList.remove('upload-guide-open');
+    // Native dialog restores focus synchronously, before the editor opens.
+  }, { once: true });
+  trigger.focus({ preventScroll: true });
+  document.body.classList.add('upload-guide-open');
+  dialog.showModal();
+  dialog.querySelector('#uploadGuideTitle').focus({ preventScroll: true });
 }
 
 function cloneFileList(fileList) {
@@ -3817,7 +3848,7 @@ function renderEditStep() {
       <span>Remove Background</span>
       <input id="wizardRemoveBg" type="checkbox" ${state.removeBg ? 'checked' : ''} />
     </label>
-    <p class="wizard-helper-text">Use this if your image background is solid, white, or not transparent.</p>
+    <p class="wizard-helper-text">Removes simple backgrounds. Does not turn photos into printable logos.</p>
     <label class="switch-row">
       <span>Fix floating regions</span>
       <input id="wizardFixFloatingRegions" type="checkbox" ${state.fixFloatingRegions ? 'checked' : ''} />

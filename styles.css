@@ -8205,3 +8205,52 @@ output,
     padding-inline: 8px;
   }
 }
+
+/* Upload guidance uses the native modal top layer for focus containment and inertness. */
+body.upload-guide-open { overflow: hidden; overscroll-behavior: none; }
+.upload-guide {
+  color-scheme: dark; color: #f6f6f6; background: #222; border: 1px solid #ffc529;
+  border-radius: 12px; padding: 0; width: min(900px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px); overflow: auto; overscroll-behavior: contain;
+  box-shadow: 0 24px 90px #0009;
+}
+.upload-guide::backdrop { background: #000b; }
+.upload-guide-body { position: relative; padding: 30px 30px 22px; }
+.upload-guide-close {
+  position: absolute; top: 8px; right: 8px; width: 44px; height: 44px;
+  border: 0; border-radius: 6px; background: transparent; color: #ddd; font-size: 28px; cursor: pointer;
+}
+.upload-guide-header { display: flex; align-items: flex-start; gap: 14px; padding-right: 25px; }
+.upload-guide-header svg { width: 30px; height: 30px; flex: 0 0 30px; color: #ffc529; margin-top: 3px; }
+.upload-guide h2 { margin: 0; font-size: clamp(22px, 3vw, 28px); line-height: 1.2; color: #fff; }
+.upload-guide-header p { margin: 10px 0 0; color: #bdbdbd; font-size: 14px; line-height: 1.5; }
+.upload-guide-examples { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin: 24px 0; }
+.upload-guide-column { min-width: 0; }
+.upload-guide h3 { margin: 0 0 12px; font-size: 15px; letter-spacing: .06em; color: #fff; }
+.upload-guide h3 span { margin-right: 7px; font-size: 22px; vertical-align: middle; }
+.upload-guide-0 { color: #70d595; }
+.upload-guide-3 { color: #ff7676; }
+.upload-guide-card { display: flex; align-items: center; gap: 16px; background: #2b2b2b; border: 1px solid #414141; border-radius: 7px; padding: 10px; margin-top: 10px; }
+.upload-guide-image { width: 112px; height: 84px; flex: 0 0 112px; background: #fff; border-radius: 4px; overflow: hidden; }
+.upload-guide-image img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.upload-guide-photo img { object-fit: cover; }
+.upload-guide .checkerboard { background-color: #fafafa; background-image: conic-gradient(#dedede 25%, transparent 0 50%, #dedede 0 75%, transparent 0); background-size: 16px 16px; }
+.upload-guide-card p { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.4; }
+.upload-guide-tip { background: #ffc5290d; border: 1px solid #ffc52940; border-radius: 7px; padding: 14px 16px; font-size: 14px; line-height: 1.5; }
+.upload-guide-tip p { margin: 0; }
+.upload-guide-tip p + p { margin-top: 6px; color: #bebebe; }
+.upload-guide-tip strong { color: #ffc529; }
+.upload-guide-footer { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 18px 30px; background: #222; border-top: 1px solid #444; }
+.upload-guide-footer a { color: #d4d4d4; font-size: 14px; text-underline-offset: 3px; padding: 12px 0; }
+.upload-guide-footer .primary-button { min-height: 48px; background: #ffc529; color: #161616; font-size: 14px; white-space: nowrap; }
+.upload-guide :focus-visible { outline: 3px solid #ffc529; outline-offset: 3px; }
+.upload-guide h2:focus { outline: none; }
+@media (max-width: 600px) {
+  .upload-guide { width: calc(100vw - 20px); max-height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  .upload-guide-body { padding: 26px 18px 18px; }
+  .upload-guide-header { gap: 10px; }
+  .upload-guide-header svg { width: 24px; flex-basis: 24px; }
+  .upload-guide-examples { grid-template-columns: 1fr; gap: 22px; }
+  .upload-guide-footer { flex-direction: column; gap: 6px; padding: 10px 18px max(12px, env(safe-area-inset-bottom)); }
+  .upload-guide-footer .primary-button { width: 100%; }
+}

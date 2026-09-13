@@ -7,7 +7,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MySignGuy.ca Sign Studio</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23151515'/%3E%3Cpath d='M7 21.5h18v3H7zM9.5 7.5h13v11h-13z' fill='%23ffc529'/%3E%3Cpath d='M12 10h8v6h-8z' fill='%23151515'/%3E%3C/svg%3E" />
-    <link rel="stylesheet" href="./styles.css?v=20260702-plaque-rollback-01" />
+    <link rel="stylesheet" href="./styles.css?v=20260913-upload-guide-01" />
   </head>
   <body class="studio-loading">
     <main class="app-shell">
@@ -47,11 +47,11 @@
             <h3>Upload / Artwork</h3>
             <p>Add your logo, then crop and clean it up for the preview.</p>
           </div>
-          <input id="fileInput" type="file" accept="image/png,image/jpeg,image/svg+xml,.png,.jpg,.jpeg,.svg,.heic,.heif" />
-          <label class="primary-button upload-button" id="chooseFile" for="fileInput" role="button" tabindex="0">
+          <input id="fileInput" type="file" hidden accept="image/png,image/jpeg,image/svg+xml,.png,.jpg,.jpeg,.svg,.heic,.heif" />
+          <button class="primary-button upload-button" id="chooseFile" type="button">
             <span class="upload-mark" aria-hidden="true">+</span>
             <span id="chooseFileText">Upload logo</span>
-          </label>
+          </button>
           <p class="upload-helper-text">Best results: Use a clear PNG with a transparent background when possible.</p>
         </section>
 
@@ -132,11 +132,11 @@
           </div>
           <div class="hype-upload-style-row">
             <div class="upload-zone hype-upload-zone" id="hypeDropZone">
-              <input id="hypeLogoInput" type="file" accept="image/png,image/jpeg,image/svg+xml,.png,.jpg,.jpeg,.svg,.heic,.heif" />
-              <label class="primary-button upload-button hype-upload-button" id="hypeChooseFile" for="hypeLogoInput" role="button" tabindex="0">
+              <input id="hypeLogoInput" type="file" hidden accept="image/png,image/jpeg,image/svg+xml,.png,.jpg,.jpeg,.svg,.heic,.heif" />
+              <button class="primary-button upload-button hype-upload-button" id="hypeChooseFile" type="button">
                 <span class="upload-mark" aria-hidden="true">+</span>
                 <span id="hypeChooseFileText">Upload logo</span>
-              </label>
+              </button>
               <p class="upload-helper-text">Best results: Use a clear PNG with a transparent background when possible.</p>
             </div>
             <div class="hype-style-panel">
@@ -292,10 +292,10 @@
               <h3>Upload / Artwork</h3>
               <p>Upload and clean a logo for layered 3D printing.</p>
             </div>
-            <label class="primary-button upload-button plaque-upload-button" id="plaqueChooseFile" for="fileInput" role="button" tabindex="0">
+            <button class="primary-button upload-button plaque-upload-button" id="plaqueChooseFile" type="button">
               <span class="upload-mark" aria-hidden="true">+</span>
               <span id="plaqueChooseFileText">Upload logo</span>
-            </label>
+            </button>
             <p class="upload-helper-text">Best results: SVG or transparent PNG with clear separated colours.</p>
           </section>
 
@@ -948,13 +948,37 @@
         };
       })();
     </script>
+    <dialog id="uploadGuide" class="upload-guide" aria-labelledby="uploadGuideTitle" aria-describedby="uploadGuideDescription">
+      <div class="upload-guide-body">
+        <button class="upload-guide-close" type="button" data-upload-close aria-label="Close upload guidance">×</button>
+        <header class="upload-guide-header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6" /></svg>
+          <div><h2 id="uploadGuideTitle" tabindex="-1">Start with a clean, simple logo</h2>
+          <p id="uploadGuideDescription">Choose sharp artwork with solid colours and clear outlines.</p></div>
+        </header>
+        <div class="upload-guide-examples">
+          <section class="upload-guide-column"><h3><span class="upload-guide-0" aria-hidden="true">✓</span> WORKS WELL</h3>
+            <div class="upload-guide-card"><div class="upload-guide-image"><img src="./assets/upload-guide/01-simple-wolf-logo.webp" alt="Simple yellow, black and white wolf head logo" width="320" height="213" decoding="async" /></div><p>Simple logos</p></div>
+            <div class="upload-guide-card"><div class="upload-guide-image"><img src="./assets/upload-guide/02-bold-north-wordmark.webp" alt="Bold NORTH wordmark on white" width="320" height="213" decoding="async" /></div><p>Bold text & clear outlines</p></div>
+            <div class="upload-guide-card"><div class="upload-guide-image checkerboard"><img src="./assets/upload-guide/03-transparent-lightning-bolt.webp" alt="Yellow lightning bolt with a transparent background" width="320" height="213" decoding="async" /></div><p>Transparent backgrounds</p></div>
+          </section>
+          <section class="upload-guide-column"><h3><span class="upload-guide-3" aria-hidden="true">×</span> AVOID THESE</h3>
+            <div class="upload-guide-card"><div class="upload-guide-image upload-guide-photo"><img src="./assets/upload-guide/04-plant-photo.webp" alt="Photograph of a potted plant" width="320" height="213" decoding="async" /></div><p>Photos of people or objects</p></div>
+            <div class="upload-guide-card"><div class="upload-guide-image upload-guide-photo"><img src="./assets/upload-guide/05-logo-on-shirt.webp" alt="Logo photographed on a shirt" width="320" height="213" decoding="async" /></div><p>Logos photographed on products</p></div>
+            <div class="upload-guide-card"><div class="upload-guide-image upload-guide-photo"><img src="./assets/upload-guide/06-complex-wolf-artwork.webp" alt="Detailed multicolour wolf artwork with a busy background" width="320" height="213" decoding="async" /></div><p>Busy backgrounds & gradients</p></div>
+          </section>
+        </div>
+        <div class="upload-guide-tip"><p><strong>BEST FILE:</strong> A high-resolution PNG with a transparent or plain background.</p><p>Avoid blurry images, tiny details, and dozens of colours.</p></div>
+      </div>
+      <footer class="upload-guide-footer"><a href="mailto:hey@mysignguy.ca?subject=Sign%20Studio%20artwork%20help">Need help with your artwork?</a><button class="primary-button" type="button" data-upload-choose>CHOOSE MY LOGO</button></footer>
+    </dialog>
     <script defer src="./assets/vendor/three-r128.min.js?v=20260621-01"></script>
     <script defer src="./assets/core/three-runtime.js?v=20260605-02"></script>
     <script defer src="./assets/led/led-product.js?v=20260529-01"></script>
     <script defer src="./assets/hype-chain/hype-chain-product.js?v=20260702-save-local-01"></script>
     <script defer src="./assets/plaque/plaque-product.js?v=20260705-uploaded-trace-quality-01"></script>
     <script defer src="./blob-upload-client.js?v=20260702-client-upload-01"></script>
-    <script defer src="./app.js?v=20260705-uploaded-trace-quality-01"></script>
+    <script defer src="./app.js?v=20260913-upload-guide-01"></script>
     <script defer src="./submit-fix.js?v=20260510-22"></script>
     <script defer src="./used-colours.js?v=20260513-09"></script>
   </body>
