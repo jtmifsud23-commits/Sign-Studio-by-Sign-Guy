@@ -122,6 +122,9 @@ function setupHypeChainControls() {
       applyHypeSpinnerStateToControls();
       scheduleHypeRender(0);
     });
+    if (key === 'topText' || key === 'bottomText') {
+      input?.addEventListener('blur', () => applyHypeSpinnerStateToControls());
+    }
   });
   els.hypeSpinnerFontButton?.addEventListener('click', (event) => {
     event.stopPropagation();
@@ -2783,8 +2786,10 @@ function applyHypeSpinnerStateToControls() {
   const isReady = Boolean(enabled && state.hypeThree?.spinnerRingGroup);
   const isLoading = Boolean(enabled && !isReady);
   els.hypeSpinnerSection?.classList.toggle('hidden', !enabled);
-  if (els.hypeSpinnerTopText) els.hypeSpinnerTopText.value = spinner.topText;
-  if (els.hypeSpinnerBottomText) els.hypeSpinnerBottomText.value = spinner.bottomText;
+  // Keep the active draft (including a newly typed space and its caret) intact.
+  // Normalized text still drives the preview and is applied after editing ends.
+  if (els.hypeSpinnerTopText && document.activeElement !== els.hypeSpinnerTopText) els.hypeSpinnerTopText.value = spinner.topText;
+  if (els.hypeSpinnerBottomText && document.activeElement !== els.hypeSpinnerBottomText) els.hypeSpinnerBottomText.value = spinner.bottomText;
   if (els.hypeSpinnerFontFamily) els.hypeSpinnerFontFamily.value = spinner.fontFamily;
   updateHypeSpinnerFontPicker(spinner.fontFamily);
   if (els.hypeSpinnerRingColor) els.hypeSpinnerRingColor.value = spinner.ringColor;
