@@ -9082,7 +9082,7 @@ function makeOrderEmailSubject(productLabel) {
   return `${email} placed a ${productLabel} order`;
 }
 
-function makeOrderEmailHtml({ title, context, logoTitle, details, colourSections }) {
+function makeOrderEmailHtml({ title, context, logoTitle, details, colourSections, extraSections = '' }) {
   const rows = details.map(([label, value]) => `
     <tr>
       <th style="text-align:left;padding:8px 12px;border-bottom:1px solid #ece6d8;color:#5f5a50;font-size:13px;">${escapeHtml(label)}</th>
@@ -9116,6 +9116,7 @@ function makeOrderEmailHtml({ title, context, logoTitle, details, colourSections
           </table>
 
           ${sections}
+          ${extraSections}
 
           <p style="margin:22px 0 0;color:#69645b;font-size:13px;">
             Attached files include the .SignGuy project file, uploaded logo, and any captured preview screenshots.

@@ -502,7 +502,7 @@ async function orderBagTag() {
     if(!getShopifyVariantId())throw new Error('Bag Tag checkout is not configured yet. Your design can still be saved.');
     const message=`Bag Tag\nNames: ${bagOrderRows().map(row=>`${row.name} (quantity ${row.quantity})`).join('; ')}\nFont: ${bagState().font}\nQuantity: ${bagTotalQuantity()}\nUsage: ${bagState().usage}\n${bagDimensionLabel()}; 4 mm base + 2 mm relief; front only.\nBase: ${bagState().baseColour}\nText: ${bagState().textColour}\nLogo colours: ${JSON.stringify(bagState().palette)}`;
     if(isLocalTesting()){await saveProjectRecord(project);downloadProjectPayload(project);els.submitNote.textContent='Bag Tag order file downloaded for review. Local testing does not send email or open checkout.';}
-    else{const result=await uploadProjectFolder(project,{screenshots:await captureBagShots(),sendOrderEmail:true,subject:makeOrderEmailSubject('Bag Tag'),message});await saveProjectRecord(project);redirectToShopifyCheckout(project,result);}
+    else{const result=await uploadProjectFolder(project,{screenshots:await captureBagOrderShots(project.config.bag),sendOrderEmail:true,subject:makeOrderEmailSubject('Bag Tag'),message,messageHtml:makeBagOrderEmailHtml(project)});await saveProjectRecord(project);redirectToShopifyCheckout(project,result);}
   }catch(error){els.submitNote.textContent=error.message;setStatus('Order not placed');}finally{state.orderInProgress=false;updateProjectControls();}
 }
 
@@ -591,8 +591,8 @@ function openBagAlignment(){
   dialog.addEventListener('close',()=>dialog.remove());draw();dialog.showModal();
 }
 
-function bagNameMesh(text,textX,textY){
-  const b=bagState();let mesh=null;
+function bagNameMesh(text,textX,textY,b=bagState()){
+  let mesh=null;
   const canvas=document.createElement('canvas');canvas.width=720;canvas.height=180;const ctx=canvas.getContext('2d');let size=160;ctx.font=`${size}px "${b.font}"`;while(ctx.measureText(text).width>690&&size>12){ctx.font=`${--size}px "${b.font}"`;}
     ctx.fillStyle='#ffffff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,360,90);
     const pixels=ctx.getImageData(0,0,720,180).data,mask=new Uint8Array(720*180);for(let i=0;i<mask.length;i++)mask[i]=pixels[i*4+3]>128?1:0;
@@ -710,4 +710,39 @@ async function reviewBagTeam(){
     }
   }catch(error){status.textContent='Could not generate all previews. Return to the editor and try again.';console.error(error);}
   finally{renderer.dispose();renderer.forceContextLoss();}
+}
+function makeBagOrderEmailHtml(project){
+  const b=project.config.bag,rows=bagOrderRows(b),d=project.config.dimensions;
+  const roster=rows.map((row,index)=>`<tr><td style="padding:9px 12px;border-bottom:1px solid #ece6d8;">${index+1}</td><td style="padding:9px 12px;border-bottom:1px solid #ece6d8;">${escapeHtml(row.name)}</td><td style="padding:9px 12px;border-bottom:1px solid #ece6d8;text-align:right;">${row.quantity}</td></tr>`).join('');
+  const images=rows.map((row,index)=>`<div style="margin:16px 0;padding:16px;border:1px solid #ded6c6;border-radius:10px;page-break-inside:avoid;"><h3 style="margin:0 0 12px;font-size:16px;">Tag ${index+1}: ${escapeHtml(row.name)} — Quantity ${row.quantity}</h3><img src="cid:bag-tag-${index+1}" alt="${escapeHtml(row.name)} front view" width="360" style="display:block;width:100%;max-width:360px;height:auto;" /></div>`).join('');
+  return makeOrderEmailHtml({title:'Custom Bag Tag request',context:'Shopify checkout order started',logoTitle:'Uploaded logo',details:[
+    ['Customer email',project.customerEmail||'Not provided'],['Design',project.name],['Uploaded file',project.source.fileName],
+    ['Order type',b.orderMode==='team'?'Team order':'Single tag'],['Total tags',String(bagTotalQuantity(b))],['Roster entries',String(rows.length)],
+    ['Usage',b.usage==='outdoor'?'Outdoor':'Indoor'],['Font',b.font],['Backing',b.resolvedBacking==='custom'?'Custom outline':'Circular'],
+    ['Dimensions',`${Number(d.widthMm.toFixed(1))} × ${Number(d.heightMm.toFixed(1))} × 6 mm`],['Construction','4 mm backing; coloured logo areas and name +2 mm; black/white logo areas flat'],
+  ],colourSections:[{title:'Tag colours',colours:[{label:'Backing',hex:b.baseColour},{label:'Name',hex:b.textColour}]},{title:'Logo colours',colours:b.palette.map((p,i)=>({label:`Colour ${i+1} — ${bagLogoColourIsRaised(p.colour)?'raised 2 mm':'flat'}`,hex:p.colour}))}],extraSections:`<h2 style="margin:24px 0 10px;font-size:16px;">Roster</h2><table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:14px;"><thead><tr style="background:#f2eee4;"><th style="text-align:left;padding:9px 12px;">Tag</th><th style="text-align:left;padding:9px 12px;">Name on tag</th><th style="text-align:right;padding:9px 12px;">Quantity</th></tr></thead><tbody>${roster}</tbody></table><h2 style="margin:24px 0 10px;font-size:16px;">Individual tag designs</h2><p style="color:#69645b;font-size:13px;">Each front view below is also attached as a separate image. The numbered filenames match the roster.</p>${images}`});
+}
+async function captureBagOrderShots(b){
+  const rows=bagOrderRows(b).map(row=>({...row})),shots=[],layout={...bagView.nameLayout};
+  const scene=new THREE.Scene();scene.background=new THREE.Color('#222625');scene.add(new THREE.HemisphereLight(0xffffff,0x616775,1.1));
+  const group=bagView.group.clone();group.rotation.set(0,0,0);group.children.filter(child=>child.userData.bagName).forEach(child=>group.remove(child));scene.add(group);
+  const camera=new THREE.PerspectiveCamera(34,1,0.1,1000),d=bagDimensions();camera.position.set(0,0,Math.max(d.heightMm,d.widthMm)/(2*Math.tan(17*Math.PI/180)*.85));camera.lookAt(0,0,0);camera.updateProjectionMatrix();
+  const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});renderer.setSize(640,640);renderer.outputEncoding=THREE.sRGBEncoding;
+  try{
+    for(let index=0;index<rows.length;index++){
+      const row=rows[index],result=bagNameMesh(row.name,layout.textX,layout.textY,b),mesh=result.mesh;
+      try{
+        if(mesh){mesh.position.x=-layout.centerX*layout.fitWidth;mesh.position.y=-layout.centerY*layout.fitWidth;mesh.scale.x=mesh.scale.y=layout.fitWidth;group.add(mesh);}
+        renderer.render(scene,camera);
+        const blob=await new Promise(resolve=>renderer.domElement.toBlob(resolve,'image/jpeg',.88));
+        if(!blob)throw Error(`Could not capture tag ${index+1}`);
+        const slug=row.name.replace(/[^a-z0-9_-]+/gi,'-').replace(/^-|-$/g,'')||'name';
+        const fileName=`tag-${String(index+1).padStart(3,'0')}-${slug}-qty-${row.quantity}.jpg`;
+        shots.push({label:`Tag ${index+1}: ${row.name} (quantity ${row.quantity})`,fileName,blob,file:new File([blob],fileName,{type:'image/jpeg'})});
+        setStatus(`Preparing tag ${index+1} of ${rows.length}`);
+        await new Promise(resolve=>setTimeout(resolve,0));
+      }finally{if(mesh){group.remove(mesh);mesh.geometry.dispose();[].concat(mesh.material).forEach(m=>m.dispose());}}
+    }
+  }finally{renderer.dispose();renderer.forceContextLoss();}
+  return shots;
 }

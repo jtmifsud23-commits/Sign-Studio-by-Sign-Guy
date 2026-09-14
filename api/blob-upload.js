@@ -113,7 +113,7 @@ function makeUploadTokenOptions(upload) {
 }
 
 function validateUploadRequest(pathname, clientPayload) {
-  const match = String(pathname || '').match(/^orders\/([a-z0-9_-]{8,96})\/(projectFile|logoPreview|logo|renderScreenshot1|renderScreenshot2|renderScreenshot3)-([^/]{1,180})$/i);
+  const match = String(pathname || '').match(/^orders\/([a-z0-9_-]{8,96})\/(projectFile|logoPreview|logo|renderScreenshot(?:[1-9][0-9]?|100))-([^/]{1,180})$/i);
   if (!match) throw new Error('Invalid upload pathname.');
 
   let payload;
@@ -128,7 +128,7 @@ function validateUploadRequest(pathname, clientPayload) {
     throw new Error('Upload metadata does not match the destination.');
   }
 
-  const rule = UPLOAD_RULES[kind];
+  const rule = UPLOAD_RULES[kind] || (/^renderScreenshot(?:[1-9][0-9]?|100)$/.test(kind) ? UPLOAD_RULES.renderScreenshot1 : null);
   if (!rule) throw new Error('Unsupported upload type.');
   return { orderId, kind, rule };
 }

@@ -14,7 +14,7 @@ import { createPreviewToken } from '../src/preview-token.js';
 
 const TO_EMAIL = 'Hey@MySignGuy.ca';
 const ORDER_SUBJECT = 'User placed a lightbox order';
-const FILE_KINDS = ['projectFile', 'logoPreview', 'logo', 'renderScreenshot1', 'renderScreenshot2', 'renderScreenshot3'];
+const FILE_KINDS = ['projectFile', 'logoPreview', 'logo', ...Array.from({length:100},(_,index)=>`renderScreenshot${index+1}`)];
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -79,6 +79,7 @@ function validateSubmission(payload) {
   const orderId = String(payload?.orderId || '').trim();
   if (!/^[a-z0-9_-]{8,96}$/i.test(orderId)) throw new Error('A valid orderId is required.');
 
+  if(!Array.isArray(payload?.files)||payload.files.length>103)throw new Error('Too many uploaded files.');
   const files = Array.isArray(payload?.files) ? payload.files.map((file) => validateBlobFile(file, orderId)) : [];
   const kinds = new Set(files.map((file) => file.kind));
   if (!kinds.has('projectFile') || !kinds.has('logo')) {
@@ -166,8 +167,8 @@ async function collectAttachments(files) {
       filename: file.filename,
       content: Readable.fromWeb(result.stream),
       contentType: result.blob?.contentType || file.contentType,
-      cid: isInlineLogo ? 'uploaded-logo' : undefined,
-      contentDisposition: isInlineLogo ? 'inline' : undefined,
+      cid: isInlineLogo ? 'uploaded-logo' : /^renderScreenshot\d+$/.test(file.kind) ? `bag-tag-${file.kind.slice(16)}` : undefined,
+      contentDisposition: isInlineLogo ? 'inline' : 'attachment',
     });
   }
 
