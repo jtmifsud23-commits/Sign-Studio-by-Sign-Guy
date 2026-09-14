@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import { createPreviewToken, readPreviewToken } from '../src/preview-token.js';
+process.env.BLOB_READ_WRITE_TOKEN='local-preview-test-key';
+const path='orders/test-order-123/renderScreenshot1-bag-tag-front.png';
+const token=createPreviewToken(path);
+assert.equal(readPreviewToken(token),path);
+assert.equal(readPreviewToken(token.replace(/^./,'Z')),null);
+assert.equal(readPreviewToken('invalid'),null);
+assert.throws(()=>createPreviewToken('orders/test-order-123/projectFile-private.SignGuy'));
+assert.throws(()=>createPreviewToken('orders/test-order-123/../projectFile-private.SignGuy'));
+process.env.BLOB_READ_WRITE_TOKEN='different-test-key';assert.equal(readPreviewToken(token),null);
+console.log('Passed: signed preview, tamper rejection, project-file isolation');

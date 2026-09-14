@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/uploads/:token/design-preview.png", "destination": "/api/design-preview?token=:token" }
+  ]
+}

@@ -8455,23 +8455,24 @@ function redirectToShopifyCheckout(project, uploadResult = {}) {
     params.set('checkout[email]', state.customerEmail);
   }
 
-  setShopifyOrderField(params, 'Customer email', state.customerEmail || '');
-  setShopifyOrderField(params, 'Design name', project.name || getDesignName());
+  setShopifyOrderField(params, project.type==='SignGuy.BagTagStudio'?'_Customer email':'Customer email', state.customerEmail || '');
+  setShopifyOrderField(params, project.type==='SignGuy.BagTagStudio'?'Design':'Design name', project.name || getDesignName());
 
   if (project.type === 'SignGuy.BagTagStudio') {
     const bag = project.config.bag;
-    setShopifyOrderField(params, 'Product', 'Custom Team Bag Tag');
-    setShopifyOrderField(params, 'Usage', bag.usage === 'outdoor' ? 'Outdoor' : 'Indoor');
+    if(uploadResult.previewUrl)params.set('properties[Preview]',uploadResult.previewUrl);
+    setShopifyOrderField(params, '_Product', 'Custom Team Bag Tag');
+    setShopifyOrderField(params, '_Usage', bag.usage === 'outdoor' ? 'Outdoor' : 'Indoor');
     setShopifyOrderField(params, 'Order type', bag.orderMode==='team'?'Team order':'Single tag');
     if(bag.orderMode==='team'){
       bagOrderRows(bag).forEach((row,index)=>params.set(`properties[Tag ${index+1}]`,`${row.name} · Qty ${row.quantity}`));
       setShopifyOrderField(params, 'Total tags', bagTotalQuantity(bag));
     }else setShopifyOrderField(params, 'Name', bag.text);
-    setShopifyOrderField(params, 'Font', bag.font);
-    setShopifyOrderField(params, 'Base colour', bag.baseColour);
-    setShopifyOrderField(params, 'Text colour', bag.textColour);
-    setShopifyOrderField(params, 'Dimensions', `${bagDimensionLabel()}; front only`);
-    setShopifyOrderField(params, 'Logo colours and relief', JSON.stringify(bag.palette));
+    setShopifyOrderField(params, '_Font', bag.font);
+    setShopifyOrderField(params, '_Base colour', bag.baseColour);
+    setShopifyOrderField(params, '_Text colour', bag.textColour);
+    setShopifyOrderField(params, '_Dimensions', `${bagDimensionLabel()}; front only`);
+    setShopifyOrderField(params, '_Logo colours and relief', JSON.stringify(bag.palette));
   } else if (project.type === 'SignGuy.HypeChainStudio') {
     const spinner = state.hype.variant === 'spinner' && typeof syncHypeSpinnerConfig === 'function'
       ? syncHypeSpinnerConfig()
@@ -8505,7 +8506,7 @@ function redirectToShopifyCheckout(project, uploadResult = {}) {
     setShopifyOrderField(params, 'Studio size', SIZE_PRESETS[state.size].label);
     setShopifyOrderField(params, 'Usage', USAGE_PRESETS[state.usage]?.label || USAGE_PRESETS.indoor.label);
   }
-  setShopifyOrderField(params, 'SignGuy file', projectName);
+  setShopifyOrderField(params, project.type==='SignGuy.BagTagStudio'?'_SignGuy file':'SignGuy file', projectName);
 
   trackSignStudioEvent('add_to_cart', {
     ecommerce: {

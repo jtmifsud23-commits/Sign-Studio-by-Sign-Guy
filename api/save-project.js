@@ -10,6 +10,7 @@
 import { get } from '@vercel/blob';
 import nodemailer from 'nodemailer';
 import { Readable } from 'node:stream';
+import { createPreviewToken } from '../src/preview-token.js';
 
 const TO_EMAIL = 'Hey@MySignGuy.ca';
 const ORDER_SUBJECT = 'User placed a lightbox order';
@@ -31,11 +32,14 @@ export default async function handler(req, res) {
       emailSent = true;
     }
 
+    const preview=submission.files.find(file=>file.kind==='renderScreenshot1');
+    const previewUrl=preview?`https://sign-studio-by-sign-guy.vercel.app/uploads/${createPreviewToken(preview.pathname)}/design-preview.png`:null;
     res.status(200).json({
       ok: true,
       folder: `orders/${submission.orderId}`,
       files: submission.files.map((file) => file.filename),
       emailSent,
+      previewUrl,
     });
   } catch (error) {
     console.error('Could not finalize private Blob submission.', error);
