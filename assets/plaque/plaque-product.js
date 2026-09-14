@@ -975,6 +975,7 @@ async function loadDefaultPlaqueProject() {
     );
     validateSignGuyProject(project);
     const processedCache = await readDefaultPlaqueProcessedCache(project);
+    if (state.productType !== 'plaque') return;
     await restoreSignGuyProject(getDefaultPlaqueInitialViewProject(project), {
       isExampleProject: true,
       processedCache,

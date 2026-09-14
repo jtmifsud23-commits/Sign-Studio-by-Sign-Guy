@@ -8258,3 +8258,28 @@ body.product-led .stage::before { display: none; }
   body.product-led .visualizer-zoom-controls { bottom: var(--led-mobile-controls-bottom, 190px); }
   body.product-led .preview-gesture-hint { bottom: calc(var(--led-mobile-controls-bottom, 190px) + 62px); }
 }
+
+/* Four peer products in one row in every editor and mobile visualizer. */
+.product-switcher,
+.visualizer-product-switcher {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.product-switcher > .product-tab,
+.visualizer-product-switcher > .product-tab {
+  min-width: 0;
+  padding-inline: 4px;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.15;
+}
+.product-switcher > .mobile-control-section-heading {
+  grid-column: 1 / -1;
+}
+@media (max-width: 767px) {
+  .visualizer-product-switcher { gap: 3px; }
+  .visualizer-product-switcher > .product-tab {
+    font-size: 10px !important;
+    min-height: 38px;
+    padding-inline: 3px;
+  }
+}

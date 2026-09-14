@@ -3,11 +3,12 @@
   <head>
     <meta charset="utf-8" />
     <!-- Google Tag Manager: Sign Studio Web container -->
-    <script src="./analytics.js?v=20260623-01" data-gtm-id="GTM-MDH5QLKP"></script>
+    <script src="./analytics.js?v=3.1" data-gtm-id="GTM-MDH5QLKP"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MySignGuy.ca Sign Studio</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23151515'/%3E%3Cpath d='M7 21.5h18v3H7zM9.5 7.5h13v11h-13z' fill='%23ffc529'/%3E%3Cpath d='M12 10h8v6h-8z' fill='%23151515'/%3E%3C/svg%3E" />
-    <link rel="stylesheet" href="./styles.css?v=3.06-hype-fix-01" />
+    <link rel="stylesheet" href="./styles.css?v=3.1" />
+    <link rel="stylesheet" href="./assets/bag-tag/bag-tag.css?v=3.1" />
   </head>
   <body class="studio-loading">
     <main class="app-shell">
@@ -39,6 +40,7 @@
           <button class="product-tab active" type="button" data-product-type="led" aria-pressed="true">LED Sign</button>
           <button class="product-tab" type="button" data-product-type="hype" aria-disabled="false">Hype Chain</button>
           <button class="product-tab" type="button" data-product-type="plaque" aria-disabled="false">3D Plaque</button>
+<button class="product-tab" type="button" data-product-type="bag" aria-pressed="false">Bag Tag</button>
           <span class="product-tooltip" id="productLockTooltip" role="tooltip">Coming soon</span>
         </nav>
 
@@ -121,6 +123,27 @@
           </div>
         </section>
 
+<section class="panel-section bag-tag-controls" id="bagTagControls" hidden aria-label="Bag Tag configurator">
+  <div class="hype-upload-style-row bag-top-row">
+    <div class="upload-zone hype-upload-zone">
+      <button class="primary-button upload-button hype-upload-button" id="bagChooseFile" type="button"><span class="upload-mark" aria-hidden="true">+</span><span>Upload logo</span></button>
+      <input id="bagLogoFile" type="file" accept=".png,.jpg,.jpeg,.webp,.svg" tabindex="-1" aria-label="Upload Bag Tag logo" />
+      <p class="upload-helper-text">Best results: Use a clear PNG with a transparent background when possible.</p>
+    </div>
+    <div class="hype-style-panel bag-usage-panel"><h3 hidden>Bag Tag</h3><p class="bag-size" hidden>80 × 106 mm · Front only</p><h3>Where will the tag be used?</h3><div class="bag-usage-buttons" role="group" aria-label="Bag Tag usage"><button class="option-button active" type="button" data-bag-usage="indoor" aria-pressed="true">Indoor</button><button class="option-button" type="button" data-bag-usage="outdoor" aria-pressed="false">Outdoor</button></div></div>
+  </div>
+  <div class="bag-backing-row"><label class="hype-field">Backing<select data-bag="backing"><option value="auto">Auto</option><option value="circle">Circle</option><option value="custom">Custom</option></select></label><button type="button" id="bagAlignment" class="secondary-button" disabled>Set alignment centre</button><span id="bagBackingResult" aria-live="polite"></span></div>
+  <h3 class="bag-heading">Name &amp; Quantity</h3>
+  <div class="bag-order-mode bag-usage-buttons" role="group" aria-label="Order type"><button type="button" class="option-button active" data-bag-mode="single" aria-pressed="true">Single tag</button><button type="button" class="option-button" data-bag-mode="team" aria-pressed="false">Team order</button></div>
+  <div class="bag-name-grid"><label class="hype-field">Name on tag<input type="text" data-bag="text" maxlength="32" value="YOUR NAME" autocomplete="off" /></label><label class="hype-field">Font<select data-bag="font"><option>Bebas Neue Bold</option><option>Bungee</option><option>Montserrat Black</option><option>Soccer League</option></select></label><label class="hype-field">Quantity<input type="number" data-bag="quantity" min="1" max="999" value="1" /></label></div>
+  <section id="bagTeamEditor" hidden aria-label="Team roster"><div id="bagRosterRows"></div><div class="bag-roster-tools"><button type="button" class="secondary-button" id="bagAddName">Add name</button><button type="button" class="secondary-button" id="bagPasteRoster">Paste a roster</button><button type="button" class="secondary-button" id="bagReviewTeam">Review all tags</button></div><p id="bagRosterStatus" role="status"></p></section>
+  <h3 class="bag-heading">Tag colours</h3>
+  <div class="bag-colour-grid"><div class="bag-colour-card bag-logo-colours"><h4>Logo</h4><p class="bag-raise-help" id="bagRaiseHelp" hidden>Logo: black/white flat; other colours +2 mm. Name always raised.</p><div id="bagPalette" aria-describedby="bagRaiseHelp"></div></div><label class="hype-field bag-colour-card">Base<input type="color" data-bag="baseColour" value="#000000" /></label><label class="hype-field bag-colour-card">Text<input type="color" data-bag="textColour" value="#ffffff" /></label></div>
+  <section class="bag-adjustments" aria-labelledby="bagAdjustmentsHeading"><div class="bag-adjust-heading"><h4 id="bagAdjustmentsHeading">Logo adjustments</h4><button id="bagCentre" type="button" class="secondary-button">Fit &amp; center logo</button></div><p id="bagLogoName" class="bag-muted" hidden></p>
+    <div class="bag-adjust-grid"><label class="hype-field">Logo size<input type="range" data-bag="scale" min="0.4" max="2" step="0.01" value="1" /></label><label class="hype-field">Logo colour limit<input type="range" data-bag="colourCount" min="1" max="8" step="1" value="4" /></label><label class="hype-field">Horizontal position<input type="range" data-bag="x" min="-25" max="25" step="0.25" value="0" /></label><label class="hype-field">Vertical position<input type="range" data-bag="y" min="-25" max="25" step="0.25" value="0" /></label></div>
+  </section>
+  <p id="bagMessage" role="status" aria-live="polite"></p>
+</section>
         <section class="panel-section hype-chain-studio hidden" id="hypeChainControls" aria-label="Hype Chain configurator">
           <div class="mobile-control-section-heading">
             <h3>Upload / Artwork</h3>
@@ -374,7 +397,7 @@
           <p id="projectNote"></p>
         </section>
         <button class="secondary-button back-to-visualizer-button" id="backToVisualizer" type="button">Back to Visualizer</button>
-        <p class="menu-build-version">Build 3.06</p>
+        <p class="menu-build-version">Build 3.1</p>
       </aside>
 
       <section class="preview-panel" aria-label="3D lightbox preview">
@@ -394,9 +417,9 @@
               </div>
               <nav class="visualizer-product-switcher" aria-label="Visualizer product type">
                 <button class="product-tab visualizer-product-tab active" type="button" data-product-type="led" aria-pressed="true">LED Sign</button>
-                <button class="product-tab visualizer-product-tab" type="button" data-product-type="hype" data-hype-variant-tab="classic" aria-disabled="false">Classic Hype Chain</button>
-                <button class="product-tab visualizer-product-tab" type="button" data-product-type="hype" data-hype-variant-tab="spinner" aria-disabled="false">Spinner Hype Chain</button>
+                <button class="product-tab visualizer-product-tab" type="button" data-product-type="hype" aria-pressed="false">Hype Chain</button>
                 <button class="product-tab visualizer-product-tab" type="button" data-product-type="plaque" aria-disabled="false">3D Plaque</button>
+<button class="product-tab visualizer-product-tab" type="button" data-product-type="bag" aria-pressed="false">Bag Tag</button>
               </nav>
             </div>
             <div class="preview-stats">
@@ -447,6 +470,7 @@
             <div class="plaque-visual-layer-list" id="plaqueVisualLayerList"></div>
           </section>
           <img class="default-led-preview-image" id="defaultLedPreviewImage" alt="" hidden />
+<section id="bagTagPreview" hidden aria-label="Bag Tag visualizer"><p id="bagRosterPreview" hidden aria-live="polite"></p><div id="bagTagCanvas"></div><div class="bag-view-tools" role="group" aria-label="Bag Tag view"><button class="zoom-button" type="button" data-bag-view="front" aria-pressed="false">Front</button><button class="zoom-button" type="button" data-bag-view="back" aria-pressed="false">Back</button><button class="zoom-button" type="button" data-bag-view="reset" aria-label="Reset Bag Tag view" title="Reset view">↺</button></div><div class="visualizer-zoom-controls bag-zoom-tools" role="group" aria-label="Bag Tag zoom"><button class="zoom-button" type="button" data-bag-zoom="0.85" aria-label="Bag Tag zoom out">−</button><button class="zoom-button" type="button" id="bagZoomReset" aria-label="Reset Bag Tag zoom">100%</button><button class="zoom-button" type="button" data-bag-zoom="1.18" aria-label="Bag Tag zoom in">+</button></div><p class="bag-preview-caption">Drag to rotate · Pinch or scroll to zoom</p></section>
           <div class="scene" id="scene">
             <div class="model-stack" id="modelStack">
               <div class="shadow"></div>
@@ -696,7 +720,7 @@
             <span class="product-selection-title-main">Sign Studio</span>
           </h2>
           <p class="product-selection-subheadline" id="productSelectionSubtitle">Choose your product below.</p>
-          <p class="product-selection-support">Custom LED signs, hype chains, and 3D plaques made&nbsp;for&nbsp;you.</p>
+          <p class="product-selection-support">Custom LED signs, hype chains, 3D plaques, and bag tags made&nbsp;for&nbsp;you.</p>
         </div>
         <div class="product-selection-grid" role="group" aria-label="Choose a product to customize">
           <button class="product-selection-card" type="button" data-product-selection="led" aria-label="Customize LED Sign">
@@ -730,6 +754,7 @@
             <span class="product-selection-lock" data-product-selection-lock hidden>Coming soon</span>
             <span class="product-selection-chevron" aria-hidden="true"></span>
           </button>
+
           <button class="product-selection-card" type="button" data-product-selection="plaque" aria-label="Customize 3D Plaque">
             <span class="product-selection-art product-selection-art-plaque" aria-hidden="true">
               <img class="product-selection-image" src="./assets/product-menu/3d-plaque-menu.png?v=20260604-02" alt="" width="1024" height="1024" loading="lazy" decoding="async" />
@@ -740,13 +765,23 @@
             </span>
             <span class="product-selection-chevron" aria-hidden="true"></span>
           </button>
+          <button class="product-selection-card" type="button" data-product-selection="bag" aria-label="Customize Bag Tags">
+            <span class="product-selection-art" aria-hidden="true">
+              <img class="product-selection-image" src="./assets/product-menu/bag-tag-menu.png?v=18" alt="" width="1254" height="1254" />
+            </span>
+            <span class="product-selection-card-copy">
+              <strong>Bag Tags</strong>
+              <span>Your team. Your name. Your tag.</span>
+            </span>
+            <span class="product-selection-chevron" aria-hidden="true"></span>
+          </button>
         </div>
         <p class="product-selection-helper">
           <span aria-hidden="true">?</span>
           <span>Not sure which one to choose?</span>
           <a href="https://mysignguy.ca/pages/compare-products">Need help deciding? Compare products →</a>
         </p>
-        <p class="menu-build-version product-selection-build-version">Build 3.06</p>
+        <p class="menu-build-version product-selection-build-version">Build 3.1</p>
       </div>
     </section>
 
@@ -972,15 +1007,17 @@
       </div>
       <footer class="upload-guide-footer"><a href="mailto:hey@mysignguy.ca?subject=Sign%20Studio%20artwork%20help">Need help with your artwork?</a><button class="primary-button" type="button" data-upload-choose>CHOOSE MY LOGO</button></footer>
     </dialog>
-    <script defer src="./assets/vendor/three-r128.min.js?v=20260621-01"></script>
-    <script defer src="./assets/core/three-runtime.js?v=3.06"></script>
-    <script defer src="./assets/led/led-product.js?v=3.06"></script>
-    <script defer src="./assets/led/led-studio.js?v=3.06"></script>
-    <script defer src="./assets/hype-chain/hype-chain-product.js?v=3.06-hype-fix-01"></script>
-    <script defer src="./assets/plaque/plaque-product.js?v=20260705-uploaded-trace-quality-01"></script>
-    <script defer src="./blob-upload-client.js?v=20260702-client-upload-01"></script>
-    <script defer src="./app.js?v=3.06"></script>
-    <script defer src="./submit-fix.js?v=20260510-22"></script>
-    <script defer src="./used-colours.js?v=20260513-09"></script>
+    <script defer src="./assets/vendor/three-r128.min.js?v=3.1"></script>
+    <script defer src="./assets/core/three-runtime.js?v=3.1"></script>
+    <script defer src="./assets/led/led-product.js?v=3.1"></script>
+    <script defer src="./assets/led/led-studio.js?v=3.1"></script>
+    <script defer src="./assets/hype-chain/hype-chain-product.js?v=3.1"></script>
+    <script defer src="./assets/plaque/plaque-product.js?v=3.1"></script>
+    <script defer src="./blob-upload-client.js?v=3.1"></script>
+    <script defer src="./assets/bag-tag/base-outline.js?v=3.1"></script>
+    <script defer src="./assets/bag-tag/bag-tag-product.js?v=3.1"></script>
+    <script defer src="./app.js?v=3.1"></script>
+    <script defer src="./submit-fix.js?v=3.1"></script>
+    <script defer src="./used-colours.js?v=3.1"></script>
   </body>
 </html>

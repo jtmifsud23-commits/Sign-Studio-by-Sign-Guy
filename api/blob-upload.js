@@ -10,7 +10,7 @@ const UPLOAD_RULES = Object.freeze({
     maximumSizeInBytes: 48 * MB,
   },
   logo: {
-    allowedContentTypes: ['image/png', 'image/jpeg', 'image/svg+xml', 'image/heic', 'image/heif', 'application/octet-stream'],
+    allowedContentTypes: ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml', 'image/heic', 'image/heif', 'application/octet-stream'],
     maximumSizeInBytes: 30 * MB,
   },
   logoPreview: {
@@ -18,6 +18,10 @@ const UPLOAD_RULES = Object.freeze({
     maximumSizeInBytes: 12 * MB,
   },
   renderScreenshot1: {
+    allowedContentTypes: ['image/png', 'image/jpeg', 'image/webp'],
+    maximumSizeInBytes: 12 * MB,
+  },
+  renderScreenshot3: {
     allowedContentTypes: ['image/png', 'image/jpeg', 'image/webp'],
     maximumSizeInBytes: 12 * MB,
   },
@@ -109,7 +113,7 @@ function makeUploadTokenOptions(upload) {
 }
 
 function validateUploadRequest(pathname, clientPayload) {
-  const match = String(pathname || '').match(/^orders\/([a-z0-9_-]{8,96})\/(projectFile|logoPreview|logo|renderScreenshot1|renderScreenshot2)-([^/]{1,180})$/i);
+  const match = String(pathname || '').match(/^orders\/([a-z0-9_-]{8,96})\/(projectFile|logoPreview|logo|renderScreenshot1|renderScreenshot2|renderScreenshot3)-([^/]{1,180})$/i);
   if (!match) throw new Error('Invalid upload pathname.');
 
   let payload;

@@ -2922,6 +2922,7 @@ async function loadDefaultHypeChainProject() {
       'Default Hype Chain project',
     );
     validateSignGuyProject(project);
+    if (state.productType !== 'hype') return;
     restoreHypeChainProject(project, { isExampleProject: true });
     setStatus('Ready');
   } catch (error) {

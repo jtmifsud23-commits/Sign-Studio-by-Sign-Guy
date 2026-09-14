@@ -13,7 +13,7 @@ import { Readable } from 'node:stream';
 
 const TO_EMAIL = 'Hey@MySignGuy.ca';
 const ORDER_SUBJECT = 'User placed a lightbox order';
-const FILE_KINDS = ['projectFile', 'logoPreview', 'logo', 'renderScreenshot1', 'renderScreenshot2'];
+const FILE_KINDS = ['projectFile', 'logoPreview', 'logo', 'renderScreenshot1', 'renderScreenshot2', 'renderScreenshot3'];
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {

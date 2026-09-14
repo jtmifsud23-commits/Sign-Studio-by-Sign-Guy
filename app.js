@@ -62,6 +62,7 @@ function trackSignStudioEvent(eventName, parameters = {}) {
 }
 
 function getAnalyticsProductItem(project = null) {
+  if (project?.type === 'SignGuy.BagTagStudio' || state.productType === 'bag') return { item_id: getShopifyVariantId() || 'bag_custom', item_name: 'Custom Team Bag Tag', item_category: 'Bag Tag', quantity: bagTotalQuantity(project?.config?.bag || bagState()) };
   const productType = project?.type === 'SignGuy.HypeChainStudio'
     ? 'hype'
     : (project?.type === 'SignGuy.WallPlaqueStudio' ? 'plaque' : state.productType);
@@ -1053,6 +1054,7 @@ function normalizeProductSelectionChoice(product, variant = '') {
   const variantText = String(variant || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
   const combined = `${productText}-${variantText}`;
   if (!productText && !variantText) return null;
+  if (combined.includes('bag')) return { key: 'bag', productType: 'bag' };
   if (combined.includes('spinner')) return { key: 'spinner-hype', productType: 'hype', hypeVariant: 'spinner' };
   if (combined.includes('classic') || combined.includes('hype-chain') || combined.includes('hype')) {
     return { key: 'classic-hype', productType: 'hype', hypeVariant: 'classic' };
@@ -1072,6 +1074,8 @@ function getProductSelectionChoice(key) {
       return { key, productType: 'hype', hypeVariant: 'classic' };
     case 'spinner-hype':
       return { key, productType: 'hype', hypeVariant: 'spinner' };
+    case 'bag':
+      return { key, productType: 'bag' };
     case 'plaque':
       return { key, productType: 'plaque' };
     case 'led':
@@ -1169,7 +1173,7 @@ function hideProductSelectionMenu() {
 }
 
 function canAccessProduct(productType) {
-  return productType === 'led' || productType === 'hype' || productType === 'plaque' || state.isAdmin;
+  return productType === 'bag' || productType === 'led' || productType === 'hype' || productType === 'plaque' || state.isAdmin;
 }
 
 function renderProductAccess() {
@@ -1192,6 +1196,9 @@ function renderProductAccess() {
 }
 
 function selectProductType(productType, options = {}) {
+  document.body.classList.toggle('product-bag', productType === 'bag');
+  document.querySelector('#bagTagControls').hidden = productType !== 'bag';
+  document.querySelector('#bagTagPreview').hidden = productType !== 'bag';
   const next = canAccessProduct(productType) ? productType : 'led';
   const previous = state.productType;
   if (next !== 'led') cancelLedThreePreviewUpgrade();
@@ -1208,6 +1215,11 @@ function selectProductType(productType, options = {}) {
     activatePlaqueArtworkState();
   }
   state.productType = next;
+  if (next === 'bag') setProjectSectionExpanded(true);
+  if (els.projectSectionHeading) {
+    els.projectSectionHeading.setAttribute('role', next === 'bag' ? 'heading' : 'button');
+    els.projectSectionHeading.setAttribute('tabindex', next === 'bag' ? '-1' : '0');
+  }
   document.body.classList.toggle('product-led', next === 'led');
   document.body.classList.toggle('product-hype', next === 'hype');
   document.body.classList.toggle('product-plaque', next === 'plaque');
@@ -1224,7 +1236,10 @@ function selectProductType(productType, options = {}) {
   els.plaqueStudio?.classList.toggle('hidden', next !== 'plaque');
   els.hypePreview?.classList.toggle('hidden', next !== 'hype');
   updateDefaultLedSavedPreview();
-  if (next === 'hype') {
+  if (next === 'bag') {
+    cancelPlaqueBuild();
+    activateBagTag();
+  } else if (next === 'hype') {
     renderPreviewTitle();
     updateProductCta();
     applyPreviewMode();
@@ -1312,6 +1327,7 @@ function getActiveUsagePreset() {
 }
 
 function applyPreviewMode() {
+  if (state.productType === 'bag') return;
   if (!els.stage) return;
   let mode = ['day', 'night', 'wall'].includes(state.previewMode) ? state.previewMode : 'night';
   if (state.productType === 'led' && mode === 'wall') mode = 'night';
@@ -1428,7 +1444,7 @@ function applyPreviewEnvironment() {
 
 function updateProductCta() {
   if (!els.placeOrder) return;
-  els.placeOrder.textContent = state.orderInProgress ? 'Placing Order...' : 'Place Order';
+  els.placeOrder.textContent = state.orderInProgress ? 'Placing Order...' : state.productType==='bag'?bagOrderButtonLabel():'Place Order';
   syncMobileCommandBar();
 }
 
@@ -1582,6 +1598,7 @@ function closeMobileControlSheet() {
 }
 
 function setProjectSectionExpanded(expanded) {
+  if (state.productType === 'bag') expanded = true;
   if (!els.projectSection || !els.projectSectionHeading) return;
   els.projectSection.classList.toggle('mobile-expanded', expanded);
   els.projectSection.classList.toggle('mobile-collapsed', !expanded);
@@ -1633,13 +1650,13 @@ function setupMobileAccordion(section, heading) {
 function syncMobileCommandBar() {
   if (els.mobilePlaceOrder && els.placeOrder) {
     els.mobilePlaceOrder.disabled = els.placeOrder.disabled;
-    els.mobilePlaceOrder.textContent = state.orderInProgress ? 'Placing Order...' : 'Place Order';
+    els.mobilePlaceOrder.textContent = state.orderInProgress ? 'Placing Order...' : state.productType==='bag'?bagOrderButtonLabel():'Place Order';
   }
   if (els.mobileSaveProject && els.saveProject) {
     els.mobileSaveProject.disabled = els.saveProject.disabled;
   }
   if (els.mobileProductSummary) {
-    els.mobileProductSummary.textContent = state.productType === 'hype'
+    els.mobileProductSummary.textContent = state.productType === 'bag' ? 'Bag Tag' : state.productType === 'hype'
       ? 'Hype Chain'
       : (state.productType === 'plaque' ? '3D Plaque' : 'LED Sign');
   }
@@ -1654,6 +1671,7 @@ function syncMobileCommandBar() {
 }
 
 function getMobileCheckoutSelectionLabel() {
+  if (state.productType === 'bag') return `${bagDimensionLabel()} · Front only`;
   if (state.productType === 'hype') {
     return 'Custom pendant chain';
   }
@@ -1668,6 +1686,7 @@ function getMobileCheckoutSelectionLabel() {
 }
 
 function getMobilePlaceOrderDisabledReason() {
+  if (state.productType === 'bag') return !bagReady() ? 'Upload a logo and enter a name' : !state.customerEmail ? 'Enter your email first' : '';
   if (state.productType === 'hype') {
     if (!hasOrderableHypeLogo()) return 'Upload a logo first';
   } else if (state.productType === 'plaque') {
@@ -2901,6 +2920,7 @@ function setupPreviewTouchGestures() {
 function setupProjectAccordion() {
   if (!els.projectSection || !els.projectSectionHeading) return;
   const toggle = () => {
+    if (state.productType === 'bag') return;
     setProjectSectionExpanded(!els.projectSection.classList.contains('mobile-expanded'));
   };
   els.projectSectionHeading.addEventListener('click', toggle);
@@ -3018,7 +3038,8 @@ function validateUploadFile(file) {
   const isJpeg = type.includes('jpeg') || type.includes('jpg') || name.endsWith('.jpg') || name.endsWith('.jpeg');
   const isHeic = type.includes('heic') || type.includes('heif') || name.endsWith('.heic') || name.endsWith('.heif');
 
-  if (!isSvg && !isPng && !isJpeg && !isHeic) {
+  const isWebp = type === 'image/webp' || name.endsWith('.webp');
+  if (!isSvg && !isPng && !isJpeg && !isHeic && !isWebp) {
     return { ok: false, message: 'This image format may not be supported. Please try a PNG or JPG.' };
   }
   if (file.size > MAX_UPLOAD_BYTES) {
@@ -3357,9 +3378,11 @@ async function detectRasterMimeType(file) {
   } catch (error) {
     console.warn('Could not inspect image file signature.', error);
   }
+  if (fallback.includes('webp')) return 'image/webp';
   if (fallback.includes('png')) return 'image/png';
   if (fallback.includes('jpeg') || fallback.includes('jpg')) return 'image/jpeg';
   const name = String(file.name || '').toLowerCase();
+  if (name.endsWith('.webp')) return 'image/webp';
   if (name.endsWith('.png')) return 'image/png';
   if (name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'image/jpeg';
   return fallback || '';
@@ -3802,6 +3825,7 @@ function openWizard(step) {
 }
 
 function closeWizard() {
+  if (bagUploadSession) cancelBagLogoWizard();
   state.wizardStep = null;
   closeColourPopover();
   document.body.classList.remove('wizard-open');
@@ -3849,11 +3873,11 @@ function renderEditStep() {
       <input id="wizardRemoveBg" type="checkbox" ${state.removeBg ? 'checked' : ''} />
     </label>
     <p class="wizard-helper-text">Removes simple backgrounds. Does not turn photos into printable logos.</p>
-    <label class="switch-row">
+    <label class="switch-row" ${state.productType === 'bag' ? 'hidden style="display:none"' : ''}>
       <span>Fix floating regions</span>
       <input id="wizardFixFloatingRegions" type="checkbox" ${state.fixFloatingRegions ? 'checked' : ''} />
     </label>
-    <p class="wizard-helper-text">Use this if your logo has separate pieces that are not connected to the main shape.</p>
+    <p class="wizard-helper-text">${state.productType === 'bag' ? 'Separate logo pieces are supported by the tag backing.' : 'Use this if your logo has separate pieces that are not connected to the main shape.'}</p>
   `;
   els.wizardFooter.innerHTML = `
     <button class="secondary-button" type="button" data-wizard-action="cancel">Cancel</button>
@@ -4213,6 +4237,7 @@ async function handleWizardAction(action) {
     return;
   }
   if (action === 'confirm') {
+    if (state.uploadTarget === 'bag') { await completeBagLogoWizard(); return; }
     if (state.uploadTarget === 'hype') {
       completeHypeLogoImport();
       closeWizard();
@@ -5767,7 +5792,7 @@ function processArtwork(artwork, options = {}) {
   ({ canvas, ctx, img, data, width, height } = addTransparentCanvasPadding(canvas, ctx, width, height));
   let floatingSupportMask = null;
   let floatingSupportRgb = null;
-  if (state.fixFloatingRegions) {
+  if (state.fixFloatingRegions && state.productType !== 'bag') {
     floatingSupportRgb = hexToRgb(state.floatingSupportColour || DEFAULT_FLOATING_SUPPORT_COLOUR);
     floatingSupportMask = connectFloatingRegionsOnCanvas(canvas, ctx, floatingSupportRgb);
     img = ctx.getImageData(0, 0, width, height);
@@ -5839,7 +5864,14 @@ function processArtwork(artwork, options = {}) {
   const meaningfulColourCount = printableClusters.filter((cluster) => (
     cluster.count >= Math.max(12, printableWeight * 0.006)
   )).length;
-  let naturalColourCount = Math.min(Math.max(stableClusters.length, meaningfulColourCount, printableClusters.length ? 1 : 0), 8);
+  // Raster edge blends can occupy many pixels without forming a solid region.
+  // Do not let their total area override the interior-region stability check.
+  // Explicit vector palettes retain their meaningful source colour count.
+  let naturalColourCount = Math.min(Math.max(
+    stableClusters.length,
+    artwork.type === 'svg' ? meaningfulColourCount : 0,
+    printableClusters.length ? 1 : 0,
+  ), 8);
   const requestedColourCount = clamp(Number(state.targetColorCount) || 8, 1, 8);
   const plaqueTraceQuality = normalizePlaqueTraceQuality(state.plaque.traceQuality);
   const frontColoursWereCustomized = state.productType === 'plaque'
@@ -5878,6 +5910,9 @@ function processArtwork(artwork, options = {}) {
     }
     const mapped = remap.get(regionIndex[i]);
     regionIndex[i] = mapped ?? nearestCluster(main, sourceByOriginal.get(regionIndex[i])?.rgb);
+  }
+  if (state.productType === 'bag' && artwork.type !== 'svg') {
+    assignBagEdgeColours(regionIndex, alphaMask, data, main, width, height);
   }
   if (state.productType === 'plaque' && artwork.type !== 'svg') {
     assignPlaqueRasterPixelsToFinalColours(regionIndex, alphaMask, alphaValues, data, main, width, height);
@@ -5941,6 +5976,41 @@ function processArtwork(artwork, options = {}) {
       plaqueLabelledMap?.warnings || [],
     ),
   };
+}
+
+// Grow confirmed source inks into antialiased edges. A global RGB nearest
+// match can introduce an unrelated ink (for example gold along blue/white).
+function assignBagEdgeColours(labels, mask, data, palette, width, height) {
+  const length=labels.length, seeds=new Int16Array(length).fill(-1);
+  const distance=new Int32Array(length).fill(-1), queue=new Int32Array(length);
+  let head=0,tail=0;
+  for(let i=0;i<length;i++){
+    if(!mask[i]||data[i*4+3]<230)continue;
+    // Palette clustering snaps neutral inks to black/white. Compare using the
+    // same normalization so solid charcoal remains a seed instead of being
+    // overwritten by neighbouring white during the edge-only flood fill.
+    const raw=[data[i*4],data[i*4+1],data[i*4+2]],normalized=normalizeVectorRgb(raw);
+    let best=-1,error=Infinity;
+    palette.forEach((colour,k)=>{
+      const d=Math.min(
+        colour.rgb.reduce((sum,v,c)=>sum+(v-raw[c])**2,0),
+        colour.rgb.reduce((sum,v,c)=>sum+(v-normalized[c])**2,0));
+      if(d<error){error=d;best=k;}
+    });
+    if(error<=20*20){seeds[i]=best;distance[i]=0;queue[tail++]=i;}
+  }
+  if(!tail)return;
+  const rgbError=(i,k)=>palette[k].rgb.reduce((sum,v,c)=>sum+(v-data[i*4+c])**2,0);
+  while(head<tail){
+    const i=queue[head++],x=i%width;
+    for(const j of [x?i-1:-1,x<width-1?i+1:-1,i-width,i+width]){
+      if(j<0||j>=length||!mask[j])continue;
+      const next=distance[i]+1;
+      if(distance[j]<0){distance[j]=next;seeds[j]=seeds[i];queue[tail++]=j;}
+      else if(distance[j]===next&&rgbError(j,seeds[i])<rgbError(j,seeds[j]))seeds[j]=seeds[i];
+    }
+  }
+  for(let i=0;i<length;i++)if(seeds[i]>=0)labels[i]=seeds[i];
 }
 
 function getColourClusterTolerance() {
@@ -7195,6 +7265,7 @@ function buildWarnings({ artwork, clusters, main, islands, tinyShapes, opaqueCou
 }
 
 function renderPreview() {
+  if (state.productType === 'bag') return;
   if (state.previewRenderTimer) {
     clearTimeout(state.previewRenderTimer);
     state.previewRenderTimer = null;
@@ -7345,6 +7416,7 @@ function resetRotation() {
 }
 
 function updateStats() {
+  if (state.productType === 'bag') { els.dimensionStat.textContent = bagDimensionLabel(); syncMobileCommandBar(); return; }
   const preset = SIZE_PRESETS[state.size];
   const usage = USAGE_PRESETS[state.usage] || USAGE_PRESETS.indoor;
   const activeUsage = getActiveUsagePreset();
@@ -7421,6 +7493,7 @@ function svgPointArea(points) {
 }
 
 function updateProjectControls() {
+  if (state.productType === 'bag') { els.saveProject.disabled = !bagReady() || state.orderInProgress; els.placeOrder.disabled = !bagReady() || !state.customerEmail || state.orderInProgress; els.placeOrder.textContent = state.orderInProgress ? 'Preparing Order...' : bagOrderButtonLabel(); syncMobileCommandBar(); return; }
   if (!els.saveProject) return;
   const hasLedArtwork = hasOrderableLedArtwork();
   const hasHypeLogo = hasOrderableHypeLogo();
@@ -7437,6 +7510,7 @@ function updateProjectControls() {
 }
 
 function getDesignName() {
+  if (state.productType === 'bag') return bagState().name || `${bagState().text} Bag Tag`;
   if (state.productType === 'plaque') return state.designName.trim() || 'My Custom 3D Plaque';
   return state.designName.trim() || 'My Custom LED Sign';
 }
@@ -7455,6 +7529,7 @@ function updateRangeFill(input) {
 }
 
 function renderPreviewTitle() {
+  if (state.productType === 'bag') { els.previewTitle.textContent = bagState().name || 'Custom Bag Tag'; return; }
   if (state.productType === 'hype') {
     const hypeDesignName = state.designName.trim();
     const generatedHypeName = /^(classic|spinner) hype chain$/i.test(hypeDesignName);
@@ -7470,6 +7545,7 @@ function renderPreviewTitle() {
 }
 
 function startDesignNameEdit() {
+  if (state.productType === 'bag') { els.previewTitle.hidden = true; els.editDesignName.hidden = true; els.designName.hidden = false; els.designName.value = bagState().name || getDesignName(); els.designName.focus(); els.designName.select(); return; }
   if (state.isDefaultPreview) {
     state.isDefaultPreview = false;
     if (!state.designName.trim()) state.designName = '';
@@ -7483,6 +7559,7 @@ function startDesignNameEdit() {
 }
 
 function finishDesignNameEdit() {
+  if (state.productType === 'bag') { bagState().name = els.designName.value.trim(); els.designName.hidden = true; els.previewTitle.hidden = false; els.editDesignName.hidden = false; renderPreviewTitle(); return; }
   if (els.designName.hidden) return;
   state.designName = els.designName.value.trim();
   els.designName.hidden = true;
@@ -7493,6 +7570,7 @@ function finishDesignNameEdit() {
 }
 
 async function saveProjectFile() {
+  if (state.productType === 'bag') return saveBagProject();
   if (state.productType === 'hype') {
     await saveHypeChainProjectFile();
     return;
@@ -7552,6 +7630,7 @@ async function saveProjectFile() {
 }
 
 async function placeOrderRequest() {
+  if (state.productType === 'bag') return orderBagTag();
   if (state.productType === 'hype') {
     await placeHypeChainOrder();
     return;
@@ -7637,6 +7716,7 @@ async function openProjectFiles(fileList) {
 }
 
 async function buildSignGuyProject() {
+  if (state.productType === 'bag') return buildBagProject();
   renderThree();
   const screenshotBlob = await captureVisualizerBlob();
   const screenshotDataUrl = await blobToDataUrl(screenshotBlob);
@@ -7740,6 +7820,7 @@ async function getArtworkProjectDataUrl() {
 }
 
 async function restoreSignGuyProject(project, options = {}) {
+  if (project?.type === 'SignGuy.BagTagStudio') { validateSignGuyProject(project); return restoreBagProject(project); }
   validateSignGuyProject(project);
   const isExampleProject = options.isExampleProject === true;
   const isDefaultPreviewProject = options.asDefaultPreview === true;
@@ -7755,7 +7836,9 @@ async function restoreSignGuyProject(project, options = {}) {
   const config = project.config || {};
   const source = project.source;
   const isPlaqueProject = project.type === 'SignGuy.WallPlaqueStudio' || config.productType === 'plaque';
+  const restoreProductType = state.productType;
   const image = await loadImage(source.dataUrl);
+  if ((isExampleProject || isDefaultPreviewProject) && state.productType !== restoreProductType) return;
   state.isDefaultPreview = isDefaultPreviewProject;
   state.projectId = isExampleProject ? null : (project.id || makeProjectId());
   state.fileName = isExampleProject ? '' : (source.fileName || `${project.name || 'saved-design'}.${source.artworkType || 'png'}`);
@@ -7875,6 +7958,7 @@ async function restoreSignGuyProject(project, options = {}) {
       cacheDefaultPlaqueProcessed: isExampleProject,
       defaultPlaqueProject: project,
     });
+    if (isExampleProject && state.productType !== 'plaque') return;
     selectProductType('plaque');
   } else {
     applyStateToControls();
@@ -7885,7 +7969,7 @@ async function restoreSignGuyProject(project, options = {}) {
 }
 
 function validateSignGuyProject(project) {
-  const supported = project?.type === 'SignGuy.LightboxStudio'
+  const supported = project?.type === 'SignGuy.BagTagStudio' || project?.type === 'SignGuy.LightboxStudio'
     || project?.type === 'SignGuy.HypeChainStudio'
     || project?.type === 'SignGuy.WallPlaqueStudio';
   if (!project || !supported || !project.source?.dataUrl) {
@@ -8262,7 +8346,7 @@ async function makeProjectUploadLogoFile(project, options = {}) {
 
 async function makeCompactOrderProject(project) {
   const compact = JSON.parse(JSON.stringify(project));
-  if (compact.source?.dataUrl) {
+  if (compact.source?.dataUrl && compact.type !== 'SignGuy.BagTagStudio') {
     const sourceName = compact.source.fileName || 'uploaded-logo.png';
     compact.source.dataUrl = await makeCompactLogoDataUrl(compact.source.dataUrl);
     compact.source.fileName = sourceName.replace(/\.(heic|heif|jpe?g|png)$/i, '.png') || 'uploaded-logo.png';
@@ -8364,7 +8448,7 @@ function redirectToShopifyCheckout(project, uploadResult = {}) {
   const params = new URLSearchParams();
 
   params.set('id', variantId);
-  params.set('quantity', '1');
+  params.set('quantity', project.type === 'SignGuy.BagTagStudio' ? String(bagTotalQuantity(project.config.bag)) : '1');
   params.set('return_to', '/cart');
 
   if (state.customerEmail) {
@@ -8374,7 +8458,21 @@ function redirectToShopifyCheckout(project, uploadResult = {}) {
   setShopifyOrderField(params, 'Customer email', state.customerEmail || '');
   setShopifyOrderField(params, 'Design name', project.name || getDesignName());
 
-  if (project.type === 'SignGuy.HypeChainStudio') {
+  if (project.type === 'SignGuy.BagTagStudio') {
+    const bag = project.config.bag;
+    setShopifyOrderField(params, 'Product', 'Custom Team Bag Tag');
+    setShopifyOrderField(params, 'Usage', bag.usage === 'outdoor' ? 'Outdoor' : 'Indoor');
+    setShopifyOrderField(params, 'Order type', bag.orderMode==='team'?'Team order':'Single tag');
+    if(bag.orderMode==='team'){
+      bagOrderRows(bag).forEach((row,index)=>params.set(`properties[Tag ${index+1}]`,`${row.name} · Qty ${row.quantity}`));
+      setShopifyOrderField(params, 'Total tags', bagTotalQuantity(bag));
+    }else setShopifyOrderField(params, 'Name', bag.text);
+    setShopifyOrderField(params, 'Font', bag.font);
+    setShopifyOrderField(params, 'Base colour', bag.baseColour);
+    setShopifyOrderField(params, 'Text colour', bag.textColour);
+    setShopifyOrderField(params, 'Dimensions', `${bagDimensionLabel()}; front only`);
+    setShopifyOrderField(params, 'Logo colours and relief', JSON.stringify(bag.palette));
+  } else if (project.type === 'SignGuy.HypeChainStudio') {
     const spinner = state.hype.variant === 'spinner' && typeof syncHypeSpinnerConfig === 'function'
       ? syncHypeSpinnerConfig()
       : null;
@@ -8482,6 +8580,7 @@ function clearCheckoutFallback() {
 }
 
 function getShopifyVariantId() {
+  if (state.productType === 'bag') return window.SIGN_STUDIO_BAG_TAG_VARIANT_ID || BAG_TAG_VARIANTS[bagState().usage] || '';
   if (state.productType === 'hype') return SHOPIFY_HYPE_CHAIN_VARIANTS[state.hype.variant] || SHOPIFY_HYPE_CHAIN_VARIANTS.classic;
   if (state.productType === 'plaque') return SHOPIFY_CUSTOM_3D_WALL_PLAQUE_VARIANTS[state.size]?.[getPlaqueUsageKey()] || '';
   return SHOPIFY_CUSTOM_LOGO_BAR_LIGHT_VARIANTS[state.size]?.[state.usage] || '';
@@ -8712,6 +8811,7 @@ function summarizeProjectRecord(project) {
 }
 
 function currentProjectType() {
+  if (state.productType === 'bag') return 'SignGuy.BagTagStudio';
   if (state.productType === 'hype') return 'SignGuy.HypeChainStudio';
   if (state.productType === 'plaque') return 'SignGuy.WallPlaqueStudio';
   return 'SignGuy.LightboxStudio';
@@ -8819,6 +8919,7 @@ function describeSubmitError(error) {
 }
 
 async function captureSubmissionScreenshots() {
+  if (state.productType === 'bag') return captureBagShots();
   const originalRotation = { ...state.rotation };
   const shots = [];
   try {
@@ -8884,6 +8985,7 @@ async function submitDesignToEndpoint({ endpoint, subject, body, screenshots }) 
 }
 
 function captureVisualizerBlob() {
+  if (state.productType === 'bag') { renderBagView(); return new Promise(resolve => bagView.renderer.domElement.toBlob(resolve, 'image/png')); }
   return new Promise((resolve, reject) => {
     const source = state.three?.renderer?.domElement;
     if (!source) {
