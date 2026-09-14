@@ -8,7 +8,7 @@
     <title>MySignGuy.ca Sign Studio</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23151515'/%3E%3Cpath d='M7 21.5h18v3H7zM9.5 7.5h13v11h-13z' fill='%23ffc529'/%3E%3Cpath d='M12 10h8v6h-8z' fill='%23151515'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="./styles.css?v=3.1" />
-    <link rel="stylesheet" href="./assets/bag-tag/bag-tag.css?v=3.1-hide-backing-label" />
+    <link rel="stylesheet" href="./assets/bag-tag/bag-tag.css?v=3.1-compact-desktop" />
   </head>
   <body class="studio-loading">
     <main class="app-shell">
@@ -134,8 +134,10 @@
   </div>
   <div class="bag-backing-row"><label class="hype-field">Backing<select data-bag="backing"><option value="auto">Auto</option><option value="circle">Circle</option><option value="custom">Custom</option></select></label><button type="button" id="bagAlignment" class="secondary-button" disabled>Set alignment centre</button><span id="bagBackingResult" aria-live="polite"></span></div>
   <h3 class="bag-heading">Name &amp; Quantity</h3>
+  <div class="bag-name-controls">
   <div class="bag-order-mode bag-usage-buttons" role="group" aria-label="Order type"><button type="button" class="option-button active" data-bag-mode="single" aria-pressed="true">Single tag</button><button type="button" class="option-button" data-bag-mode="team" aria-pressed="false">Team order</button></div>
   <div class="bag-name-grid"><label class="hype-field">Name on tag<input type="text" data-bag="text" maxlength="32" value="YOUR NAME" autocomplete="off" /></label><label class="hype-field">Font<select data-bag="font"><option>Bebas Neue Bold</option><option>Bungee</option><option>Montserrat Black</option><option>Soccer League</option></select></label><label class="hype-field">Quantity<input type="number" data-bag="quantity" min="1" max="999" value="1" /></label></div>
+  </div>
   <section id="bagTeamEditor" hidden aria-label="Team roster"><div id="bagRosterRows"></div><div class="bag-roster-tools"><button type="button" class="secondary-button" id="bagAddName">Add name</button><button type="button" class="secondary-button" id="bagPasteRoster">Paste a roster</button><button type="button" class="secondary-button" id="bagReviewTeam">Review all tags</button></div><p id="bagRosterStatus" role="status"></p></section>
   <h3 class="bag-heading">Tag colours</h3>
   <div class="bag-colour-grid"><div class="bag-colour-card bag-logo-colours"><h4>Logo</h4><p class="bag-raise-help" id="bagRaiseHelp" hidden>Logo: black/white flat; other colours +2 mm. Name always raised.</p><div id="bagPalette" aria-describedby="bagRaiseHelp"></div></div><label class="hype-field bag-colour-card">Base<input type="color" data-bag="baseColour" value="#000000" /></label><label class="hype-field bag-colour-card">Text<input type="color" data-bag="textColour" value="#ffffff" /></label></div>

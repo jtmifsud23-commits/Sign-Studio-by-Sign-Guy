@@ -160,3 +160,39 @@
 .product-bag #dimensionStat{display:none!important}
 
 #bagBackingResult{display:none!important}
+
+/* Compact the desktop editor without clipping controls on shorter windows. */
+@media(min-width:901px){
+  .product-bag .control-panel{gap:6px}
+  #bagTagControls{padding:8px}
+  .bag-heading{margin:6px 0 4px;font-size:14px}
+  .bag-backing-row{margin:5px 0;gap:8px}
+  .bag-name-controls:has(.bag-team-font){display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:8px;align-items:center}
+  .bag-name-controls:has(.bag-team-font) .bag-order-mode{margin:0;gap:4px}
+  .bag-name-controls:has(.bag-team-font) .bag-order-mode button{font-size:10px;padding:4px;min-height:32px}
+  .bag-team-font .hype-field{display:flex;flex-direction:row;align-items:center;gap:5px;font-size:11px;min-width:0}
+  .bag-team-font select{flex:1;width:0;min-width:0;height:32px;min-height:32px;font-size:11px;padding:3px 5px}
+  #bagRosterRows{max-height:108px;margin-top:4px}
+  .bag-roster-row{padding:2px;gap:4px}
+  #bagTeamEditor input{height:30px;min-height:30px}
+  .bag-roster-tools{margin-top:4px;gap:5px}
+  #bagRosterStatus{margin:3px 0}
+  .bag-colour-grid{grid-template-columns:minmax(0,1fr) 76px 76px;gap:5px}
+  .bag-colour-grid .bag-colour-card,.bag-colour-grid .bag-logo-colours,.bag-colour-grid:has(.bag-palette-row) .bag-logo-colours{display:flex;flex-direction:row;align-items:center;gap:6px;padding:5px;min-height:38px}
+  .bag-colour-card h4{margin:0;font-size:11px}
+  .bag-colour-card.hype-field{font-size:11px}
+  #bagPalette{flex:1;gap:3px}
+  .bag-adjustments{margin-top:5px;padding-top:5px}
+  .bag-adjust-grid{gap:3px 8px;margin:4px 0 0}
+  #bagTagControls .plaque-layer-reset{height:27px;min-height:27px}
+  .bag-adjust-heading .secondary-button{min-height:26px}
+  #bagMessage{margin:4px 0 0}
+  #bagMessage:empty{display:none}
+}
+@media(min-width:901px){
+  .product-bag .control-panel>.product-switcher .product-tab{min-height:33px;padding:4px 3px}
+  .bag-top-row .upload-zone,.bag-top-row .bag-usage-panel{padding:6px}
+  .bag-top-row .bag-usage-buttons button{min-height:32px}
+  .product-bag .project-list{grid-template-columns:repeat(auto-fill,84px);max-height:66px}
+  .product-bag .project-thumb{height:62px;aspect-ratio:auto}
+}
