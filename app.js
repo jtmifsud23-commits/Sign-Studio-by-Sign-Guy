@@ -8315,13 +8315,15 @@ function isLocalTesting() {
 
 async function makeEmailLogoPreviewFile(project) {
   try {
-    const dataUrl = project.type === 'SignGuy.HypeChainStudio'
+    const dataUrl = ['SignGuy.HypeChainStudio', 'SignGuy.BagTagStudio'].includes(project.type)
       ? project.source?.dataUrl
       : state.artwork?.dataUrl || project.source?.dataUrl;
 
     if (!dataUrl) return null;
 
-    const fileName = project.type === 'SignGuy.HypeChainStudio'
+    const fileName = project.type === 'SignGuy.BagTagStudio'
+      ? 'bag-tag-logo-preview.png'
+      : project.type === 'SignGuy.HypeChainStudio'
       ? 'hype-chain-logo-preview.png'
       : (project.type === 'SignGuy.WallPlaqueStudio' ? 'wall-plaque-logo-preview.png' : 'led-sign-logo-preview.png');
 
@@ -8337,7 +8339,7 @@ async function makeProjectUploadLogoFile(project, options = {}) {
   const sourceDataUrl = project.source?.dataUrl || '';
   const sourceName = project.source?.fileName || (project.type === 'SignGuy.HypeChainStudio' ? 'hype-chain-logo.png' : `${baseName()}.png`);
   if (!options.compact) {
-    return project.type === 'SignGuy.HypeChainStudio'
+    return ['SignGuy.HypeChainStudio', 'SignGuy.BagTagStudio'].includes(project.type)
       ? dataUrlToFile(sourceDataUrl, sourceName)
       : state.uploadedFile || dataUrlToFile(sourceDataUrl, sourceName);
   }
