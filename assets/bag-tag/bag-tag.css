@@ -158,3 +158,5 @@
 #bagTeamEditor input{background:linear-gradient(#232627,#17191a);border:1px solid var(--line);border-radius:7px;color:var(--ink);font-family:inherit;font-weight:700}
 
 .product-bag #dimensionStat{display:none!important}
+
+#bagBackingResult{display:none!important}
