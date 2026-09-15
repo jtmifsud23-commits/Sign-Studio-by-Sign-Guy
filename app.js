@@ -1686,7 +1686,14 @@ function getMobileCheckoutSelectionLabel() {
 }
 
 function getMobilePlaceOrderDisabledReason() {
-  if (state.productType === 'bag') return !bagReady() ? 'Upload a logo and enter a name' : !state.customerEmail ? 'Enter your email first' : '';
+  if (state.productType === 'bag') {
+    const b=bagState();
+    if(b.busy)return 'Preparing your logo';
+    if(b.error)return b.error;
+    if(!b.source)return 'Upload a logo first';
+    if(!bagNamesValid(b))return b.orderMode==='team'?'Check every roster name and quantity':'Enter a name and valid quantity';
+    return !state.customerEmail?'Enter your email first':'';
+  }
   if (state.productType === 'hype') {
     if (!hasOrderableHypeLogo()) return 'Upload a logo first';
   } else if (state.productType === 'plaque') {
