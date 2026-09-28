@@ -12,17 +12,8 @@ const HYPE_SPINNER_CONNECTOR_ENTRY_CLEARANCE_DROP_Y = -11;
 const HYPE_SPINNER_BASE_FORWARD_DEPTH_OFFSET = 20;
 const HYPE_SPINNER_FIXED_CENTER_LOGO_FORWARD_DEPTH_OFFSET = 20;
 const HYPE_SPINNER_FIXED_CENTER_LOGO_VERTICAL_OFFSET = 0;
-const HYPE_UPLOADED_TOP_HOOK_BASE_WIDTH = 26;
-const HYPE_UPLOADED_TOP_HOOK_TUBE_RADIUS = 2.6;
-const HYPE_UPLOADED_TOP_HOOK_LEG_LENGTH = 18;
-const HYPE_UPLOADED_TOP_HOOK_VISIBLE_STEM = 3.2;
-const HYPE_UPLOADED_TOP_HOOK_HOLE_LOCAL_RISE = 4.8;
-const HYPE_UPLOADED_TOP_HOOK_MAX_CENTER_DROP = 18;
-const HYPE_UPLOADED_TOP_HOOK_MAX_CENTER_DROP_RATIO = 0.16;
 const HYPE_UPLOADED_LOGO_BODY_Y_OFFSET = -25;
 const HYPE_EXAMPLE_LOGO_BODY_Y_OFFSET = -28;
-const HYPE_UPLOADED_HOOK_ANCHOR_Y_OFFSET = -10;
-const HYPE_EXAMPLE_HOOK_ANCHOR_Y_OFFSET = -30;
 const HYPE_ATTACHMENT_LINK_HOLE_CONTACT_FROM_BOTTOM = 0.18;
 const HYPE_PENDANT_FRAME_PADDING = 1.24;
 const HYPE_PENDANT_BOTTOM_SAFE_PADDING = 0.18;
@@ -2162,7 +2153,7 @@ function createHypeLogoPendantFromAlpha(dataUrl, options) {
     face.frustumCulled = false;
     group.add(face);
 
-    const hook = skipHook ? null : makeHypePendantHookMesh(silhouette, bodyMaterial, resources, depth);
+    const hook = skipHook ? null : makeHypePendantHookMesh(silhouette, bodyMaterial, resources);
     if (hook) {
       group.add(hook);
       alignHypeChainRigToPendantHook(hook);
@@ -2205,138 +2196,60 @@ function isHypeObjectAttachedToCurrentModel(object) {
   return false;
 }
 
-function makeHypePendantHookMesh(silhouette, bodyMaterial, resources, depth) {
-  if (!window.THREE) return null;
-  const usableWidth = Math.max(1, silhouette.uvBounds?.width || 120);
-  const desiredWidth = clamp(usableWidth * 0.2, 27, 34);
-  const geometry = makeHypeUploadedTopHookGeometry();
+// Source STL: 11.4364 x 16 x 3 mm. Widen by 25%; local depth is 4 mm.
+function makeHypePendantHookMesh(silhouette, bodyMaterial, resources) {
+  if (!window.THREE || !window.SIGN_GUY_PENDANT_HOOK_SOURCE) return null;
+  const width = clamp((silhouette.uvBounds?.width || 120) * 0.27, 27, 38);
+  const scaleY = width / (11.43644380569458 * 1.25);
+  const scaleX = width / 11.43644380569458;
+  const points = silhouette.points?.length ? silhouette.points : silhouette.shape.getPoints(80).map(p => [p.x, p.y]);
+  // Intersect the actual outline beneath the tab instead of using a separate
+  // vertical offset. Stretch only the buried base to reach uneven contours.
+  const tops = [];
+  for (let sample = 0; sample <= 32; sample += 1) {
+    const x = -width / 2 + width * sample / 32;
+    let top = -Infinity;
+    for (let i = 0; i < points.length; i += 1) {
+      const a = points[i];
+      const b = points[(i + 1) % points.length];
+      if (Math.abs(b[0] - a[0]) < 1e-8) {
+        if (Math.abs(x - a[0]) < 1e-6) top = Math.max(top, a[1], b[1]);
+      } else if (x >= Math.min(a[0], b[0]) && x <= Math.max(a[0], b[0])) {
+        top = Math.max(top, a[1] + (x - a[0]) / (b[0] - a[0]) * (b[1] - a[1]));
+      }
+    }
+    if (Number.isFinite(top)) tops.push(top);
+  }
+  const outlineTop = tops.length ? Math.max(...tops) : silhouette.topY;
+  const outlineLow = tops.length ? Math.min(...tops) : outlineTop;
+  const offset = getHypeLogoPendantOffset(silhouette);
+  const seamY = outlineTop + offset.y;
+  const embeddedDepth = Math.max(8 * scaleY, outlineTop - outlineLow + 2);
+  const positions = new Float32Array(window.SIGN_GUY_PENDANT_HOOK_SOURCE);
+  for (let i = 0; i < positions.length; i += 3) {
+    positions[i] *= scaleX;
+    const y = positions[i + 1];
+    positions[i + 1] = y < 8 ? (y - 8) / 8 * embeddedDepth : (y - 8) * scaleY;
+    positions[i + 2] *= 4 / 3;
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.computeVertexNormals();
   geometry.computeBoundingBox();
-  const size = new THREE.Vector3();
-  geometry.boundingBox.getSize(size);
-  const hookMaterial = bodyMaterial.clone();
-  hookMaterial.polygonOffset = true;
-  hookMaterial.polygonOffsetFactor = 2;
-  hookMaterial.polygonOffsetUnits = 2;
-  resources.push(geometry, hookMaterial);
-
-  const xyScale = desiredWidth / Math.max(size.x, 0.001);
-  const zScale = (depth * 0.5) / Math.max(size.z, 0.001);
-  const hookHeight = size.y * xyScale;
-  const hookAnchorY = getHypePendantTopCenterY(silhouette);
-  const hookTopEdgeY = getHypeUploadedHookAnchorYOffset() + hookAnchorY;
-  const hookPositionY = hookTopEdgeY
-    + HYPE_UPLOADED_TOP_HOOK_VISIBLE_STEM
-    - HYPE_UPLOADED_TOP_HOOK_LEG_LENGTH * xyScale;
-
+  geometry.computeBoundingSphere();
+  resources.push(geometry);
   const hookGroup = new THREE.Group();
   hookGroup.name = 'uploadedLogoPendantHookAssembly';
-  hookGroup.position.z = 0;
-  hookGroup.userData.extraDrop = 0;
-  hookGroup.userData.shortLogoChainDrop = getShortLogoChainDrop(silhouette);
-
-  const hook = new THREE.Mesh(geometry, hookMaterial);
+  const hook = new THREE.Mesh(geometry, bodyMaterial);
   hook.name = 'uploadedLogoPendantHook';
-  hook.scale.set(xyScale, xyScale, zScale);
-  hook.position.set(0, hookPositionY, -0.2);
-  hook.userData.holeCenterLocalY = HYPE_UPLOADED_TOP_HOOK_LEG_LENGTH
-    + HYPE_UPLOADED_TOP_HOOK_HOLE_LOCAL_RISE;
-  hook.renderOrder = 0;
+  hook.position.set(offset.x, seamY, 0);
+  hook.userData.holeCenterLocalY = 4 * scaleY;
+  hook.userData.thicknessMm = 4;
+  hook.userData.exposedHeight = 8 * scaleY;
   hook.castShadow = true;
   hook.receiveShadow = true;
-  hook.frustumCulled = false;
   hookGroup.add(hook);
-
-  addHypeUploadedHookShoulderWelds(hookGroup, hookMaterial, resources, {
-    xyScale,
-    zScale,
-    hookPositionY,
-  });
-
-  console.info('Pendant Hook added to uploaded-logo pendant', {
-    source: 'procedural-top-loop',
-    anchorY: Number(hookTopEdgeY.toFixed(2)),
-    anchorX: 0,
-    visibleStem: Number(HYPE_UPLOADED_TOP_HOOK_VISIBLE_STEM.toFixed(2)),
-    width: Number(desiredWidth.toFixed(2)),
-    height: Number(hookHeight.toFixed(2)),
-    exampleProject: Boolean(state.hype.isExampleProject),
-    shortLogoChainDrop: Number(hookGroup.userData.shortLogoChainDrop.toFixed(2)),
-    zOffset: Number(hookGroup.position.z.toFixed(2)),
-  });
   return hookGroup;
-}
-
-function getHypeUploadedHookAnchorYOffset() {
-  return state.hype.isExampleProject ? HYPE_EXAMPLE_HOOK_ANCHOR_Y_OFFSET : HYPE_UPLOADED_HOOK_ANCHOR_Y_OFFSET;
-}
-
-function makeHypeUploadedTopHookGeometry() {
-  const halfWidth = HYPE_UPLOADED_TOP_HOOK_BASE_WIDTH / 2;
-  const archCenterY = HYPE_UPLOADED_TOP_HOOK_LEG_LENGTH;
-  const points = [];
-  points.push(new THREE.Vector3(-halfWidth, 0, 0));
-  points.push(new THREE.Vector3(-halfWidth, archCenterY, 0));
-  const arcSegments = 28;
-  for (let i = 1; i <= arcSegments; i += 1) {
-    const angle = Math.PI - (i / arcSegments) * Math.PI;
-    points.push(new THREE.Vector3(
-      Math.cos(angle) * halfWidth,
-      archCenterY + Math.sin(angle) * halfWidth,
-      0,
-    ));
-  }
-  points.push(new THREE.Vector3(halfWidth, 0, 0));
-  const curve = new THREE.CatmullRomCurve3(points, false, 'centripetal', 0.5);
-  const geometry = new THREE.TubeBufferGeometry(curve, 72, HYPE_UPLOADED_TOP_HOOK_TUBE_RADIUS, 18, false);
-  geometry.computeBoundingBox();
-  const center = new THREE.Vector3();
-  geometry.boundingBox.getCenter(center);
-  geometry.translate(-center.x, -geometry.boundingBox.min.y, -center.z);
-  geometry.computeBoundingBox();
-  return geometry;
-}
-
-function addHypeUploadedHookShoulderWelds(hookGroup, material, resources, placement) {
-  if (!window.THREE) return;
-  const { xyScale, zScale, hookPositionY } = placement;
-  const halfWidth = HYPE_UPLOADED_TOP_HOOK_BASE_WIDTH / 2;
-  const shoulderY = HYPE_UPLOADED_TOP_HOOK_LEG_LENGTH;
-  [-1, 1].forEach((side) => {
-    const weldGeometry = new THREE.SphereBufferGeometry(
-      HYPE_UPLOADED_TOP_HOOK_TUBE_RADIUS * 1.04,
-      18,
-      12,
-    );
-    resources.push(weldGeometry);
-    const weld = new THREE.Mesh(weldGeometry, material);
-    weld.name = side < 0 ? 'uploadedLogoPendantHookLeftShoulderWeld' : 'uploadedLogoPendantHookRightShoulderWeld';
-    weld.scale.set(xyScale, xyScale, zScale);
-    weld.position.set(side * halfWidth * xyScale, hookPositionY + shoulderY * xyScale, -0.2);
-    weld.renderOrder = 0;
-    weld.castShadow = true;
-    weld.receiveShadow = true;
-    weld.frustumCulled = false;
-    hookGroup.add(weld);
-  });
-}
-
-function getHypePendantTopCenterY(silhouette) {
-  const topY = Number.isFinite(silhouette?.topY) ? silhouette.topY : NaN;
-  const candidate = Number.isFinite(silhouette?.hookAnchorY)
-    ? silhouette.hookAnchorY
-    : (Number.isFinite(silhouette?.centerTopY) ? silhouette.centerTopY : topY);
-  if (Number.isFinite(topY) && Number.isFinite(candidate)) {
-    const height = Math.max(1, Number(silhouette?.uvBounds?.height) || 1);
-    const maxDrop = clamp(
-      height * HYPE_UPLOADED_TOP_HOOK_MAX_CENTER_DROP_RATIO,
-      8,
-      HYPE_UPLOADED_TOP_HOOK_MAX_CENTER_DROP,
-    );
-    return clamp(candidate, topY - maxDrop, topY);
-  }
-  if (Number.isFinite(candidate)) return candidate;
-  if (Number.isFinite(topY)) return topY;
-  return 0;
 }
 
 function alignHypeChainRigToPendantHook(hookGroup) {
