@@ -2252,42 +2252,41 @@ function makeHypePendantHookMesh(silhouette, bodyMaterial, resources) {
   return hookGroup;
 }
 
+// The bundled link lies along local X and has a 7 mm round section.
+// Its negative-X end becomes the bottom curve after the attachment rotation.
+// Use that curve's centreline as the threading anchor, not a rotated world box.
+function getHypeAttachmentThreadingAnchor(attachmentLink) {
+  const geometry = attachmentLink.geometry;
+  if (!geometry.boundingBox) geometry.computeBoundingBox();
+  const box = geometry.boundingBox;
+  const tubeRadius = (box.max.z - box.min.z) / 2;
+  return new THREE.Vector3(
+    box.min.x + tubeRadius,
+    (box.min.y + box.max.y) / 2,
+    (box.min.z + box.max.z) / 2,
+  );
+}
+
 function alignHypeChainRigToPendantHook(hookGroup) {
   const chainRig = state.hypeThree?.group?.getObjectByName?.('hypeChainAttachmentRig');
   const attachmentLink = chainRig?.getObjectByName?.('pendantAttachmentLink');
   const hook = hookGroup?.getObjectByName?.('uploadedLogoPendantHook');
-  if (!chainRig) return;
-  chainRig.position.y = HYPE_UPLOADED_CHAIN_DROP_Y;
-  if (!attachmentLink || !hook || !window.THREE) return;
+  if (!chainRig || !attachmentLink || !hook || !window.THREE) return;
+  const holeY = Number(hook.userData.holeCenterLocalY);
+  if (!Number.isFinite(holeY)) return;
 
   state.hypeThree.group.updateMatrixWorld(true);
-  const hookBox = new THREE.Box3().setFromObject(hook);
-  const linkBox = new THREE.Box3().setFromObject(attachmentLink);
-  if (hookBox.isEmpty() || linkBox.isEmpty()) return;
-
-  const hookHeight = Math.max(1, hookBox.max.y - hookBox.min.y);
-  const hookHoleCenterY = getUploadedHookHoleCenterY(hook, hookBox, hookHeight);
-  const linkHeight = Math.max(1, linkBox.max.y - linkBox.min.y);
-  const linkContactY = linkBox.min.y + linkHeight * HYPE_ATTACHMENT_LINK_HOLE_CONTACT_FROM_BOTTOM;
-  const rigDeltaY = clamp(
-    hookHoleCenterY - linkContactY,
-    -HYPE_HOOK_CHAIN_ALIGN_LIMIT,
-    HYPE_HOOK_CHAIN_ALIGN_LIMIT,
-  );
-  const shortLogoChainDrop = clamp(Number(hookGroup.userData?.shortLogoChainDrop) || 0, 0, HYPE_SHORT_LOGO_CHAIN_DROP_MAX);
-  chainRig.position.y += rigDeltaY - shortLogoChainDrop;
-  chainRig.userData.hookAlignmentDeltaY = rigDeltaY;
-  chainRig.userData.shortLogoChainDrop = shortLogoChainDrop;
-}
-
-function getUploadedHookHoleCenterY(hook, hookBox, hookHeight) {
-  const holeCenterLocalY = Number(hook?.userData?.holeCenterLocalY);
-  if (window.THREE && Number.isFinite(holeCenterLocalY)) {
-    const holeCenter = new THREE.Vector3(0, holeCenterLocalY, 0);
-    hook.localToWorld(holeCenter);
-    return holeCenter.y;
-  }
-  return hookBox.max.y - hookHeight * HYPE_HOOK_HOLE_CENTER_FROM_TOP;
+  const holeCenter = hook.localToWorld(new THREE.Vector3(0, holeY, 0));
+  const linkAnchor = attachmentLink.localToWorld(getHypeAttachmentThreadingAnchor(attachmentLink));
+  // Both anchors must use the rig parent's coordinates. World Y changes with
+  // viewing rotation and cannot be added directly to the rig's local Y.
+  const parent = chainRig.parent;
+  parent.worldToLocal(holeCenter);
+  parent.worldToLocal(linkAnchor);
+  const delta = holeCenter.sub(linkAnchor);
+  chainRig.position.add(delta);
+  chainRig.updateMatrixWorld(true);
+  chainRig.userData.hookAlignmentDelta = delta.toArray();
 }
 
 function makeHypePendantColourLayers(silhouette, resources) {
