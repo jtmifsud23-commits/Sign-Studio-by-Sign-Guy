@@ -1,0 +1,19 @@
+/* Keep Studio design labels and preview links inside their own cart item. */
+.cart-item__details:has(a[href*="sign-studio-by-sign-guy.vercel.app/uploads/"]) {
+  min-width: 0;
+}
+.cart-item__details:has(a[href*="sign-studio-by-sign-guy.vercel.app/uploads/"]) dl .product-option {
+  display: block !important;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cart-item__details:has(a[href*="sign-studio-by-sign-guy.vercel.app/uploads/"]) dl .product-option dt,
+.cart-item__details:has(a[href*="sign-studio-by-sign-guy.vercel.app/uploads/"]) dl .product-option dd {
+  display: block !important;
+  white-space: normal !important;
+  word-break: normal !important;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+  margin-left: 0 !important;
+}
