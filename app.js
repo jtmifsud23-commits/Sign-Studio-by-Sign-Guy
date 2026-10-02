@@ -8451,7 +8451,9 @@ async function makeRasterLogoPreviewDataUrl(dataUrl) {
 }
 
 function redirectToShopifyCheckout(project, uploadResult = {}) {
-  const variantId = getShopifyVariantId();
+  // Use the saved design, not mutable controls after the asynchronous upload.
+  const hype = project.type === 'SignGuy.HypeChainStudio' ? project.config.hype : null;
+  const variantId = hype ? SHOPIFY_HYPE_CHAIN_VARIANTS[hype.variant] : getShopifyVariantId();
   if (!variantId) throw new Error('No matching Shopify variant was found.');
   const projectName = `${projectFileBaseName(project)}.SignGuy`;
   const params = new URLSearchParams();
@@ -8483,26 +8485,26 @@ function redirectToShopifyCheckout(project, uploadResult = {}) {
     setShopifyOrderField(params, '_Dimensions', `${bagDimensionLabel()}; front only`);
     setShopifyOrderField(params, '_Logo colours and relief', JSON.stringify(bag.palette));
   } else if (project.type === 'SignGuy.HypeChainStudio') {
-    const spinner = state.hype.variant === 'spinner' && typeof syncHypeSpinnerConfig === 'function'
-      ? syncHypeSpinnerConfig()
-      : null;
+    const spinner = hype.variant === 'spinner' ? hype.spinner : null;
+    const patternLength = getHypePatternLength(hype.patternLength);
+    if (uploadResult.previewUrl) setShopifyOrderField(params, 'Design preview', uploadResult.previewUrl);
     setShopifyOrderField(params, 'Product', 'Hype Chain');
-    setShopifyOrderField(params, 'Style', state.hype.variant === 'spinner' ? 'Spinner' : 'Classic');
+    setShopifyOrderField(params, 'Style', hype.variant === 'spinner' ? 'Spinner' : 'Classic');
     if (spinner) {
       setShopifyOrderField(params, 'Spinner top text', spinner.topText);
       setShopifyOrderField(params, 'Spinner bottom text', spinner.bottomText);
       setShopifyOrderField(params, 'Spinner ring font', spinner.fontFamily);
-      setShopifyOrderField(params, 'Spinner ring colour', spinner.ringColor);
-      setShopifyOrderField(params, 'Spinner text colour', spinner.textColor);
-      setShopifyOrderField(params, 'Spinner base colour', spinner.baseColor);
+      setShopifyOrderField(params, 'Spinner ring colour', getOrderColourName(spinner.ringColor));
+      setShopifyOrderField(params, 'Spinner text colour', getOrderColourName(spinner.textColor));
+      setShopifyOrderField(params, 'Spinner base colour', getOrderColourName(spinner.baseColor));
     }
-    setShopifyOrderField(params, 'Pattern length', `${getHypePatternLength()} link${getHypePatternLength() === 1 ? '' : 's'}`);
-    setShopifyOrderField(params, 'Primary chain colour', normalizeHex(state.hype.primary));
-    if (getHypePatternLength() >= 2) setShopifyOrderField(params, 'Secondary chain colour', normalizeHex(state.hype.secondary));
-    if (getHypePatternLength() >= 3) setShopifyOrderField(params, 'Tertiary chain colour', normalizeHex(state.hype.tertiary));
-    setShopifyOrderField(params, 'Connector and attachment colour', normalizeHex(state.hype.primary));
-    setShopifyOrderField(params, 'Pendant backing sides and hook colour', getHypePendantBodyColour());
-    setShopifyOrderField(params, 'Chain length', state.hype.chainLength);
+    setShopifyOrderField(params, 'Pattern length', `${patternLength} link${patternLength === 1 ? '' : 's'}`);
+    setShopifyOrderField(params, 'Primary chain colour', getOrderColourName(hype.primary));
+    if (patternLength >= 2) setShopifyOrderField(params, 'Secondary chain colour', getOrderColourName(hype.secondary));
+    if (patternLength >= 3) setShopifyOrderField(params, 'Tertiary chain colour', getOrderColourName(hype.tertiary));
+    setShopifyOrderField(params, 'Connector and attachment colour', getOrderColourName(hype.primary));
+    setShopifyOrderField(params, 'Pendant backing sides and hook colour', getOrderColourName(hype.pendantCasing || hype.pendant));
+    setShopifyOrderField(params, 'Chain length', hype.chainLength);
   } else if (project.type === 'SignGuy.WallPlaqueStudio') {
     const usage = USAGE_PRESETS[getPlaqueUsageKey()] || USAGE_PRESETS.indoor;
     setShopifyOrderField(params, 'Product', '3D Wall Plaque');
@@ -8529,7 +8531,31 @@ function redirectToShopifyCheckout(project, uploadResult = {}) {
 function setShopifyOrderField(params, label, value) {
   const safeValue = value == null ? '' : String(value);
   params.set(`properties[${label}]`, safeValue);
-  params.set(`attributes[${label}]`, safeValue);
+}
+
+// Descriptive colour names, not filament SKUs. Exact colours stay in the .SignGuy file.
+function getOrderColourName(value) {
+  const hex = normalizeHex(value).toLowerCase();
+  const named = {
+    '#ffffff': 'White', '#000000': 'Black', '#010202': 'Black', '#95022f': 'Maroon',
+    '#ff0000': 'Red', '#00ff00': 'Lime green', '#0000ff': 'Blue', '#ffff00': 'Yellow',
+    '#f2e6db': 'Cream', '#e8c16b': 'Gold', '#d6d9d2': 'Light grey', '#a6aaa4': 'Grey',
+    '#807b4d': 'Olive', '#913827': 'Rust', '#f4f1eb': 'Off-white', '#b62035': 'Red',
+    '#ee3e70': 'Pink', '#ff6080': 'Coral pink', '#fb7447': 'Coral', '#ff9a19': 'Orange',
+    '#ffc400': 'Golden yellow', '#f3ef45': 'Yellow', '#88c43f': 'Lime green',
+    '#00a651': 'Green', '#2f7f3b': 'Forest green', '#16b8c1': 'Turquoise',
+    '#0b86c8': 'Sky blue', '#003f8c': 'Royal blue', '#001c42': 'Navy blue',
+    '#5148a8': 'Violet', '#4a2765': 'Purple', '#5d6674': 'Slate grey',
+    '#dfe2e2': 'Light grey', '#55585b': 'Charcoal', '#202326': 'Charcoal',
+  };
+  if (named[hex]) return named[hex];
+  const rgb = colour => [1, 3, 5].map(offset => parseInt(colour.slice(offset, offset + 2), 16));
+  const input = rgb(hex);
+  const closest = Object.keys(named).reduce((best, colour) => {
+    const distance = rgb(colour).reduce((sum, channel, index) => sum + (channel - input[index]) ** 2, 0);
+    return distance < best.distance ? { colour, distance } : best;
+  }, { colour: '#000000', distance: Infinity });
+  return `${named[closest.colour]} (custom shade)`;
 }
 
 function isEmbeddedInFrame() {

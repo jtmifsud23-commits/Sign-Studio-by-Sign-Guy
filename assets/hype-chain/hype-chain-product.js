@@ -3085,6 +3085,7 @@ async function saveHypeChainProjectFile() {
 }
 
 async function placeHypeChainOrder() {
+  if (state.orderInProgress) return;
   if (!hasOrderableHypeLogo() || !state.customerEmail) {
     updateProjectControls();
     return;
@@ -3093,6 +3094,9 @@ async function placeHypeChainOrder() {
   closeOnboarding();
   clearCheckoutFallback();
   state.orderInProgress = true;
+  const orderControls = document.querySelector('.app-shell');
+  const controlsWereInert = orderControls?.inert || false;
+  if (orderControls) orderControls.inert = true;
   els.placeOrder.disabled = true;
   els.placeOrder.textContent = 'Placing Order...';
   syncMobileCommandBar();
@@ -3101,6 +3105,10 @@ async function placeHypeChainOrder() {
     const project = await buildHypeChainProject();
     const localOrder = isLocalTesting();
     const screenshots = await captureHypeSubmissionScreenshots();
+    // The shared preview is the same snapshot stored in this production file.
+    const savedPreview = dataUrlToBlob(project.preview.screenshotDataUrl);
+    screenshots[0].blob = savedPreview;
+    screenshots[0].file = new File([savedPreview], screenshots[0].fileName, { type: savedPreview.type });
     const uploadResult = localOrder
       ? { ok: true, localTesting: true, emailSent: false }
       : await uploadProjectFolder(project, {
@@ -3129,6 +3137,8 @@ async function placeHypeChainOrder() {
     state.orderInProgress = false;
     els.placeOrder.textContent = 'Place Order';
     updateProjectControls();
+  } finally {
+    if (orderControls) orderControls.inert = controlsWereInert;
   }
 }
 
