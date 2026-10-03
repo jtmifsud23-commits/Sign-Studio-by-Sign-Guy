@@ -8125,6 +8125,11 @@ function renderProjectLog() {
 }
 
 function getProjectPreviewImage(project) {
+  // Older Hype Chain saves framed the whole chain. Show their artwork until
+  // they are saved again with a pendant-focused preview.
+  if (project?.type === 'SignGuy.HypeChainStudio' && project.preview?.focus !== 'pendant') {
+    return project.source?.dataUrl || project.preview?.screenshotDataUrl || '';
+  }
   return project?.preview?.screenshotDataUrl || project?.source?.dataUrl || '';
 }
 

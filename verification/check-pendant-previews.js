@@ -1,0 +1,51 @@
+// Run with agent-browser eval --stdin. Saves only to the test browser's local DB.
+(async () => {
+  const checks = [];
+  const check = (ok, label) => { if (!ok) throw new Error(label); checks.push(label); };
+  queueEmailMarketingSubscription = () => {};
+  trackSignStudioEvent = () => {};
+  await initializeStudioApp(); hideAppLoading(); hideProductSelectionMenu(); closeOnboarding();
+  if (!isLocalTesting() && !location.hostname.endsWith('vercel.app')) throw new Error('Use a verification browser');
+  const example = await fetch('./assets/hype-chain/default-hype-chain.SignGuy').then(r => r.json());
+  example.customerEmail = 'pendant-preview-test@example.com';
+  await restoreSignGuyProject(example);
+  state.customerEmail = example.customerEmail;
+  state.hype.isExampleProject = false;
+  state.previewZoom = 0.5;
+  state.previewPan = { x: 40, y: -25 };
+  state.hype.rotation = { x: 35, y: 150 };
+  const originalView = JSON.stringify({zoom:state.previewZoom,pan:state.previewPan,rotation:state.hype.rotation});
+  const classic = await buildHypeChainProject({ forceNewId: true });
+  check(classic.preview.focus === 'pendant', 'Classic saves a pendant-focused preview');
+  check(JSON.stringify({zoom:state.previewZoom,pan:state.previewPan,rotation:state.hype.rotation}) === originalView, 'Save preserves editor zoom, pan and rotation');
+  const img = await loadImage(classic.preview.screenshotDataUrl);
+  check(img.naturalWidth === 640 && img.naturalHeight === 480, 'Thumbnail has a consistent 4:3 frame');
+  state.previewZoom = 2.4; state.previewPan = {x:-70,y:55}; state.hype.rotation = {x:-30,y:-90};
+  const second = await buildHypeChainProject({forceNewId:true});
+  check(classic.preview.screenshotDataUrl === second.preview.screenshotDataUrl, 'Thumbnail is independent of editor view');
+  const legacy = structuredClone(classic); delete legacy.preview.focus;
+  check(getProjectPreviewImage(legacy) === legacy.source.dataUrl, 'Existing saves show their identifying artwork');
+  check(getProjectPreviewImage(classic) === classic.preview.screenshotDataUrl, 'New saves show their rendered pendant');
+  check(getProjectPreviewImage({type:'SignGuy.LightboxStudio',preview:{screenshotDataUrl:'led'},source:{dataUrl:'logo'}}) === 'led', 'Other product previews are preserved');
+  await saveProjectRecord(classic);
+  await refreshProjectLog({forcePreviews:true});
+  const stored = await getProjectRecord(classic.id);
+  check(stored.preview.screenshotDataUrl === classic.preview.screenshotDataUrl && stored.preview.focus === 'pendant', 'Pendant preview survives saved-design storage');
+  await restoreSignGuyProject(stored);
+  check(state.hype.logoDataUrl === classic.source.dataUrl && state.hype.variant === 'classic', 'Saved design restores the same pendant');
+  state.hype.variant = 'spinner';
+  state.hype.spinner.topText = 'PENDANT'; state.hype.spinner.bottomText = 'PREVIEW';
+  const spinner = await buildHypeChainProject({forceNewId:true});
+  check(spinner.preview.focus === 'pendant' && spinner.config.hype.variant === 'spinner', 'Spinner saves its pendant assembly');
+  check(spinner.preview.screenshotDataUrl !== classic.preview.screenshotDataUrl, 'Spinner ring produces a distinct preview');
+  const gallery = document.createElement('div'); gallery.id = 'pendant-preview-proof';
+  gallery.style.cssText = 'position:fixed;inset:0;z-index:999999;background:#202223;display:flex;align-items:center;justify-content:center;gap:24px;color:white;flex-wrap:wrap';
+  for (const [name,project] of [['Classic',classic],['Spinner',spinner],['Existing save',legacy]]) {
+    const card = document.createElement('div'); card.textContent = name;
+    const image = document.createElement('img'); image.src = getProjectPreviewImage(project);
+    image.style.cssText = 'display:block;width:320px;height:240px;object-fit:contain'; card.append(image); gallery.append(card);
+  }
+  document.body.append(gallery);
+  window.pendantPreviewProof = {classic,spinner,legacy};
+  return {passed:checks.length,checks};
+})();

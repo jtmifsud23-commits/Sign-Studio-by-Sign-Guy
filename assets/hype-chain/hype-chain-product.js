@@ -2054,10 +2054,14 @@ function makeHypeLogoPendantMesh(material, resources, options = {}) {
   group.scale.set(pendantScale, pendantScale, pendantScale);
   const pendantSize = options.pendantSize || getHypeLogoPendantSize();
   const pendantDepth = 11;
+  let resolveTextureReady;
+  const textureReady = new Promise((resolve) => { resolveTextureReady = resolve; });
   const texture = new THREE.TextureLoader().load(state.hype.logoDataUrl, () => {
     texture.needsUpdate = true;
+    resolveTextureReady();
     renderHypeThree();
-  });
+  }, undefined, () => resolveTextureReady());
+  texture.userData = { ...texture.userData, ready: textureReady };
   texture.encoding = THREE.sRGBEncoding;
   texture.anisotropy = Math.min(state.hypeThree?.renderer?.capabilities?.getMaxAnisotropy?.() || 4, 8);
   texture.minFilter = THREE.LinearFilter;
@@ -2126,8 +2130,10 @@ function createHypeLogoPendantFromAlpha(dataUrl, options) {
     logoYOffset,
   } = options;
   const image = new Image();
+  let resolveGeometryReady;
+  group.userData.ready = new Promise((resolve) => { resolveGeometryReady = resolve; });
   image.onload = () => {
-    if (!isHypeObjectAttachedToCurrentModel(group)) return;
+    if (!isHypeObjectAttachedToCurrentModel(group)) { resolveGeometryReady(); return; }
     const silhouette = makeAlphaSilhouettePendantShape(image, pendantSize.width, pendantSize.height);
     const pendantOffset = getHypeLogoPendantOffset(silhouette, { skipHook, logoYOffset });
     const bodyGeometry = makeAlphaSilhouettePendantGeometry(silhouette.shape, depth);
@@ -2162,6 +2168,8 @@ function createHypeLogoPendantFromAlpha(dataUrl, options) {
     updateHypeCameraFocus(state.hypeThree?.pendantGroup || group);
     renderHypeThree();
   };
+  image.addEventListener('load', () => resolveGeometryReady());
+  image.addEventListener('error', () => resolveGeometryReady());
   image.src = dataUrl;
 }
 
@@ -3146,7 +3154,7 @@ async function buildHypeChainProject(options = {}) {
   syncHypeDerivedColours();
   let screenshotDataUrl = '';
   try {
-    const screenshotBlob = await captureHypeVisualizerBlob();
+    const screenshotBlob = await captureHypePendantPreviewBlob();
     screenshotDataUrl = await blobToDataUrl(screenshotBlob);
   } catch (error) {
     console.warn('Could not capture Hype Chain preview for save; using logo fallback.', error);
@@ -3178,6 +3186,7 @@ async function buildHypeChainProject(options = {}) {
     },
     preview: {
       screenshotDataUrl,
+      focus: 'pendant',
       colours: [
         { label: 'Primary chain', display: normalizeHex(state.hype.primary) },
         ...(getHypePatternLength() >= 2 ? [{ label: 'Secondary chain', display: normalizeHex(state.hype.secondary) }] : []),
@@ -3342,6 +3351,97 @@ async function captureHypeSubmissionScreenshots() {
     ...shot,
     file: new File([shot.blob], shot.fileName, { type: 'image/png' }),
   }));
+}
+
+async function captureHypePendantPreviewBlob() {
+  await ensureHypeThreePreviewReady();
+  if (state.hype.variant === 'spinner') {
+    await loadHypeSpinnerStlGeometries();
+    buildHypeThreeModel();
+  }
+  const { renderer, environmentLights } = state.hypeThree;
+  let pendantGroup;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    pendantGroup = state.hypeThree.pendantGroup;
+    if (!pendantGroup) throw new Error('The Hype Chain pendant is not ready yet.');
+    const geometryReady = [];
+    pendantGroup.traverse((object) => { if (object.userData.ready) geometryReady.push(object.userData.ready); });
+    await Promise.all(geometryReady);
+    const textures = new Set();
+    pendantGroup.traverse((object) => {
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      materials.forEach((material) => { if (material?.map) textures.add(material.map); });
+    });
+    await Promise.all([...textures].map((texture) => texture.userData?.ready));
+    // Font loading or a pending editor render can replace the model while the
+    // artwork loads. Capture the current assembly, never a detached old one.
+    if (pendantGroup !== state.hypeThree.pendantGroup) continue;
+    if ([...textures].some((texture) => !texture.image)) {
+      throw new Error('The Hype Chain pendant artwork could not be loaded.');
+    }
+    break;
+  }
+  if (pendantGroup !== state.hypeThree.pendantGroup) throw new Error('The Hype Chain pendant is still loading.');
+
+  // Render a separate front-facing pendant so editor zoom, pan and rotation
+  // cannot hide the identifying artwork in a saved design.
+  const scene = new THREE.Scene();
+  Object.values(environmentLights).forEach((light) => {
+    const copy = light.clone();
+    copy.castShadow = false;
+    scene.add(copy);
+  });
+  const pendant = pendantGroup.clone(true);
+  pendant.position.set(0, 0, 0);
+  pendant.rotation.set(0, 0, 0);
+  const ring = pendant.getObjectByName('rotatingOuterTextRing');
+  if (ring) ring.rotation.z = 0;
+  scene.add(pendant);
+  scene.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(pendant);
+  if (box.isEmpty()) throw new Error('The Hype Chain pendant has no preview geometry.');
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const width = 640;
+  const height = 480;
+  const camera = new THREE.PerspectiveCamera(36, width / height, HYPE_CAMERA_NEAR, HYPE_CAMERA_FAR);
+  const halfFov = Math.tan(THREE.Math.degToRad(camera.fov) / 2);
+  const distance = Math.max(size.y / (2 * halfFov), size.x / (2 * halfFov * camera.aspect)) * 1.15 + size.z / 2;
+  camera.position.set(center.x, center.y, center.z + distance);
+  camera.lookAt(center);
+  camera.updateMatrixWorld(true);
+  const target = new THREE.WebGLRenderTarget(width, height);
+  target.texture.encoding = renderer.outputEncoding;
+  const previousTarget = renderer.getRenderTarget();
+  const pixels = new Uint8Array(width * height * 4);
+  try {
+    renderer.setRenderTarget(target);
+    renderer.render(scene, camera);
+    renderer.readRenderTargetPixels(target, 0, 0, width, height, pixels);
+  } finally {
+    renderer.setRenderTarget(previousTarget);
+    target.dispose();
+    renderHypeThree();
+  }
+  const artwork = document.createElement('canvas');
+  artwork.width = width;
+  artwork.height = height;
+  const artworkContext = artwork.getContext('2d');
+  const image = artworkContext.createImageData(width, height);
+  for (let y = 0; y < height; y += 1) {
+    image.data.set(pixels.subarray((height - 1 - y) * width * 4, (height - y) * width * 4), y * width * 4);
+  }
+  artworkContext.putImageData(image, 0, 0);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  drawHypeScreenshotBackground(ctx, width, height);
+  ctx.drawImage(artwork, 0, 0);
+  return new Promise((resolve, reject) => canvas.toBlob((blob) => {
+    if (blob) resolve(blob);
+    else reject(new Error('The Hype Chain pendant preview could not be captured.'));
+  }, 'image/png'));
 }
 
 async function captureHypeVisualizerBlob() {
