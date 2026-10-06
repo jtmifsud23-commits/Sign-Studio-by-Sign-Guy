@@ -13,7 +13,7 @@ export function createPaidWebhook({ env = process.env, processOrder = enqueuePai
   return async (req) => {
     const reply = (status, payload, headers) => Response.json(payload, { status, headers });
     if (req.method !== 'POST') return reply(405, { error: 'Method not allowed' }, { Allow: 'POST' });
-    const shop = String(env.SHOPIFY_STORE_DOMAIN || '').trim().toLowerCase();
+    const shop = String(env.SHOPIFY_STORE_DOMAIN || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
     const secret = env.SHOPIFY_WEBHOOK_SECRET || env.SHOPIFY_CLIENT_SECRET;
     if (!shop || !secret) return reply(503, { error: 'Payment notifications are not configured' });
     let body;

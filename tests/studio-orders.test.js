@@ -196,3 +196,13 @@ test('webhook validates exact raw bytes, signed shop/topic, payment state and qu
   assert.equal((await handler(new Request('https://studio.test/api', { method: 'GET' }))).status, 405);
   assert.equal(calls, 1);
 });
+
+test('webhook normalizes the configured shop URL without accepting a different shop', async () => {
+  for (const configuredShop of [`http://${shop}/`, ` HTTPS://${shop.toUpperCase()}/ `]) {
+    let acceptedShop;
+    const handler = createPaidWebhook({ env: { SHOPIFY_STORE_DOMAIN: configuredShop, SHOPIFY_WEBHOOK_SECRET: 'test-secret' }, processOrder: async (_order, domain) => { acceptedShop = domain; return { designs: 0 }; } });
+    assert.equal((await handler(signedRequest(paid()))).status, 200);
+    assert.equal(acceptedShop, shop);
+    assert.equal((await handler(signedRequest(paid(), { 'x-shopify-shop-domain': 'other.myshopify.com' }))).status, 403);
+  }
+});

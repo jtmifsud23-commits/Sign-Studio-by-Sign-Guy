@@ -1,4 +1,4 @@
-# Sign Studio Build 3.1.6 — releases 1 and 2
+# Sign Studio Build 3.1.7 — releases 1 and 2
 
 ## Implemented
 
@@ -12,18 +12,18 @@
 
 ## Verified locally
 
-- `pnpm test`: 17 passing tests covering four products, immutable/repeated/concurrent saves, invalid files/customer, abandoned checkout, email/queue outages, lease recovery, signed/tampered events, paid state, mixed carts, replay suppression, missing-record recovery, complete team rosters and test-order labels.
+- `pnpm test`: 18 passing tests covering four products, immutable/repeated/concurrent saves, invalid files/customer, abandoned checkout, email/queue outages, lease recovery, signed/tampered events, configured shop URL normalization, paid state, mixed carts, replay suppression, missing-record recovery, complete team rosters and test-order labels.
 - `verification/check-release-1-2.cjs`: 12 checkout scenarios at 1440px and 390px: LED, Plaque, Classic, Spinner, single Bag Tag and team Bag Tags. Real browser compaction/upload/handoff code runs against mocked private upload/save boundaries. IDs, quantities, variants, previews and roster/text properties survive; missing IDs block navigation. No browser script errors.
 - Syntax checks, client build and `git diff --check` pass.
 - `verification/order-email-release-1-2-preview.html` shows sample pending/paid emails; it sends no messages and creates no Shopify orders.
 
 ## Remaining configuration and live acceptance
 
-1. Set **SHOPIFY_WEBHOOK_SECRET** in this Vercel project's Production environment to the shop-level signing secret shown under Shopify Settings → Notifications → Webhooks. The merchant must enter this credential directly; do not paste it in chat. A manually created webhook uses this shop signing secret, not the app's `SHOPIFY_CLIENT_SECRET`.
-2. Publish the tested build, then add one Shopify **Order payment / JSON / 2026-07** webhook pointing to `https://sign-studio-by-sign-guy.vercel.app/api/shopify/orders-paid`. Inspect the existing list to avoid a duplicate. Connecting this event sends paid-order payloads from Shopify to the existing Sign Studio Vercel project.
+1. Completed: the merchant saved **SHOPIFY_WEBHOOK_SECRET** directly in this Vercel project's Production environment. A manually created webhook uses this shop signing secret, not the app's `SHOPIFY_CLIENT_SECRET`.
+2. Completed: Build 3.1.6 was published and one Shopify **Order payment / JSON / 2026-07** webhook was activated at `https://sign-studio-by-sign-guy.vercel.app/api/shopify/orders-paid`. The initial Shopify test passed HMAC validation but exposed a configured shop URL (`http://.../`) mismatch. Build 3.1.7 normalizes that setting to its exact hostname, while still rejecting other shops; publish it and repeat the signed test.
 3. Confirm both queue consumers are deployed and a small submitted design produces a queued pending email without SMTP delaying checkout.
 4. Use a Shopify test order carrying a real saved Studio ID; verify receipt → payment link → sent job → actual staff email with matching order and attachments. Re-delivery should not send an additional completed notice. Do not manufacture or mark a real customer order as paid for testing.
-5. Verify an abandoned checkout remains pending, plus a mixed cart and team-tag quantities. Verify live mobile/desktop assets and Build 3.1.6.
+5. Verify an abandoned checkout remains pending, plus a mixed cart and team-tag quantities. Verify live mobile/desktop assets and Build 3.1.7.
 
 ## Operational boundaries
 
