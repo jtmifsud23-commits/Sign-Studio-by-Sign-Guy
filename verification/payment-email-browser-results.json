@@ -1,0 +1,194 @@
+{
+  "cases": [
+    {
+      "product": "classic",
+      "viewport": 736,
+      "width": 736,
+      "scrollWidth": 736,
+      "previewCount": 2,
+      "imageBeforeDetails": true,
+      "noRawJson": true
+    },
+    {
+      "product": "spinner",
+      "viewport": 736,
+      "width": 736,
+      "scrollWidth": 736,
+      "previewCount": 2,
+      "imageBeforeDetails": true,
+      "noRawJson": true
+    },
+    {
+      "product": "led",
+      "viewport": 736,
+      "width": 736,
+      "scrollWidth": 736,
+      "previewCount": 2,
+      "imageBeforeDetails": true,
+      "noRawJson": true
+    },
+    {
+      "product": "plaque",
+      "viewport": 736,
+      "width": 736,
+      "scrollWidth": 736,
+      "previewCount": 2,
+      "imageBeforeDetails": true,
+      "noRawJson": true
+    },
+    {
+      "product": "bag-single",
+      "viewport": 736,
+      "width": 736,
+      "scrollWidth": 736,
+      "previewCount": 2,
+      "imageBeforeDetails": true,
+      "noRawJson": true
+    },
+    {
+      "product": "bag-team",
+      "viewport": 736,
+      "width": 736,
+      "scrollWidth": 736,
+      "previewCount": 4,
+      "imageBeforeDetails": true,
+      "noRawJson": true
+    },
+    {
+      "product": "provided-order",
+      "viewport": 736,
+      "width": 736,
+      "scrollWidth": 736,
+      "previewCount": 2,
+      "imageBeforeDetails": true,
+      "noRawJson": true
+    },
+    {
+      "product": "classic",
+      "viewport": 390,
+      "width": 390,
+      "scrollWidth": 390,
+      "previewCount": 2,
+      "imageBeforeDetails": true,
+      "noRawJson": true
+    },
+    {
+      "product": "spinner",
+      "viewport": 390,
+      "width": 390,
+      "scrollWidth": 390,
+      "previewCount": 2,
+      "imageBeforeDetails": true,
+      "noRawJson": true
+    },
+    {
+      "product": "led",
+      "viewport": 390,
+      "width": 390,
+      "scrollWidth": 390,
+      "previewCount": 2,
+      "imageBeforeDetails": true,
+      "noRawJson": true
+    },
+    {
+      "product": "plaque",
+      "viewport": 390,
+      "width": 390,
+      "scrollWidth": 390,
+      "previewCount": 2,
+      "imageBeforeDetails": true,
+      "noRawJson": true
+    },
+    {
+      "product": "bag-single",
+      "viewport": 390,
+      "width": 390,
+      "scrollWidth": 390,
+      "previewCount": 2,
+      "imageBeforeDetails": true,
+      "noRawJson": true
+    },
+    {
+      "product": "bag-team",
+      "viewport": 390,
+      "width": 390,
+      "scrollWidth": 390,
+      "previewCount": 4,
+      "imageBeforeDetails": true,
+      "noRawJson": true
+    },
+    {
+      "product": "provided-order",
+      "viewport": 390,
+      "width": 390,
+      "scrollWidth": 390,
+      "previewCount": 2,
+      "imageBeforeDetails": true,
+      "noRawJson": true
+    },
+    {
+      "product": "classic",
+      "viewport": 320,
+      "width": 320,
+      "scrollWidth": 320,
+      "previewCount": 2,
+      "imageBeforeDetails": true,
+      "noRawJson": true
+    },
+    {
+      "product": "spinner",
+      "viewport": 320,
+      "width": 320,
+      "scrollWidth": 320,
+      "previewCount": 2,
+      "imageBeforeDetails": true,
+      "noRawJson": true
+    },
+    {
+      "product": "led",
+      "viewport": 320,
+      "width": 320,
+      "scrollWidth": 320,
+      "previewCount": 2,
+      "imageBeforeDetails": true,
+      "noRawJson": true
+    },
+    {
+      "product": "plaque",
+      "viewport": 320,
+      "width": 320,
+      "scrollWidth": 320,
+      "previewCount": 2,
+      "imageBeforeDetails": true,
+      "noRawJson": true
+    },
+    {
+      "product": "bag-single",
+      "viewport": 320,
+      "width": 320,
+      "scrollWidth": 320,
+      "previewCount": 2,
+      "imageBeforeDetails": true,
+      "noRawJson": true
+    },
+    {
+      "product": "bag-team",
+      "viewport": 320,
+      "width": 320,
+      "scrollWidth": 320,
+      "previewCount": 4,
+      "imageBeforeDetails": true,
+      "noRawJson": true
+    },
+    {
+      "product": "provided-order",
+      "viewport": 320,
+      "width": 320,
+      "scrollWidth": 320,
+      "previewCount": 2,
+      "imageBeforeDetails": true,
+      "noRawJson": true
+    }
+  ],
+  "scriptErrors": []
+}
