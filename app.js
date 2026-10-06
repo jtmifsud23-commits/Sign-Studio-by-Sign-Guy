@@ -2760,12 +2760,17 @@ function setupFileButtonKeyboard(label, input) {
   label.addEventListener('click', () => openUploadGuide(label, input));
 }
 
+let uploadGuideEvents = null;
+
 function openUploadGuide(trigger, input) {
   const dialog = document.querySelector('#uploadGuide');
   if (dialog.open) return;
+  // A native close event can arrive after the guide has already reopened.
+  uploadGuideEvents?.abort();
   const choose = dialog.querySelector('[data-upload-choose]');
   const close = dialog.querySelector('[data-upload-close]');
   const events = new AbortController();
+  uploadGuideEvents = events;
   const options = { signal: events.signal };
   choose.addEventListener('click', () => input.click(), options);
   close.addEventListener('click', () => dialog.close(), options);
@@ -2789,10 +2794,12 @@ function openUploadGuide(trigger, input) {
     }
   }, options);
   dialog.addEventListener('close', () => {
+    if (dialog.open) return;
     events.abort();
+    uploadGuideEvents = null;
     document.body.classList.remove('upload-guide-open');
     // Native dialog restores focus synchronously, before the editor opens.
-  }, { once: true });
+  }, options);
   trigger.focus({ preventScroll: true });
   document.body.classList.add('upload-guide-open');
   dialog.showModal();

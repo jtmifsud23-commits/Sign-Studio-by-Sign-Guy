@@ -7,7 +7,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MySignGuy.ca Sign Studio</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23151515'/%3E%3Cpath d='M7 21.5h18v3H7zM9.5 7.5h13v11h-13z' fill='%23ffc529'/%3E%3Cpath d='M12 10h8v6h-8z' fill='%23151515'/%3E%3C/svg%3E" />
-    <link rel="stylesheet" href="./styles.css?v=3.1-mobile-audit" />
+    <link rel="stylesheet" href="./styles.css?v=3.1.5" />
     <link rel="stylesheet" href="./assets/bag-tag/bag-tag.css?v=3.1-compact-desktop" />
   </head>
   <body class="studio-loading">
@@ -54,7 +54,7 @@
             <span class="upload-mark" aria-hidden="true">+</span>
             <span id="chooseFileText">Upload logo</span>
           </button>
-          <p class="upload-helper-text">Best results: Use a clear PNG with a transparent background when possible.</p>
+          <p class="upload-helper-text"><strong>Use a simple, flat-colour logo.</strong> Avoid photos, gradients, glow effects and tiny details. Best file: a clear PNG with a transparent background.</p>
         </section>
 
         <section class="panel-section lightbox-settings led-studio-section">
@@ -128,7 +128,7 @@
     <div class="upload-zone hype-upload-zone">
       <button class="primary-button upload-button hype-upload-button" id="bagChooseFile" type="button"><span class="upload-mark" aria-hidden="true">+</span><span>Upload logo</span></button>
       <input id="bagLogoFile" type="file" accept=".png,.jpg,.jpeg,.webp,.svg" tabindex="-1" aria-label="Upload Bag Tag logo" />
-      <p class="upload-helper-text">Best results: Use a clear PNG with a transparent background when possible.</p>
+      <p class="upload-helper-text"><strong>Use a simple, flat-colour logo.</strong> Avoid photos, gradients, glow effects and tiny details. Best file: a clear PNG with a transparent background.</p>
     </div>
     <div class="hype-style-panel bag-usage-panel"><h3 hidden>Bag Tag</h3><p class="bag-size" hidden>80 × 106 mm · Front only</p><h3>Where will the tag be used?</h3><div class="bag-usage-buttons" role="group" aria-label="Bag Tag usage"><button class="option-button active" type="button" data-bag-usage="indoor" aria-pressed="true">Indoor</button><button class="option-button" type="button" data-bag-usage="outdoor" aria-pressed="false">Outdoor</button></div></div>
   </div>
@@ -162,7 +162,7 @@
                 <span class="upload-mark" aria-hidden="true">+</span>
                 <span id="hypeChooseFileText">Upload logo</span>
               </button>
-              <p class="upload-helper-text">Best results: Use a clear PNG with a transparent background when possible.</p>
+              <p class="upload-helper-text"><strong>Use a simple, flat-colour logo.</strong> Avoid photos, gradients, glow effects and tiny details. Best file: a clear PNG with a transparent background.</p>
             </div>
             <div class="hype-style-panel">
               <div class="section-heading">
@@ -321,7 +321,7 @@
               <span class="upload-mark" aria-hidden="true">+</span>
               <span id="plaqueChooseFileText">Upload logo</span>
             </button>
-            <p class="upload-helper-text">Best results: SVG or transparent PNG with clear separated colours.</p>
+            <p class="upload-helper-text"><strong>Use a simple, flat-colour logo.</strong> Avoid photos, gradients, glow effects and tiny details. Best file: SVG or transparent PNG with clear separated colours.</p>
           </section>
 
           <section class="plaque-section plaque-options-section">
@@ -399,7 +399,7 @@
           <p id="projectNote"></p>
         </section>
         <button class="secondary-button back-to-visualizer-button" id="backToVisualizer" type="button">Back to Visualizer</button>
-        <p class="menu-build-version">Build 3.1.4</p>
+        <p class="menu-build-version">Build 3.1.5</p>
       </aside>
 
       <section class="preview-panel" aria-label="3D lightbox preview">
@@ -783,7 +783,7 @@
           <span>Not sure which one to choose?</span>
           <a href="https://mysignguy.ca/pages/compare-products">Need help deciding? Compare products →</a>
         </p>
-        <p class="menu-build-version product-selection-build-version">Build 3.1.4</p>
+        <p class="menu-build-version product-selection-build-version">Build 3.1.5</p>
       </div>
     </section>
 
@@ -990,9 +990,22 @@
         <button class="upload-guide-close" type="button" data-upload-close aria-label="Close upload guidance">×</button>
         <header class="upload-guide-header">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6" /></svg>
-          <div><h2 id="uploadGuideTitle" tabindex="-1">Start with a clean, simple logo</h2>
-          <p id="uploadGuideDescription">Choose sharp artwork with solid colours and clear outlines.</p></div>
+          <div><h2 id="uploadGuideTitle" tabindex="-1">Upload a simple, flat-colour logo</h2>
+          <p id="uploadGuideDescription">For LED Signs, 3D Plaques, Hype Chains and Bag Tags. Use solid colours, bold outlines and clear lettering.</p></div>
         </header>
+        <section class="upload-guide-comparison" aria-label="Before and after artwork example">
+          <figure class="upload-guide-comparison-card">
+            <figcaption><h3><span class="upload-guide-3" aria-hidden="true">×</span> BEFORE: TOO COMPLEX</h3></figcaption>
+            <div class="upload-guide-comparison-image upload-guide-comparison-before"><img src="./assets/upload-guide/07-sports-logo-complex.webp" alt="Illustrative Nepean Raiders logo with blue ice shards, metallic textures and a glowing red outline" width="1495" height="1052" decoding="async" /></div>
+            <p>Glow, textures, gradients &amp; busy backgrounds</p>
+          </figure>
+          <figure class="upload-guide-comparison-card">
+            <figcaption><h3><span class="upload-guide-0" aria-hidden="true">✓</span> AFTER: WORKS WELL</h3></figcaption>
+            <div class="upload-guide-comparison-image"><img src="./assets/upload-guide/08-sports-logo-simple.webp" alt="Illustrative simplified Nepean Raiders logo using solid red, black and white with clear lettering and bold outlines" width="1494" height="1052" decoding="async" /></div>
+            <p>Solid colours, bold outlines &amp; clear lettering</p>
+          </figure>
+        </section>
+        <p class="upload-guide-logo-only">Upload the logo itself, without decorative effects.</p>
         <div class="upload-guide-examples">
           <section class="upload-guide-column"><h3><span class="upload-guide-0" aria-hidden="true">✓</span> WORKS WELL</h3>
             <div class="upload-guide-card"><div class="upload-guide-image"><img src="./assets/upload-guide/01-simple-wolf-logo.webp" alt="Simple yellow, black and white wolf head logo" width="320" height="213" decoding="async" /></div><p>Simple logos</p></div>
@@ -1005,7 +1018,7 @@
             <div class="upload-guide-card"><div class="upload-guide-image upload-guide-photo"><img src="./assets/upload-guide/06-complex-wolf-artwork.webp" alt="Detailed multicolour wolf artwork with a busy background" width="320" height="213" decoding="async" /></div><p>Busy backgrounds & gradients</p></div>
           </section>
         </div>
-        <div class="upload-guide-tip"><p><strong>BEST FILE:</strong> A high-resolution PNG with a transparent or plain background.</p><p>Avoid blurry images, tiny details, and dozens of colours.</p></div>
+        <div class="upload-guide-tip"><p><strong>BEST FILE:</strong> A high-resolution PNG with a transparent or plain background.</p><p>Avoid blurry images, tiny details, and dozens of colours. A transparent background alone does not make detailed artwork suitable.</p><p>Artwork that is too detailed may need simplification before we can make your product.</p></div>
       </div>
       <footer class="upload-guide-footer"><a href="mailto:hey@mysignguy.ca?subject=Sign%20Studio%20artwork%20help">Need help with your artwork?</a><button class="primary-button" type="button" data-upload-choose>CHOOSE MY LOGO</button></footer>
     </dialog>
@@ -1014,12 +1027,12 @@
     <script defer src="./assets/led/led-product.js?v=3.1"></script>
     <script defer src="./assets/led/led-studio.js?v=3.1"></script>
     <script defer src="./assets/hype-chain/pendant-hook-source.js?v=3.1.1"></script>
-    <script defer src="./assets/hype-chain/hype-chain-product.js?v=3.1.4"></script>
+    <script defer src="./assets/hype-chain/hype-chain-product.js?v=3.1.5"></script>
     <script defer src="./assets/plaque/plaque-product.js?v=3.1"></script>
     <script defer src="./blob-upload-client.js?v=3.1"></script>
     <script defer src="./assets/bag-tag/base-outline.js?v=3.1"></script>
     <script defer src="./assets/bag-tag/bag-tag-product.js?v=3.1-bag-email"></script>
-    <script defer src="./app.js?v=3.1.4"></script>
+    <script defer src="./app.js?v=3.1.5"></script>
     <script defer src="./submit-fix.js?v=3.1"></script>
     <script defer src="./used-colours.js?v=3.1"></script>
   </body>
