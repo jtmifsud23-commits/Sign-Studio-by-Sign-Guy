@@ -3134,10 +3134,11 @@ async function placeHypeChainOrder() {
       console.warn(storageError);
     }
     els.submitNote.textContent = localOrder
-      ? `${project.name}.SignGuy downloaded for local Hype Chain checkout testing. Email is only sent from the deployed site.`
+      ? `${project.name}.SignGuy downloaded for local review. Local testing does not send email or open checkout.`
       : `${project.name} saved. Redirecting to checkout.`;
-    setStatus('Checkout');
-    redirectToShopifyCheckout(project, uploadResult);
+    setStatus(localOrder ? 'Saved locally' : 'Checkout');
+    if (localOrder) { state.orderInProgress = false; updateProjectControls(); }
+    else redirectToShopifyCheckout(project, uploadResult);
   } catch (error) {
     console.error(error);
     els.submitNote.textContent = describeOrderError(error);

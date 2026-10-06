@@ -1,4 +1,16 @@
 {
+  "functions": {
+    "api/save-project.js": { "maxDuration": 60 },
+    "api/shopify/orders-paid.js": { "maxDuration": 60 },
+    "api/queues/shopify-paid.js": {
+      "maxDuration": 120,
+      "experimentalTriggers": [{ "type": "queue/v2beta", "topic": "studio-paid-order" }]
+    },
+    "api/queues/order-email.js": {
+      "maxDuration": 120,
+      "experimentalTriggers": [{ "type": "queue/v2beta", "topic": "studio-order-email" }]
+    }
+  },
   "rewrites": [
     { "source": "/uploads/:token/design-preview.png", "destination": "/api/design-preview?token=:token" }
   ]

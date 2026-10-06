@@ -1,15 +1,17 @@
 {
   "name": "sign-studio-by-sign-guy",
-  "version": "3.1.5",
+  "version": "3.1.6",
   "private": true,
   "packageManager": "pnpm@11.5.3",
   "type": "module",
   "scripts": {
+    "test": "node --test tests/*.test.js",
     "build": "node scripts/build-blob-client.js",
     "build:blob-client": "node scripts/build-blob-client.js"
   },
   "dependencies": {
     "@vercel/blob": "^2.4.1",
+    "@vercel/queue": "0.8.0",
     "formidable": "^3.5.4",
     "nodemailer": "^6.9.16"
   },

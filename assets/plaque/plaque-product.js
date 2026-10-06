@@ -6150,6 +6150,7 @@ function hasOrderablePlaqueArtwork() {
 }
 
 async function placePlaqueOrder() {
+  if (state.orderInProgress) return;
   if (!hasOrderablePlaqueArtwork() || !state.customerEmail) {
     updateProjectControls();
     return;
@@ -6187,10 +6188,11 @@ async function placePlaqueOrder() {
       console.warn(storageError);
     }
     els.submitNote.textContent = localOrder
-      ? `${project.name}.SignGuy downloaded for local 3D Wall Plaque checkout testing. Email is only sent from the deployed site.`
+      ? `${project.name}.SignGuy downloaded for local review. Local testing does not send email or open checkout.`
       : `${project.name} saved. Redirecting to checkout.`;
-    setStatus('Checkout');
-    redirectToShopifyCheckout(project, uploadResult);
+    setStatus(localOrder ? 'Saved locally' : 'Checkout');
+    if (localOrder) { state.orderInProgress = false; updateProjectControls(); }
+    else redirectToShopifyCheckout(project, uploadResult);
   } catch (error) {
     console.error(error);
     els.submitNote.textContent = describeOrderError(error);

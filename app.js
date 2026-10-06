@@ -7644,6 +7644,7 @@ async function saveProjectFile() {
 }
 
 async function placeOrderRequest() {
+  if (state.orderInProgress) return;
   if (state.productType === 'bag') return orderBagTag();
   if (state.productType === 'hype') {
     await placeHypeChainOrder();
@@ -7689,10 +7690,11 @@ async function placeOrderRequest() {
       console.warn(storageError);
     }
     els.submitNote.textContent = localOrder
-      ? `${project.name}.SignGuy downloaded for local checkout testing. Email is only sent from the deployed site.`
+      ? `${project.name}.SignGuy downloaded for local review. Local testing does not send email or open checkout.`
       : `${project.name} saved. Redirecting to checkout.`;
-    setStatus('Checkout');
-    redirectToShopifyCheckout(project, uploadResult);
+    setStatus(localOrder ? 'Saved locally' : 'Checkout');
+    if (localOrder) { state.orderInProgress = false; updateProjectControls(); }
+    else redirectToShopifyCheckout(project, uploadResult);
   } catch (error) {
     console.error(error);
     els.submitNote.textContent = describeOrderError(error);
@@ -8463,6 +8465,8 @@ async function makeRasterLogoPreviewDataUrl(dataUrl) {
 }
 
 function redirectToShopifyCheckout(project, uploadResult = {}) {
+  const designId = String(uploadResult.designId || '');
+  if (!/^[a-z0-9_-]{8,96}$/i.test(designId)) throw new Error('The design record was not confirmed. Please try placing your order again.');
   // Use the saved design, not mutable controls after the asynchronous upload.
   const hype = project.type === 'SignGuy.HypeChainStudio' ? project.config.hype : null;
   const variantId = hype ? SHOPIFY_HYPE_CHAIN_VARIANTS[hype.variant] : getShopifyVariantId();
@@ -8473,6 +8477,7 @@ function redirectToShopifyCheckout(project, uploadResult = {}) {
   params.set('id', variantId);
   params.set('quantity', project.type === 'SignGuy.BagTagStudio' ? String(bagTotalQuantity(project.config.bag)) : '1');
   params.set('return_to', '/cart');
+  setShopifyOrderField(params, '_Studio design ID', designId);
 
   if (state.customerEmail) {
     params.set('checkout[email]', state.customerEmail);

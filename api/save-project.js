@@ -7,16 +7,14 @@
   the incoming Vercel Function request.
 */
 
-import { get } from '@vercel/blob';
-import nodemailer from 'nodemailer';
-import { Readable } from 'node:stream';
 import { createPreviewToken } from '../src/preview-token.js';
+import { saveDesignRecord } from '../src/design-records.js';
+import { enqueueEmail } from '../src/order-notifications.js';
 
-const TO_EMAIL = 'Hey@MySignGuy.ca';
-const ORDER_SUBJECT = 'User placed a lightbox order';
 const FILE_KINDS = ['projectFile', 'logoPreview', 'logo', ...Array.from({length:100},(_,index)=>`renderScreenshot${index+1}`)];
 
-export default async function handler(req, res) {
+export function createSaveHandler({ save = saveDesignRecord, enqueue = enqueueEmail, previewToken = createPreviewToken } = {}) {
+ return async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     res.status(405).json({ error: 'Method not allowed' });
@@ -25,30 +23,27 @@ export default async function handler(req, res) {
   try {
     const payload = await readJsonBody(req);
     const submission = validateSubmission(payload);
-    let emailSent = false;
-
-    if (submission.sendOrderEmail) {
-      await sendOrderEmail(submission);
-      emailSent = true;
-    }
-
     const preview=submission.files.find(file=>file.kind==='renderScreenshot1');
-    const previewUrl=preview?`https://sign-studio-by-sign-guy.vercel.app/uploads/${createPreviewToken(preview.pathname)}/design-preview.png`:null;
+    const previewUrl=preview?`https://sign-studio-by-sign-guy.vercel.app/uploads/${previewToken(preview.pathname)}/design-preview.png`:null;
+    const record = await save(submission, { previewUrl });
+    // Only durable queue acceptance is awaited, never SMTP delivery.
+    if (submission.sendOrderEmail) await enqueue(record, { kind: 'submitted' });
     res.status(200).json({
       ok: true,
       folder: `orders/${submission.orderId}`,
       files: submission.files.map((file) => file.filename),
-      emailSent,
+      designId: record.designId,
+      emailQueued: submission.sendOrderEmail,
+      emailSent: false,
       previewUrl,
     });
   } catch (error) {
-    console.error('Could not finalize private Blob submission.', error);
-    res.status(500).json({
-      error: 'Could not save project files or send the order email.',
-      detail: error?.message || 'Unknown save error.',
-    });
+    console.error('Could not finalize Studio submission.', { errorType: error?.name || 'Error' });
+    res.status(503).json({ error: 'Could not finalize the saved design. Please try again.' });
   }
+ };
 }
+export default createSaveHandler();
 
 function readJsonBody(req) {
   if (req.body && typeof req.body === 'object') return Promise.resolve(req.body);
@@ -72,7 +67,7 @@ function readJsonBody(req) {
   });
 }
 
-function validateSubmission(payload) {
+export function validateSubmission(payload) {
   const customerEmail = String(payload?.customerEmail || '').trim().toLowerCase();
   if (!isValidEmail(customerEmail)) throw new Error('A valid customerEmail is required.');
 
@@ -129,59 +124,6 @@ function validateBlobFile(file, orderId) {
     size: Math.max(0, Number(file?.size) || 0),
     label: String(file?.label || '').slice(0, 160),
   };
-}
-
-async function sendOrderEmail(submission) {
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
-
-  await transporter.sendMail({
-    from: process.env.FROM_EMAIL || TO_EMAIL,
-    to: TO_EMAIL,
-    subject: submission.subject || ORDER_SUBJECT,
-    text: submission.message,
-    html: submission.messageHtml || makeFallbackHtml(submission.message),
-    attachments: await collectAttachments(submission.files),
-  });
-}
-
-async function collectAttachments(files) {
-  const attachments = [];
-  const sortedFiles = [...files].sort((a, b) => FILE_KINDS.indexOf(a.kind) - FILE_KINDS.indexOf(b.kind));
-  const hasLogoPreview = sortedFiles.some((file) => file.kind === 'logoPreview');
-
-  for (const file of sortedFiles) {
-    const result = await get(file.url, { access: 'private' });
-    if (!result || result.statusCode !== 200 || !result.stream) {
-      throw new Error(`Private Blob is unavailable: ${file.pathname}`);
-    }
-    const isInlineLogo = file.kind === 'logoPreview' || (!hasLogoPreview && file.kind === 'logo');
-    attachments.push({
-      filename: file.filename,
-      content: Readable.fromWeb(result.stream),
-      contentType: result.blob?.contentType || file.contentType,
-      cid: isInlineLogo ? 'uploaded-logo' : /^renderScreenshot\d+$/.test(file.kind) ? `bag-tag-${file.kind.slice(16)}` : undefined,
-      contentDisposition: isInlineLogo ? 'inline' : 'attachment',
-    });
-  }
-
-  return attachments;
-}
-
-function makeFallbackHtml(text) {
-  const body = escapeHtml(text || 'Order details are attached.');
-  return `<pre style="font-family:Arial,Helvetica,sans-serif;white-space:pre-wrap;line-height:1.45;">${body}</pre>`;
-}
-
-function escapeHtml(value) {
-  return String(value).replace(/[<>&"]/g, (char) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[char]);
 }
 
 function isValidEmail(email) {

@@ -1,0 +1,88 @@
+[
+  {
+    "width": 1440,
+    "checks": [
+      {
+        "product": "led",
+        "designIdPresent": true,
+        "expectedQuantity": "1",
+        "savedSnapshot": true
+      },
+      {
+        "product": "plaque",
+        "designIdPresent": true,
+        "expectedQuantity": "1",
+        "savedSnapshot": true
+      },
+      {
+        "product": "classic",
+        "designIdPresent": true,
+        "expectedQuantity": "1",
+        "savedSnapshot": true
+      },
+      {
+        "product": "spinner",
+        "designIdPresent": true,
+        "expectedQuantity": "1",
+        "savedSnapshot": true
+      },
+      {
+        "product": "single bag",
+        "designIdPresent": true,
+        "expectedQuantity": "2",
+        "savedSnapshot": true
+      },
+      {
+        "product": "team bag",
+        "designIdPresent": true,
+        "expectedQuantity": "3",
+        "savedSnapshot": true
+      }
+    ],
+    "saveRequests": 6,
+    "pageErrors": []
+  },
+  {
+    "width": 390,
+    "checks": [
+      {
+        "product": "led",
+        "designIdPresent": true,
+        "expectedQuantity": "1",
+        "savedSnapshot": true
+      },
+      {
+        "product": "plaque",
+        "designIdPresent": true,
+        "expectedQuantity": "1",
+        "savedSnapshot": true
+      },
+      {
+        "product": "classic",
+        "designIdPresent": true,
+        "expectedQuantity": "1",
+        "savedSnapshot": true
+      },
+      {
+        "product": "spinner",
+        "designIdPresent": true,
+        "expectedQuantity": "1",
+        "savedSnapshot": true
+      },
+      {
+        "product": "single bag",
+        "designIdPresent": true,
+        "expectedQuantity": "2",
+        "savedSnapshot": true
+      },
+      {
+        "product": "team bag",
+        "designIdPresent": true,
+        "expectedQuantity": "3",
+        "savedSnapshot": true
+      }
+    ],
+    "saveRequests": 6,
+    "pageErrors": []
+  }
+]
