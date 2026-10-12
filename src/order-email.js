@@ -8,15 +8,16 @@ const escape = value => String(value ?? '').replace(/[<>&"]/g, char => ({ '<': '
 export function makeOrderEmail(record, event, jobId) {
   const paid = event.kind === 'paid';
   const adminPreview = event.kind === 'admin_design';
+  const lockerDesign = event.kind === 'locker_design';
   const title = paid
     ? `${event.test ? 'TEST payment' : 'Payment confirmed'} — ${event.orderName}`
-    : adminPreview ? 'Admin design preview' : 'Design submitted — checkout pending';
+    : adminPreview ? 'Admin design preview' : lockerDesign ? 'Locker sign design submitted' : 'Design submitted — checkout pending';
   const envelope = {
     from: process.env.FROM_EMAIL || TO_EMAIL, to: TO_EMAIL,
     messageId: `<studio-${jobId}@mysignguy.ca>`,
     subject: `${title} | ${record.product} | ${record.name}`.slice(0, 240),
   };
-  if (paid || adminPreview) return { ...envelope, ...paidProductionEmail(record, event) };
+  if (paid || adminPreview || lockerDesign) return { ...envelope, ...paidProductionEmail(record, event) };
   const note = 'Payment has not been confirmed. This is a design submission; do not begin production from this email.';
   const summary = [title, note, `Product: ${record.product}`, `Design: ${record.name}`, `Studio design ID: ${record.designId}`, `Customer email: ${record.customerEmail}`];
   const bag = record.settings.bag;

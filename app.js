@@ -1114,7 +1114,7 @@ function renderProductSelectionAccess() {
     button.classList.toggle('is-locked', locked);
     if (lock) {
       lock.hidden = !locked;
-      lock.textContent = (choice.productType === 'locker' || choice.hypeVariant === 'spinner') && !state.isAdmin ? 'Admin only' : 'Coming soon';
+      lock.textContent = choice.hypeVariant === 'spinner' && !state.isAdmin ? 'Admin only' : 'Coming soon';
     }
   });
 }
@@ -1183,8 +1183,7 @@ function hideProductSelectionMenu() {
 }
 
 function canAccessProduct(productType) {
-  if (productType === 'locker') return state.isAdmin || isLocalTesting();
-  return productType === 'bag' || productType === 'led' || productType === 'hype' || productType === 'plaque' || state.isAdmin;
+  return productType === 'locker' || productType === 'bag' || productType === 'led' || productType === 'hype' || productType === 'plaque' || state.isAdmin;
 }
 
 function renderProductAccess() {
@@ -1706,7 +1705,7 @@ function getMobileCheckoutSelectionLabel() {
 }
 
 function getMobilePlaceOrderDisabledReason() {
-  if (state.productType === 'locker') { return 'Admin preview · Email your finished design'; }
+  if (state.productType === 'locker') { return 'Email your finished design'; }
   if (state.productType === 'bag') {
     const b=bagState();
     if(b.busy)return 'Preparing your logo';
@@ -8326,7 +8325,7 @@ async function uploadPrivateBlobAsset({ orderId, asset, endpoint }) {
       access: 'private',
       handleUploadUrl: endpoint,
       contentType: file.type || 'application/octet-stream',
-      clientPayload: JSON.stringify({ orderId, kind: asset.kind, ...(/^finalArtwork/.test(asset.kind) ? { adminToken: sessionStorage.getItem('signGuyAdminToken') } : {}) }),
+      clientPayload: JSON.stringify({ orderId, kind: asset.kind }),
     });
     return {
       kind: asset.kind,

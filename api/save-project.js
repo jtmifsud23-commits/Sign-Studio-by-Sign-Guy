@@ -28,7 +28,7 @@ export function createSaveHandler({ save = saveDesignRecord, enqueue = enqueueEm
     const previewUrl=preview?`https://sign-studio-by-sign-guy.vercel.app/uploads/${previewToken(preview.pathname)}/design-preview.png`:null;
     const record = await save(submission, { previewUrl, adminAuthorized: hasAdminSession(req) });
     // Only durable queue acceptance is awaited, never SMTP delivery.
-    if (submission.sendOrderEmail) await enqueue(record, record.product === 'Locker Room Sign' && submission.adminDesignPreview ? { kind: 'admin_design', lineItems: [{ title: 'Locker Room Sign', quantity: 1 }] } : { kind: 'submitted' });
+    if (submission.sendOrderEmail) await enqueue(record, record.product === 'Locker Room Sign' ? { kind: submission.adminDesignPreview ? 'admin_design' : 'locker_design', lineItems: [{ title: 'Locker Room Sign', quantity: 1 }] } : { kind: 'submitted' });
     res.status(200).json({
       ok: true,
       folder: `orders/${submission.orderId}`,
@@ -40,7 +40,7 @@ export function createSaveHandler({ save = saveDesignRecord, enqueue = enqueueEm
     });
   } catch (error) {
     console.error('Could not finalize Studio submission.', { errorType: error?.name || 'Error' });
-    res.status(error.statusCode || 503).json({ error: error.statusCode === 403 ? 'Admin login is required for Locker Room Signs.' : 'Could not finalize the saved design. Please try again.' });
+    res.status(error.statusCode || 503).json({ error: error.statusCode === 403 ? 'Admin login is required for admin design previews.' : 'Could not finalize the saved design. Please try again.' });
   }
  };
 }

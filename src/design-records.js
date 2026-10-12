@@ -28,7 +28,7 @@ export async function saveDesignRecord(submission, {
     throw new Error('Unsupported or incomplete SignGuy project');
   }
   if (product === 'Locker Room Sign') {
-    if (!adminAuthorized) throw Object.assign(new Error('Admin login is required for Locker Room Signs.'), { statusCode: 403 });
+    if (submission.adminDesignPreview && !adminAuthorized) throw Object.assign(new Error('Admin login is required for admin design previews.'), { statusCode: 403 });
     if (!project.outputArtwork?.pngDataUrl || !project.outputArtwork?.svgText || !['finalArtworkPng','finalArtworkSvg'].every(kind => submission.files.some(file => file.kind === kind))) throw new Error('Finished circle PNG and SVG are required');
   }
   if (String(project.customerEmail || '').trim().toLowerCase() !== submission.customerEmail) {
@@ -37,7 +37,7 @@ export async function saveDesignRecord(submission, {
   const snapshotHash = createHash('sha256').update(JSON.stringify({ submission, project })).digest('hex');
   const record = {
     schemaVersion: 1, designId: submission.orderId, snapshotHash, createdAt: now(),
-    submissionStatus: product === 'Locker Room Sign' && submission.adminDesignPreview ? 'admin_preview' : submission.sendOrderEmail ? 'checkout_pending' : 'saved',
+    submissionStatus: product === 'Locker Room Sign' && submission.adminDesignPreview ? 'admin_preview' : product === 'Locker Room Sign' && submission.sendOrderEmail ? 'design_submitted' : submission.sendOrderEmail ? 'checkout_pending' : 'saved',
     projectId: String(project.id || ''), name: String(project.name || ''),
     customerEmail: submission.customerEmail, product, projectType: project.type,
     settings: project.config,

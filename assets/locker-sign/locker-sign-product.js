@@ -282,14 +282,13 @@ async function buildLockerProject(){
  clearTimeout(lockerBuildTimer);await buildLockerSign();if(!lockerReady())throw new Error('Upload your design and enter the stick text before saving.');
  const s=lockerState(),{source,busy,error,...config}=s;
  const mapColour=colour=>{const rgb=hexToRgb(colour);let best=0,distance=Infinity;s.palette.forEach((p,k)=>{const d=p.rgb.reduce((sum,v,j)=>sum+(v-rgb[j])**2,0);if(d<distance){best=k;distance=d;}});return s.palette[best]?.colour||colour;};
- const wizardEdit=s.wizardEdit?{...s.wizardEdit,backing:mapColour(s.wizardEdit.backing),logoColourMapping:(s.wizardEdit.logoColourMapping||[]).map(m=>({...m,to:mapColour(m.to)})),textBoxes:(s.wizardEdit.textBoxes||[]).map(box=>({...box,colour:mapColour(box.colour)}))}:null;
+ const wizardEdit=s.wizardEdit?{...s.wizardEdit,backing:mapColour(s.wizardEdit.backing),logoColourMapping:(s.wizardEdit.logoColourMapping||[]).map(m=>({...m,to:mapColour(m.to)})),textBoxes:(s.wizardEdit.textBoxes||[]).map(box=>{const sourceColour=box.sourceColour||rgbToHex(s.palette.find(p=>normalizeHex(p.colour)===normalizeHex(box.colour))?.rgb||hexToRgb(box.colour));return {...box,sourceColour,colour:mapColour(sourceColour)};})}:null;
  return {type:'SignGuy.LockerSignStudio',version:PROJECT_FILE_VERSION,id:s.projectId||makeProjectId(),name:s.name||`${s.text} Locker Room Sign`,customerEmail:state.customerEmail,savedAt:new Date().toISOString(),source:{...source},outputArtwork:buildLockerFinalArtwork(),config:{productType:'locker',locker:{...config,wizardEdit,palette:s.palette.map(p=>({...p,rgb:[...p.rgb]}))},dimensions:lockerDimensions(),hardware:'hockey-glove-magnetic-v1'},preview:{screenshotDataUrl:lockerView.renderer.domElement.toDataURL('image/png'),colours:s.palette.map((p,k)=>({index:k,display:p.colour,height:p.height})),details:{style:s.style,stickText:s.text},dimensions:lockerDimensions()}};
 }
 async function saveLockerProject(){
  setStatus('Saving');try{const project=await buildLockerProject();if(!isLocalTesting())await uploadProjectFolder(project,{screenshots:await captureLockerShots()});await saveProjectRecord(project);lockerState().projectId=project.id;downloadProjectPayload(project);await refreshProjectLog();els.projectNote.textContent=`${project.name} saved ${isLocalTesting()?'locally':'to your project folder'} and downloaded as a .SignGuy file.`;setStatus('Saved');}catch(error){els.projectNote.textContent=error.message;setStatus('Save failed');}finally{updateProjectControls();}
 }
 async function restoreLockerProject(project){
- if(!canAccessProduct('locker'))throw new Error('Admin login is required for Locker Room Signs.');
  const c=project.config?.locker;if(!c||!project.source?.dataUrl||!['layered','flat'].includes(c.style)||!HYPE_SPINNER_FONT_OPTIONS.includes(c.font))throw new Error('Invalid Locker Room Sign project.');
  const image=await loadImage(c.preparedDataUrl||project.source.dataUrl);++lockerRevision;lockerImage=image;
  lockerSign={...lockerState(),...c,source:{...project.source},name:project.name,projectId:project.id,busy:false,error:'',isExample:false};
