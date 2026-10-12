@@ -7,15 +7,16 @@ const TO_EMAIL = 'Hey@MySignGuy.ca';
 const escape = value => String(value ?? '').replace(/[<>&"]/g, char => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[char]);
 export function makeOrderEmail(record, event, jobId) {
   const paid = event.kind === 'paid';
+  const adminPreview = event.kind === 'admin_design';
   const title = paid
     ? `${event.test ? 'TEST payment' : 'Payment confirmed'} — ${event.orderName}`
-    : 'Design submitted — checkout pending';
+    : adminPreview ? 'Admin design preview' : 'Design submitted — checkout pending';
   const envelope = {
     from: process.env.FROM_EMAIL || TO_EMAIL, to: TO_EMAIL,
     messageId: `<studio-${jobId}@mysignguy.ca>`,
     subject: `${title} | ${record.product} | ${record.name}`.slice(0, 240),
   };
-  if (paid) return { ...envelope, ...paidProductionEmail(record, event) };
+  if (paid || adminPreview) return { ...envelope, ...paidProductionEmail(record, event) };
   const note = 'Payment has not been confirmed. This is a design submission; do not begin production from this email.';
   const summary = [title, note, `Product: ${record.product}`, `Design: ${record.name}`, `Studio design ID: ${record.designId}`, `Customer email: ${record.customerEmail}`];
   const bag = record.settings.bag;
@@ -27,8 +28,8 @@ export function makeOrderEmail(record, event, jobId) {
   return { ...envelope, text: `${summary.join('\n')}\n\n${record.submissionEmail.text}`, html: `${header}${details}` };
 }
 
-export async function sendOrderMail(record, event, jobId) {
-  const transport = nodemailer.createTransport({
+export async function sendOrderMail(record, event, jobId, { readBlob = get, makeTransport = options => nodemailer.createTransport(options) } = {}) {
+  const transport = makeTransport({
     host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT || 587),
     secure: process.env.SMTP_SECURE === 'true',
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
@@ -37,7 +38,7 @@ export async function sendOrderMail(record, event, jobId) {
   const attachments = [];
   const hasPreview = record.files.some(file => file.kind === 'logoPreview');
   for (const file of record.files) {
-    const result = await get(file.pathname, { access: 'private' });
+    const result = await readBlob(file.pathname, { access: 'private' });
     if (!result || result.statusCode !== 200 || !result.stream) throw new Error('Notification attachment unavailable');
     const inline = file.kind === 'logoPreview' || (!hasPreview && file.kind === 'logo');
     attachments.push({

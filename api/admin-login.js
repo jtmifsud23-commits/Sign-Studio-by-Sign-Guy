@@ -1,3 +1,4 @@
+import { issueAdminToken } from '../src/admin-session.js';
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
@@ -18,7 +19,7 @@ export default async function handler(req, res) {
       return;
     }
 
-    res.status(200).json({ ok: true });
+    res.status(200).json({ ok: true, adminToken: issueAdminToken() });
   } catch (error) {
     console.error(error);
     res.status(400).json({ error: 'Could not process admin login.' });

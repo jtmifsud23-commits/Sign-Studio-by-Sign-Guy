@@ -1,0 +1,58 @@
+const {chromium}=require('C:/Users/johnm/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const wordmark={name:'wordmark.svg',mimeType:'image/svg+xml',buffer:Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="240"><rect x="15" y="35" width="570" height="160" fill="#ff2200"/><text x="300" y="148" font-size="100" text-anchor="middle" font-family="Arial" font-weight="bold" fill="#ffffff">TEAM</text></svg>')};
+(async()=>{
+ const browser=await chromium.launch({channel:'chrome',headless:true,args:['--use-gl=angle','--use-angle=swiftshader']}),page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
+ page.on('pageerror',e=>errors.push(e.message));await page.addInitScript(()=>localStorage.setItem('signGuyOnboardingDismissed','true'));
+ await page.goto('http://127.0.0.1:8780/?product=locker&preview=upload-9');await page.waitForFunction(()=>typeof lockerView!=='undefined'&&lockerView?.face&&!lockerState().busy);await page.locator('#appLoading').waitFor({state:'hidden'});
+ const report={},initial=await page.evaluate(()=>({source:lockerState().source,image:lockerImage.src,sharedFile:state.fileName}));
+ async function upload(file){await page.locator('#lockerChooseFile').click();assert.equal(await page.locator('#uploadGuide').evaluate(d=>d.open),true);const chosen=page.waitForEvent('filechooser');await page.locator('[data-upload-choose]').click();await(await chosen).setFiles(file);await page.waitForFunction(()=>state.wizardStep==='edit'&&lockerUploadSession?.logo);assert.equal(await page.locator('#uploadGuide').evaluate(d=>d.open),false);}
+ await upload(wordmark);report.guideAndEdit=true;
+ await page.locator('#lockerWizardBacking').click();await page.locator('[data-popover-tab=used]').click();
+ const uploadedUsed=await page.locator('#usedGrid [data-used-colour]').evaluateAll(buttons=>buttons.map(b=>b.dataset.usedColour));
+ assert.ok(uploadedUsed.includes('#ff2200')&&uploadedUsed.includes('#ffffff'));assert.ok(!uploadedUsed.includes('#fcd504')&&!uploadedUsed.includes('#fbcb95'));
+ await page.screenshot({path:path.join(__dirname,'locker-upload-used-logo-colours.png')});
+ await page.locator('#usedGrid [data-used-colour="#ff2200"]').click();assert.equal(await page.evaluate(()=>lockerUploadSession.edit.backing),'#ff2200');await page.locator('#closeColourPopover').click();report.usedShowsCurrentUpload=true;
+ assert.equal(await page.locator('[data-wizard-action=to-vector]').isDisabled(),true);await page.evaluate(()=>handleWizardAction('to-vector'));assert.equal(await page.evaluate(()=>state.wizardStep),'edit');assert.equal(await page.evaluate(()=>lockerReady()),false);report.nonCircularCannotProceed=true;
+ await page.locator('.locker-logo-drag').dragTo(page.locator('#lockerCircleCanvas'));await page.waitForFunction(()=>lockerUploadSession.edit.mode==='place'&&lockerCircleValidation().ok);report.dragDropWorks=true;
+ const canvas=page.locator('#lockerCircleCanvas'),r=await canvas.boundingBox();
+ await page.mouse.move(r.x+r.width/2,r.y+r.height/2);await page.mouse.down();await page.mouse.move(r.x+r.width/2+5,r.y+r.height*.58,{steps:8});
+ assert.deepEqual(await page.evaluate(()=>lockerUploadSession.snapping),{x:true,y:false});assert.equal(await page.evaluate(()=>lockerUploadSession.edit.x),0);assert.ok(await page.evaluate(()=>lockerUploadSession.edit.y>.07));
+ await page.screenshot({path:path.join(__dirname,'locker-centre-snap-horizontal.png')});await page.mouse.up();assert.equal(await page.evaluate(()=>lockerUploadSession.dragging),false);await page.locator('#lockerWizardCentre').click();
+ await page.mouse.move(r.x+r.width/2,r.y+r.height/2);await page.mouse.down();await page.mouse.move(r.x+r.width*.56,r.y+r.height/2+5,{steps:8});assert.deepEqual(await page.evaluate(()=>lockerUploadSession.snapping),{x:false,y:true});
+ await page.mouse.move(r.x+r.width/2+5,r.y+r.height/2+5,{steps:8});assert.deepEqual(await page.evaluate(()=>({x:lockerUploadSession.edit.x,y:lockerUploadSession.edit.y})),{x:0,y:0});
+ await page.screenshot({path:path.join(__dirname,'locker-centre-snap-both.png')});await page.mouse.up();report.bothAxesSnapIndependently=true;
+ await page.mouse.move(r.x+r.width/2,r.y+r.height/2);await page.mouse.down();await page.mouse.move(r.x+r.width*.95,r.y+r.height/2,{steps:8});await page.mouse.up();assert.equal(await page.locator('[data-wizard-action=to-vector]').isDisabled(),true);report.outsideCircleCannotProceed=true;
+ await page.locator('#lockerWizardCentre').click();assert.equal(await page.locator('[data-wizard-action=to-vector]').isEnabled(),true);
+ await page.locator('#lockerWizardScale').fill('80');await canvas.press('ArrowRight');assert.ok(await page.evaluate(()=>lockerUploadSession.edit.x>0));await page.locator('#lockerWizardCentre').click();
+ await page.locator('#lockerWizardBacking').click();await page.locator('#popoverHex').fill('#225588');await page.locator('#closeColourPopover').click();assert.equal(await page.evaluate(()=>lockerUploadSession.edit.backing),'#225588');report.circleColourAndKeyboard=true;
+ await page.screenshot({path:path.join(__dirname,'locker-upload-edit-placed.png')});
+ await page.locator('[data-wizard-action=to-vector]').click();await page.waitForFunction(()=>state.wizardStep==='vector');report.vectorStep=true;
+ await page.locator('#mapColorCount').fill('2');await page.waitForFunction(()=>state.processed?.colours.length===2&&!state.processingDirty);report.colourCountWorks=true;
+ await page.locator('[data-wizard-action=to-edit]').click();assert.equal(await page.locator('#lockerWizardScale').inputValue(),'80');assert.equal(await page.evaluate(()=>lockerUploadSession.edit.backing),'#225588');report.backPreservesPlacement=true;
+ await page.locator('[data-wizard-action=to-vector]').click();await page.waitForFunction(()=>state.wizardStep==='vector');await page.locator('[data-wizard-action=to-details]').click();await page.waitForFunction(()=>state.wizardStep==='details');
+ await page.locator('[data-edit-colour="0"]').click();await page.locator('#popoverHex').fill('#008844');await page.locator('#closeColourPopover').click();assert.ok(await page.evaluate(()=>state.colorOverrides.includes('#008844')));report.editColourDetailsWorks=true;
+ await page.locator('[data-wizard-action=to-vector]').click();await page.locator('[data-wizard-action=to-edit]').click();await page.locator('#lockerWizardBacking').click();await page.locator('[data-popover-tab=used]').click();
+ assert.ok(await page.locator('#usedGrid [data-used-colour="#008844"]').count()>0);await page.locator('#closeColourPopover').click();report.usedReflectsEditedColours=true;
+ await page.locator('[data-wizard-action=to-vector]').click();await page.waitForFunction(()=>state.wizardStep==='vector');await page.locator('[data-wizard-action=to-details]').click();
+ await page.screenshot({path:path.join(__dirname,'locker-upload-details.png')});
+ assert.deepEqual(await page.evaluate(()=>({source:lockerState().source,image:lockerImage.src,sharedFile:lockerUploadSession.snapshot.fileName})),initial);report.signUnchangedBeforeConfirm=true;
+ await page.locator('[data-wizard-action=confirm]').click();await page.waitForFunction(()=>lockerReady()&&state.wizardStep===null);assert.equal(await page.evaluate(()=>lockerState().circlePrepared),true);assert.equal(await page.evaluate(()=>state.fileName),initial.sharedFile);report.confirmCommitsAndRestoresSharedState=true;
+ const project=await page.evaluate(()=>buildLockerProject());assert.equal(project.source.fileName,'wordmark.svg');assert.ok(project.config.locker.preparedDataUrl);assert.ok(project.config.locker.palette.some(p=>p.colour==='#008844'));
+ await page.evaluate(project=>restoreLockerProject(project),project);await page.waitForFunction(()=>lockerReady());assert.equal(await page.evaluate(()=>lockerImage.src),project.config.locker.preparedDataUrl);report.savedProjectRestoresCircle=true;
+ const prior=await page.evaluate(()=>({source:lockerState().source,prepared:lockerState().preparedDataUrl,image:lockerImage.src,palette:lockerState().palette}));
+ await upload(wordmark);await page.locator('[data-locker-circle-mode=crop]').click();assert.equal(await page.locator('[data-wizard-action=to-vector]').isEnabled(),true);await page.locator('[data-wizard-action=cancel]').click();assert.deepEqual(await page.evaluate(()=>({source:lockerState().source,prepared:lockerState().preparedDataUrl,image:lockerImage.src,palette:lockerState().palette})),prior);report.cropAndCancel=true;
+ await upload(path.resolve('assets/locker-sign/sign-guy-example.png'));assert.equal(await page.evaluate(()=>lockerUploadSession.detectedCircle),true);assert.equal(await page.locator('[data-wizard-action=to-vector]').isEnabled(),true);report.detectsExistingCircle=true;await page.locator('#wizardClose').click();
+ report.responsive=[];
+ for(const width of [768,390,320]){
+  await page.setViewportSize({width,height:width===768?1024:844});await page.evaluate(()=>openMobileControlSheet());await upload(wordmark);
+  const bounds=await canvas.boundingBox();assert.ok(Math.abs(bounds.width-bounds.height)<2);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  await page.locator('[data-locker-circle-mode=place]').click();assert.equal(await page.locator('[data-wizard-action=to-vector]').isEnabled(),true);
+  const touch=await page.context().newCDPSession(page);await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:bounds.x+bounds.width/2,y:bounds.y+bounds.height/2,id:1}]});
+  await touch.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:bounds.x+bounds.width/2+5,y:bounds.y+bounds.height/2+5,id:1}]});
+  assert.deepEqual(await page.evaluate(()=>({x:lockerUploadSession.edit.x,y:lockerUploadSession.edit.y})),{x:0,y:0});await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await touch.detach();
+  await page.screenshot({path:path.join(__dirname,'locker-upload-edit-'+width+'.png')});report.responsive.push({width,canvasWidth:bounds.width,canvasHeight:bounds.height});await page.locator('#wizardClose').click();
+ }
+ await page.setViewportSize({width:1440,height:1000});await page.evaluate(()=>{closeMobileControlSheet();selectProductType('bag');});await page.waitForFunction(()=>state.productType==='bag');await page.locator('#bagChooseFile').click();assert.equal(await page.locator('#uploadGuide').evaluate(d=>d.open),true);const chosen=page.waitForEvent('filechooser');await page.locator('[data-upload-choose]').click();await(await chosen).setFiles(wordmark);await page.waitForFunction(()=>state.wizardStep==='edit'&&bagUploadSession);assert.equal(await page.locator('#cropBox').evaluate(e=>e.classList.contains('visible')),true);assert.equal(await page.locator('#lockerCircleCanvas').isHidden(),true);await page.locator('#wizardClose').click();report.bagWizardUnchanged=true;
+ report.errors=errors;assert.equal(errors.length,0);fs.writeFileSync(path.join(__dirname,'locker-upload-wizard-results.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));await browser.close();
+})().catch(e=>{console.error(e);process.exit(1)});

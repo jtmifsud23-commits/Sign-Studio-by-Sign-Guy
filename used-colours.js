@@ -47,7 +47,8 @@
 
   const renderUsedColours = () => {
     const isHype = document.querySelector('[data-product-type="hype"]')?.classList.contains('active');
-    if (isHype && typeof window.SignGuyRenderUsedColourGrid === 'function') {
+    const isLocker=document.body.classList.contains('product-locker');
+    if ((isHype || isLocker) && typeof window.SignGuyRenderUsedColourGrid === 'function') {
       window.SignGuyRenderUsedColourGrid();
       return;
     }
@@ -90,7 +91,7 @@
   });
 
   document.addEventListener('click', (event) => {
-    if (!event.target.closest('[data-front-colour], [data-hype-colour], [data-hype-pendant-casing], [data-hype-pendant-colour], #sideColourButton, #backColourButton')) return;
+    if (!event.target.closest('[data-front-colour], [data-hype-colour], [data-hype-pendant-casing], [data-hype-pendant-colour], [data-locker-colour], [data-locker-art-colour], #sideColourButton, #backColourButton')) return;
     window.setTimeout(renderUsedColours, 0);
   }, true);
 

@@ -7,6 +7,7 @@ const PRODUCTS = {
   'SignGuy.WallPlaqueStudio': '3D Plaque',
   'SignGuy.HypeChainStudio': 'Hype Chain',
   'SignGuy.BagTagStudio': 'Bag Tag',
+  'SignGuy.LockerSignStudio': 'Locker Room Sign',
 };
 export const validDesignId = id => typeof id === 'string' && /^[a-z0-9_-]{8,96}$/i.test(id);
 export function designPath(id) {
@@ -19,12 +20,16 @@ export async function readUploadedProject(file) {
   return new Response(result.stream).json();
 }
 export async function saveDesignRecord(submission, {
-  store = studioStore, readProject = readUploadedProject, previewUrl = null, now = () => new Date().toISOString(),
+  store = studioStore, readProject = readUploadedProject, previewUrl = null, adminAuthorized = false, now = () => new Date().toISOString(),
 } = {}) {
   const project = await readProject(submission.files.find(file => file.kind === 'projectFile'));
   const product = PRODUCTS[project?.type];
   if (!product || !project.config || typeof project.config !== 'object' || Array.isArray(project.config)) {
     throw new Error('Unsupported or incomplete SignGuy project');
+  }
+  if (product === 'Locker Room Sign') {
+    if (!adminAuthorized) throw Object.assign(new Error('Admin login is required for Locker Room Signs.'), { statusCode: 403 });
+    if (!project.outputArtwork?.pngDataUrl || !project.outputArtwork?.svgText || !['finalArtworkPng','finalArtworkSvg'].every(kind => submission.files.some(file => file.kind === kind))) throw new Error('Finished circle PNG and SVG are required');
   }
   if (String(project.customerEmail || '').trim().toLowerCase() !== submission.customerEmail) {
     throw new Error('Project customer does not match the submission');
@@ -32,7 +37,7 @@ export async function saveDesignRecord(submission, {
   const snapshotHash = createHash('sha256').update(JSON.stringify({ submission, project })).digest('hex');
   const record = {
     schemaVersion: 1, designId: submission.orderId, snapshotHash, createdAt: now(),
-    submissionStatus: submission.sendOrderEmail ? 'checkout_pending' : 'saved',
+    submissionStatus: product === 'Locker Room Sign' && submission.adminDesignPreview ? 'admin_preview' : submission.sendOrderEmail ? 'checkout_pending' : 'saved',
     projectId: String(project.id || ''), name: String(project.name || ''),
     customerEmail: submission.customerEmail, product, projectType: project.type,
     settings: project.config,

@@ -9,6 +9,7 @@
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23151515'/%3E%3Cpath d='M7 21.5h18v3H7zM9.5 7.5h13v11h-13z' fill='%23ffc529'/%3E%3Cpath d='M12 10h8v6h-8z' fill='%23151515'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="./styles.css?v=3.1.8" />
     <link rel="stylesheet" href="./assets/bag-tag/bag-tag.css?v=3.1-compact-desktop" />
+    <link rel="stylesheet" href="./assets/locker-sign/locker-sign.css?v=3.2.0" />
   </head>
   <body class="studio-loading">
     <main class="app-shell">
@@ -41,6 +42,7 @@
           <button class="product-tab" type="button" data-product-type="hype" aria-disabled="false">Hype Chain</button>
           <button class="product-tab" type="button" data-product-type="plaque" aria-disabled="false">3D Plaque</button>
 <button class="product-tab" type="button" data-product-type="bag" aria-pressed="false">Bag Tag</button>
+<button class="product-tab" type="button" data-product-type="locker" aria-pressed="false">Locker Room Sign<span class="product-lock" aria-hidden="true">🔒</span></button>
           <span class="product-tooltip" id="productLockTooltip" role="tooltip">Coming soon</span>
         </nav>
 
@@ -122,6 +124,53 @@
             </ul>
           </div>
         </section>
+
+<section class="panel-section locker-controls" id="lockerSignControls" hidden aria-label="Locker Room Sign configurator">
+  <div class="section-heading"><h2>Locker Room Sign</h2></div>
+  <div class="locker-upload-row"><button class="primary-button upload-button" id="lockerChooseFile" type="button">Upload your design</button><button class="secondary-button" id="lockerEditDesign" type="button" hidden>Edit design</button></div>
+  <input id="lockerLogoFile" type="file" hidden accept="image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg" />
+  <div class="locker-style-options" role="group" aria-label="Locker sign style">
+    <button type="button" class="option-button active" data-locker-style="layered" aria-pressed="true"><strong>Single-sided</strong><span>Layered · Raised artwork</span></button>
+    <button type="button" class="option-button" data-locker-style="flat" aria-pressed="false"><strong>Double-sided</strong><span>Flat · Same design both faces</span></button>
+  </div>
+  <div class="locker-text-row">
+  <label class="hype-field">Text on the stick<input data-locker="text" type="text" value="TEAM NAME" maxlength="40" autocomplete="off" /></label>
+  <label class="hype-field">Stick font<select data-locker="font" aria-label="Stick font"></select></label>
+  </div>
+  <div class="locker-adjustments">
+    <label class="hype-field"><span>Size <output id="lockerScaleOutput">100%</output></span><input data-locker="scale" aria-label="Artwork size" type="range" min="40" max="160" value="100" step="1" /></label>
+    <label class="hype-field">Horizontal<input data-locker="x" aria-label="Horizontal artwork position" type="range" min="-60" max="60" value="0" step="1" /></label>
+    <label class="hype-field">Vertical<input data-locker="y" aria-label="Vertical artwork position" type="range" min="-60" max="60" value="0" step="1" /></label>
+  </div>
+  <div class="locker-artwork-tools">
+    <button type="button" class="secondary-button" id="lockerResetArtwork">Reset artwork position</button>
+  <label class="locker-check"><input type="checkbox" data-locker="removeBg" /> Remove white background</label>
+  </div>
+  <section class="locker-all-colours" aria-label="Locker sign colours">
+    <div class="locker-colour-heading">
+    <h3>Colours</h3>
+    <label class="hype-field">Artwork colour count<select data-locker="colourCount"><option value="1">1 colour</option><option value="2">2 colours</option><option value="3">3 colours</option><option value="4">4 colours</option><option value="5" selected>5 colours</option><option value="6">6 colours</option><option value="7">7 colours</option><option value="8">8 colours</option></select></label>
+    </div>
+    <div class="locker-colour-layout">
+      <div class="hype-colour-selector"><div class="section-heading"><h2>Hanger</h2></div>
+        <div class="hype-colour-row" aria-label="Hanger colours">
+          <button type="button" class="hype-colour-chip" data-locker-colour="stick" aria-label="Hockey stick colour" title="Hockey stick"><i></i></button>
+          <button type="button" class="hype-colour-chip" data-locker-colour="glove" aria-label="Glove mount colour" title="Glove mount"><i></i></button>
+          <button type="button" class="hype-colour-chip" data-locker-colour="textColour" aria-label="Stick text colour" title="Stick text"><i></i></button>
+          <button type="button" class="hype-colour-chip" data-locker-colour="rings" aria-label="Hanging ring colour" title="Hanging rings"><i></i></button>
+        </div>
+      </div>
+      <div class="hype-colour-selector"><div class="section-heading"><h2>Circle sign</h2></div>
+        <div class="hype-colour-row" aria-label="Circle backing and artwork colours">
+          <button type="button" class="hype-colour-chip" data-locker-colour="backing" aria-label="Circle backing colour" title="Circle backing"><i></i></button>
+          <span id="lockerPalette" class="locker-art-swatches" aria-label="Artwork colours"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+  <p id="lockerConstruction" class="locker-helper">Raised artwork on the front. Plain reverse.</p>
+  <p id="lockerMessage" class="locker-message" role="status" aria-live="polite"></p>
+</section>
 
 <section class="panel-section bag-tag-controls" id="bagTagControls" hidden aria-label="Bag Tag configurator">
   <div class="hype-upload-style-row bag-top-row">
@@ -399,7 +448,7 @@
           <p id="projectNote"></p>
         </section>
         <button class="secondary-button back-to-visualizer-button" id="backToVisualizer" type="button">Back to Visualizer</button>
-        <p class="menu-build-version">Build 3.1.8</p>
+        <p class="menu-build-version">Build 3.2.0</p>
       </aside>
 
       <section class="preview-panel" aria-label="3D lightbox preview">
@@ -422,6 +471,7 @@
                 <button class="product-tab visualizer-product-tab" type="button" data-product-type="hype" aria-pressed="false">Hype Chain</button>
                 <button class="product-tab visualizer-product-tab" type="button" data-product-type="plaque" aria-disabled="false">3D Plaque</button>
 <button class="product-tab visualizer-product-tab" type="button" data-product-type="bag" aria-pressed="false">Bag Tag</button>
+<button class="product-tab visualizer-product-tab" type="button" data-product-type="locker" aria-pressed="false">Locker Room Sign<span class="product-lock" aria-hidden="true">🔒</span></button>
               </nav>
             </div>
             <div class="preview-stats">
@@ -472,6 +522,12 @@
             <div class="plaque-visual-layer-list" id="plaqueVisualLayerList"></div>
           </section>
           <img class="default-led-preview-image" id="defaultLedPreviewImage" alt="" hidden />
+<section id="lockerSignPreview" hidden aria-label="Locker Room Sign visualizer">
+  <div id="lockerSignCanvas"></div>
+  <div class="locker-camera-tools" role="group" aria-label="Locker sign camera controls"><button type="button" class="zoom-button" data-locker-view="front" aria-label="Circle front view" aria-pressed="false">Front</button><button type="button" class="zoom-button" data-locker-view="back" aria-label="Circle back view" aria-pressed="false">Back</button><button type="button" class="zoom-button" data-locker-view="detail" aria-label="Hanging detail view" aria-pressed="false">Detail</button><button type="button" class="zoom-button" data-locker-view="assembly" aria-label="Reset full assembly view" title="Reset view">↺</button></div>
+  <div class="visualizer-zoom-controls locker-zoom-tools" role="group" aria-label="Locker sign zoom"><button type="button" class="zoom-button" data-locker-zoom="0.85" aria-label="Zoom out">−</button><button type="button" class="zoom-button" id="lockerZoomReset" aria-label="Reset zoom">100%</button><button type="button" class="zoom-button" data-locker-zoom="1.18" aria-label="Zoom in">+</button></div>
+  <p class="locker-preview-note" id="lockerPreviewCaption">Single-sided · Layered · Plain reverse</p><p class="locker-preview-note locker-gesture-hint">Drag to rotate · Pinch or scroll to zoom</p>
+</section>
 <section id="bagTagPreview" hidden aria-label="Bag Tag visualizer"><p id="bagRosterPreview" hidden aria-live="polite"></p><div id="bagTagCanvas"></div><div class="bag-view-tools" role="group" aria-label="Bag Tag view"><button class="zoom-button" type="button" data-bag-view="front" aria-pressed="false">Front</button><button class="zoom-button" type="button" data-bag-view="back" aria-pressed="false">Back</button><button class="zoom-button" type="button" data-bag-view="reset" aria-label="Reset Bag Tag view" title="Reset view">↺</button></div><div class="visualizer-zoom-controls bag-zoom-tools" role="group" aria-label="Bag Tag zoom"><button class="zoom-button" type="button" data-bag-zoom="0.85" aria-label="Bag Tag zoom out">−</button><button class="zoom-button" type="button" id="bagZoomReset" aria-label="Reset Bag Tag zoom">100%</button><button class="zoom-button" type="button" data-bag-zoom="1.18" aria-label="Bag Tag zoom in">+</button></div><p class="bag-preview-caption">Drag to rotate · Pinch or scroll to zoom</p></section>
           <div class="scene" id="scene">
             <div class="model-stack" id="modelStack">
@@ -722,7 +778,7 @@
             <span class="product-selection-title-main">Sign Studio</span>
           </h2>
           <p class="product-selection-subheadline" id="productSelectionSubtitle">Choose your product below.</p>
-          <p class="product-selection-support">Custom LED signs, hype chains, 3D plaques, and bag tags made&nbsp;for&nbsp;you.</p>
+          <p class="product-selection-support">Custom LED signs, hype chains, plaques, bag tags, and locker signs made&nbsp;for&nbsp;you.</p>
         </div>
         <div class="product-selection-grid" role="group" aria-label="Choose a product to customize">
           <button class="product-selection-card" type="button" data-product-selection="led" aria-label="Customize LED Sign">
@@ -777,13 +833,14 @@
             </span>
             <span class="product-selection-chevron" aria-hidden="true"></span>
           </button>
+<button class="product-selection-card" type="button" data-product-selection="locker" aria-label="Customize Locker Room Sign"><span class="product-selection-art" aria-hidden="true"><img class="product-selection-image" src="./assets/locker-sign/locker-menu.png" alt="" loading="lazy" /><span class="product-selection-lock" data-product-selection-lock hidden>Admin only</span></span><span class="product-selection-card-copy"><strong>Locker Room Sign</strong><span>Your design. Your locker. Your team.</span></span><span class="product-selection-chevron" aria-hidden="true"></span></button>
         </div>
         <p class="product-selection-helper">
           <span aria-hidden="true">?</span>
           <span>Not sure which one to choose?</span>
           <a href="https://mysignguy.ca/pages/compare-products">Need help deciding? Compare products →</a>
         </p>
-        <p class="menu-build-version product-selection-build-version">Build 3.1.8</p>
+        <p class="menu-build-version product-selection-build-version">Build 3.2.0</p>
       </div>
     </section>
 
@@ -991,7 +1048,7 @@
         <header class="upload-guide-header">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6" /></svg>
           <div><h2 id="uploadGuideTitle" tabindex="-1">Upload a simple, flat-colour logo</h2>
-          <p id="uploadGuideDescription">For LED Signs, 3D Plaques, Hype Chains and Bag Tags. Use solid colours, bold outlines and clear lettering.</p></div>
+          <p id="uploadGuideDescription">For LED Signs, 3D Plaques, Hype Chains, Bag Tags and Locker Room Signs. Use solid colours, bold outlines and clear lettering.</p></div>
         </header>
         <section class="upload-guide-comparison" aria-label="Before and after artwork example">
           <figure class="upload-guide-comparison-card">
@@ -1032,8 +1089,13 @@
     <script defer src="./blob-upload-client.js?v=3.1"></script>
     <script defer src="./assets/bag-tag/base-outline.js?v=3.1"></script>
     <script defer src="./assets/bag-tag/bag-tag-product.js?v=3.1-bag-email"></script>
-    <script defer src="./app.js?v=3.1.8"></script>
+    <script defer src="./assets/locker-sign/locker-font-picker.js?v=3.2.0"></script>
+    <script defer src="./assets/locker-sign/locker-sign-product.js?v=3.2.0"></script>
+    <script defer src="./assets/locker-sign/locker-output.js?v=3.2.0"></script>
+    <script defer src="./assets/locker-sign/locker-text-editor.js?v=3.2.0"></script>
+    <script defer src="./assets/locker-sign/locker-upload-wizard.js?v=3.2.0"></script>
+    <script defer src="./app.js?v=3.2.0"></script>
     <script defer src="./submit-fix.js?v=3.1"></script>
-    <script defer src="./used-colours.js?v=3.1"></script>
+    <script defer src="./used-colours.js?v=3.2.0"></script>
   </body>
 </html>

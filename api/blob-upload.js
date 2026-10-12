@@ -1,10 +1,13 @@
 import { issueSignedToken } from '@vercel/blob';
 import { handleUpload, handleUploadPresigned } from '@vercel/blob/client';
+import { verifyAdminToken } from '../src/admin-session.js';
 
 const TEN_MINUTES_MS = 10 * 60 * 1000;
 const MB = 1024 * 1024;
 const UNUSED_WEBHOOK_PUBLIC_KEY = 'sign-studio-presigned-upload-without-callbacks';
 const UPLOAD_RULES = Object.freeze({
+  finalArtworkPng: { allowedContentTypes: ['image/png'], maximumSizeInBytes: 12 * MB },
+  finalArtworkSvg: { allowedContentTypes: ['image/svg+xml'], maximumSizeInBytes: 12 * MB },
   projectFile: {
     allowedContentTypes: ['application/x-signguy+json', 'application/json', 'application/octet-stream'],
     maximumSizeInBytes: 48 * MB,
@@ -113,7 +116,7 @@ function makeUploadTokenOptions(upload) {
 }
 
 function validateUploadRequest(pathname, clientPayload) {
-  const match = String(pathname || '').match(/^orders\/([a-z0-9_-]{8,96})\/(projectFile|logoPreview|logo|renderScreenshot(?:[1-9][0-9]?|100))-([^/]{1,180})$/i);
+  const match = String(pathname || '').match(/^orders\/([a-z0-9_-]{8,96})\/(projectFile|logoPreview|logo|finalArtworkPng|finalArtworkSvg|renderScreenshot(?:[1-9][0-9]?|100))-([^/]{1,180})$/i);
   if (!match) throw new Error('Invalid upload pathname.');
 
   let payload;
@@ -124,6 +127,7 @@ function validateUploadRequest(pathname, clientPayload) {
   }
 
   const [, orderId, kind] = match;
+  if (/^finalArtwork/.test(kind) && !verifyAdminToken(payload.adminToken)) throw new Error('Admin login is required for locker artwork uploads.');
   if (payload.orderId !== orderId || payload.kind !== kind) {
     throw new Error('Upload metadata does not match the destination.');
   }

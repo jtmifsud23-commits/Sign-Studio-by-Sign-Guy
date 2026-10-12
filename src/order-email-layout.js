@@ -12,7 +12,7 @@ const colourNames = { '#000000': 'Black', '#020201': 'Black', '#FFFFFF': 'White'
 
 // A bounded, product-specific brief; the complete saved settings remain in .SignGuy.
 export function productionBrief(record, event) {
-  const config = record.settings || {}, preview = record.preview || {}, hype = config.hype || {}, bag = config.bag || {}, plaque = config.plaque || {};
+  const config = record.settings || {}, preview = record.preview || {}, hype = config.hype || {}, bag = config.bag || {}, plaque = config.plaque || {}, locker = config.locker || {};
   const details = [], colours = [], facts = [];
   const add = (label, value) => { if (value != null && value !== '' && typeof value !== 'object') details.push([label, String(value)]); };
   const colourGroup = (title, entries) => {
@@ -29,7 +29,7 @@ export function productionBrief(record, event) {
   const tagDimensions = [dimension.widthMm, dimension.heightMm, dimension.depthMm].filter(value => number(value) != null).map(number).join(' × ');
   const quantity = (event.lineItems || []).reduce((sum, line) => sum + Number(line.quantity || 0), 0);
   const quantityLabel = `${quantity} ${record.product === 'Hype Chain' ? (quantity === 1 ? 'chain' : 'chains') : record.product === 'Bag Tag' ? (quantity === 1 ? 'tag' : 'tags') : record.product === '3D Plaque' ? (quantity === 1 ? 'plaque' : 'plaques') : (quantity === 1 ? 'sign' : 'signs')}`;
-  facts.push(['Quantity ordered', quantityLabel]);
+  facts.push([event.kind === 'admin_design' ? 'Quantity' : 'Quantity ordered', quantityLabel]);
   let productTitle = record.product;
   if (record.product === 'Hype Chain') {
     const style = hype.variant === 'spinner' ? 'Spinner' : 'Classic';
@@ -51,6 +51,23 @@ export function productionBrief(record, event) {
       add('Ring diameter', unit(spinner.ringDiameter, 'mm')); add('Ring thickness', unit(spinner.ringThickness, 'mm')); add('Ring clearance', unit(spinner.ringClearance, 'mm'));
       colourGroup('Spinner colours', [{ label: 'Ring', value: spinner.ringColor }, { label: 'Ring text', value: spinner.textColor }, { label: 'Base', value: spinner.baseColor }]);
     }
+  } else if (record.product === 'Locker Room Sign') {
+    productTitle = 'Custom Locker Room Sign';
+    facts.push(['Circle diameter', '9 in · 228.6 mm']);
+    facts.push(['Style', locker.style === 'flat' ? 'Double-sided flat' : 'Single-sided layered']);
+    add('Mount', 'Magnetic hockey stick and glove');
+    add('Stick text · both sides', locker.text); add('Stick font', locker.font);
+    add('Construction', locker.style === 'flat' ? 'Same artwork on both flat faces' : '6 mm raised colours; flat base colour; plain reverse');
+    add('Backing thickness', unit(dimension.baseMm || 4, 'mm'));
+    add('Artwork scale', unit(locker.scale, '%')); add('Artwork horizontal position', unit(locker.x, 'mm')); add('Artwork vertical position', unit(locker.y, 'mm'));
+    const textBoxes = locker.wizardEdit?.textBoxes || [];
+    textBoxes.forEach((box, i) => {
+      add(`Circle text ${i + 1}`, box.text); add(`Circle text ${i + 1} font`, box.font);
+      add(`Circle text ${i + 1} box`, `${number(box.width * 228.6)} × ${number(box.height * 228.6)} mm`);
+    });
+    colourGroup('Hanger colours', [{ label: 'Hockey stick', value: locker.stick }, { label: 'Glove', value: locker.glove }, { label: 'Stick text', value: locker.textColour }, { label: 'Hanging rings', value: locker.rings }]);
+    colourGroup('Circle sign colours', [{ label: 'Backing and sides', value: locker.backing }, ...(locker.palette || []).map((p, i) => ({ label: `Colour ${i + 1} · ${locker.style === 'flat' || !p.height ? 'flat' : `raised ${number(p.height)} mm`}`, value: p.colour }))]);
+    colourGroup('Added text colours', textBoxes.map((box, i) => ({ label: `Circle text ${i + 1}`, value: box.colour })));
   } else if (record.product === 'Bag Tag') {
     productTitle = bag.orderMode === 'team' ? 'Team Bag Tags' : 'Bag Tag';
     facts.push(['Order type', bag.orderMode === 'team' ? 'Team roster' : 'Single name']);
@@ -83,9 +100,10 @@ export function productionBrief(record, event) {
   const screenshots = files.filter(file => /^renderScreenshot\d+$/.test(file.kind)).sort((a, b) => Number(a.kind.slice(16)) - Number(b.kind.slice(16)));
   const previews = screenshots.slice(0, record.product === 'Bag Tag' ? 4 : 2).map((file, i) => ({
     cid: `bag-tag-${file.kind.slice(16)}`,
-    label: record.product === 'Bag Tag' ? `Tag ${Number(file.kind.slice(16))}${roster[Number(file.kind.slice(16)) - 1]?.name ? ` · ${roster[Number(file.kind.slice(16)) - 1].name}` : ''}` : i === 0 ? 'Saved design · front' : record.product === 'Hype Chain' ? 'Saved design · chain view' : 'Saved design · angled',
+    label: record.product === 'Bag Tag' ? `Tag ${Number(file.kind.slice(16))}${roster[Number(file.kind.slice(16)) - 1]?.name ? ` · ${roster[Number(file.kind.slice(16)) - 1].name}` : ''}` : record.product === 'Locker Room Sign' ? i === 0 ? 'Saved design · assembly' : 'Saved design · circle front' : i === 0 ? 'Saved design · front' : record.product === 'Hype Chain' ? 'Saved design · chain view' : 'Saved design · angled',
   }));
   if (!previews.length && files.some(file => file.kind === 'logoPreview' || file.kind === 'logo')) previews.push({ cid: 'uploaded-logo', label: 'Uploaded artwork · design preview unavailable' });
+  else if (record.product === 'Locker Room Sign' && files.some(file => file.kind === 'logoPreview')) previews.push({ cid: 'uploaded-logo', label: 'Finished circle artwork · logo and added text' });
   const shop = String(event.shop || '');
   const orderUrl = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop) && /^\d+$/.test(String(event.orderId || ''))
     ? `https://admin.shopify.com/store/${shop.split('.')[0]}/orders/${event.orderId}` : null;
@@ -94,8 +112,9 @@ export function productionBrief(record, event) {
 
 export function paidProductionEmail(record, event) {
   const brief = productionBrief(record, event);
-  const title = `${event.test ? 'TEST payment' : 'Payment confirmed'} — ${event.orderName}`;
-  const note = event.test ? 'TEST ORDER — do not produce.' : 'Shopify reports this order as paid. Review the saved design before production.';
+  const adminPreview = event.kind === 'admin_design';
+  const title = adminPreview ? 'Admin design preview' : `${event.test ? 'TEST payment' : 'Payment confirmed'} — ${event.orderName}`;
+  const note = adminPreview ? 'Admin design review. No checkout or payment has been recorded. The finished artwork and editable files are attached.' : event.test ? 'TEST ORDER — do not produce.' : 'Shopify reports this order as paid. Review the saved design before production.';
   const testWarning = event.test ? `<p style="margin:0 0 18px;padding:14px;background:#fff3ce;color:#473600;font-weight:bold">${escape(note)}</p>` : '';
   const facts = brief.facts.map(([label, value]) => `<td valign="top" style="padding:14px 8px 14px 0"><div style="font-size:12px;color:#62645c">${escape(label)}</div><div style="font-size:14px;font-weight:bold;margin-top:5px">${escape(value)}</div></td>`).join('');
   const images = brief.previews.map(item => `<td class="sg-preview" valign="top" style="padding:0 10px 16px 0"><img src="cid:${item.cid}" width="280" alt="${escape(item.label)}" style="display:block;width:100%;max-width:280px;height:auto;border-radius:8px"><div style="font-size:12px;color:#62645c;margin-top:7px">${escape(item.label)}</div></td>`);
@@ -106,11 +125,11 @@ export function paidProductionEmail(record, event) {
   const colours = brief.colours.map(group => `<h2 style="font-size:16px;margin:22px 0 12px">${escape(group.title)}</h2>${group.items.map(item => `<table role="presentation" cellpadding="0" cellspacing="0" style="display:inline-table;margin:0 14px 14px 0;vertical-align:top"><tr><td valign="top" style="padding:3px 8px 0 0"><div style="width:22px;height:22px;background-color:${item.hex};border:1px solid #d8d8d0;border-radius:50%">&nbsp;</div></td><td style="font-size:13px;line-height:1.4"><div style="color:#62645c;font-size:12px">${escape(item.label)}</div><div>${escape(item.name)}</div><div style="font-size:11px;color:#62645c">${item.hex}</div></td></tr></table>`).join('')}`).join('');
   const roster = brief.roster.length ? `<h2 style="font-size:16px;margin:22px 0 10px">Bag Tag roster</h2><table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:14px"><thead><tr style="background:#f6f6f1"><th style="padding:10px;text-align:left">Tag</th><th style="padding:10px;text-align:left">Name on tag</th><th style="padding:10px;text-align:right">Quantity</th></tr></thead><tbody>${brief.roster.map((row, i) => `<tr><td style="padding:10px;border-bottom:1px solid #e7e7e0">${i + 1}</td><td style="padding:10px;border-bottom:1px solid #e7e7e0;overflow-wrap:anywhere">${escape(row.name)}</td><td style="padding:10px;border-bottom:1px solid #e7e7e0;text-align:right">${escape(row.quantity)}</td></tr>`).join('')}</tbody></table>` : '';
   const warning = brief.warning ? `<p style="padding:14px;background:#fff3ce;color:#473600;font-weight:bold;font-size:14px;line-height:1.5">${escape(brief.warning)}</p>` : '';
-  const lineDetails = (event.lineItems || []).map(line => `${line.title} — quantity ${line.quantity} · line ${line.lineItemId}`);
-  const fileNote = `Editable .SignGuy project · original logo${brief.screenshotCount ? ` · ${brief.screenshotCount} design preview${brief.screenshotCount === 1 ? '' : 's'}` : ''}`;
+  const lineDetails = (event.lineItems || []).map(line => `${line.title || record.product} — quantity ${line.quantity}${line.lineItemId != null ? ` · line ${line.lineItemId}` : ''}`);
+  const fileNote = `Editable .SignGuy project · original logo${(record.files || []).some(file => file.kind === 'finalArtworkSvg') ? ' · finished circle SVG and PNG (logo, text and final colours)' : ''}${brief.screenshotCount ? ` · ${brief.screenshotCount} design preview${brief.screenshotCount === 1 ? '' : 's'}` : ''}`;
   const orderLink = brief.orderUrl ? `<a href="${escape(brief.orderUrl)}" style="display:inline-block;background:#ffcb28;color:#171710;text-decoration:none;padding:13px 18px;border-radius:6px;font-size:14px;font-weight:bold">View order ${escape(event.orderName)} in Shopify &#8599;</a>` : '';
   const designName = record.name && String(record.name).trim().toLowerCase() !== String(brief.productTitle).trim().toLowerCase() ? `<p style="font-size:14px;margin:0 0 6px;line-height:1.5">${escape(record.name)}</p>` : '';
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>@media only screen and (max-width:480px){.sg-body{padding:18px!important}.sg-preview{display:block!important;width:100%!important;padding-right:0!important}.sg-preview img{max-width:100%!important}.sg-heading{font-size:23px!important}}</style></head><body style="margin:0;padding:0;background:#f6f6f1;color:#202020;font-family:Arial,sans-serif"><table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="width:100%;background:#f6f6f1"><tr><td align="center" style="padding:20px 8px"><!--[if mso]><table role="presentation" align="center" width="640" cellpadding="0" cellspacing="0"><tr><td><![endif]--><table role="presentation" cellpadding="0" cellspacing="0" width="640" style="width:100%;max-width:640px;background:#ffffff;border:1px solid #e7e7e0;border-radius:12px;overflow:hidden"><tr><td style="padding:18px 24px;background:#ffcb28;color:#171710;font-size:16px;font-weight:bold">SIGN GUY <span style="float:right;font-size:12px;font-weight:normal">STUDIO ORDER</span></td></tr><tr><td class="sg-body" style="padding:24px"><span style="display:inline-block;padding:6px 10px;background:${event.test ? '#fff3ce' : '#eaf6ed'};color:${event.test ? '#473600' : '#20744d'};font-size:12px;font-weight:bold;border-radius:20px">${event.test ? 'TEST ORDER — DO NOT PRODUCE' : 'PAYMENT CONFIRMED'}</span><h1 class="sg-heading" style="font-size:28px;margin:14px 0 8px;line-height:1.25">${escape(brief.productTitle)} <span style="white-space:nowrap">${escape(event.orderName)}</span></h1>${designName}<p style="font-size:13px;margin:0;color:#62645c;line-height:1.5">${escape(note)}</p><p style="font-size:13px;margin:10px 0 0;overflow-wrap:anywhere">Customer: ${escape(record.customerEmail)}</p><table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-bottom:1px solid #e7e7e0;margin:10px 0 20px"><tr>${facts}</tr></table>${testWarning}${warning}<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;table-layout:fixed">${imageRows.join('')}</table>${morePreviews}${details}${colours}${roster}<div style="margin:22px 0 18px;padding:15px 16px;background:#f6f6f1;border-radius:8px;font-size:13px;line-height:1.5"><strong style="display:block;margin-bottom:4px;font-size:14px">Production files attached</strong>${escape(fileNote)}<br>Full artwork and settings are in the attached .SignGuy file.</div>${orderLink}</td></tr><tr><td style="padding:16px 24px;background:#f6f6f1;color:#62645c;font-size:11px;line-height:1.6;overflow-wrap:anywhere;word-break:break-word">Studio design ID: ${escape(record.designId)}<br>Shopify order ID: ${escape(event.orderId)}<br>${lineDetails.map(escape).join('<br>')}</td></tr></table><!--[if mso]></td></tr></table><![endif]--></td></tr></table></body></html>`;
   const text = [title, note, brief.productTitle, record.name, `Customer: ${record.customerEmail}`, ...brief.facts.map(([label, value]) => `${label}: ${value}`), ...(brief.warning ? [brief.warning] : []), '', 'Production details', ...brief.details.map(([label, value]) => `${label}: ${value}`), ...brief.colours.flatMap(group => ['', group.title, ...group.items.map(item => `${item.label}: ${item.name} (${item.hex})`)]), ...(brief.roster.length ? ['', 'Bag Tag roster:', ...brief.roster.map(row => `${row.name} — quantity ${row.quantity}`)] : []), '', 'Production files attached', fileNote, 'Full artwork and settings are in the attached .SignGuy file.', ...(brief.orderUrl ? ['', `View Shopify order: ${brief.orderUrl}`] : []), '', `Studio design ID: ${record.designId}`, `Shopify order ID: ${event.orderId}`, ...lineDetails].join('\n');
-  return { html, text };
+  return { html: adminPreview ? html.replace(event.test ? 'TEST ORDER — DO NOT PRODUCE' : 'PAYMENT CONFIRMED', 'ADMIN DESIGN PREVIEW').replace('STUDIO ORDER', 'STUDIO DESIGN').replace('<br>Shopify order ID: <br>', '<br>').replace('#eaf6ed', '#fff3ce').replace('#20744d', '#473600') : html, text: adminPreview ? text.split('\n').filter(line => !line.startsWith('Shopify order ID:')).join('\n') : text };
 }

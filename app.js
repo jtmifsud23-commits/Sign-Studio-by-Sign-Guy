@@ -62,6 +62,7 @@ function trackSignStudioEvent(eventName, parameters = {}) {
 }
 
 function getAnalyticsProductItem(project = null) {
+  if (project?.type === 'SignGuy.LockerSignStudio' || state.productType === 'locker') return {item_id:'locker_custom',item_name:'Custom Locker Room Hanging Sign',item_category:'Locker Room Sign',quantity:1};
   if (project?.type === 'SignGuy.BagTagStudio' || state.productType === 'bag') return { item_id: getShopifyVariantId() || 'bag_custom', item_name: 'Custom Team Bag Tag', item_category: 'Bag Tag', quantity: bagTotalQuantity(project?.config?.bag || bagState()) };
   const productType = project?.type === 'SignGuy.HypeChainStudio'
     ? 'hype'
@@ -806,6 +807,11 @@ async function initializeStudioAppOnce() {
 }
 
 function setupEmailGate() {
+  // Local testing needs no email signup; deployed builds use the normal gate.
+  if (isLocalTesting()) {
+    state.customerEmail = 'local-preview@example.invalid'; state.requiresEmailGate = false;
+    els.emailGateForm?.classList.add('hidden'); renderSessionEmail(); return;
+  }
   if (!els.emailGateForm || !els.customerEmail) return;
   const savedEmail = normalizeEmail(localStorage.getItem(EMAIL_STORAGE_KEY));
   if (savedEmail && isValidEmail(savedEmail)) {
@@ -889,6 +895,7 @@ function queueEmailMarketingSubscription(value, source = EMAIL_MARKETING_SOURCE)
 }
 
 function getEmailMarketingSubscribeEndpoint() {
+  if (isLocalTesting()) return '';
   if (window.SIGN_GUY_SHOPIFY_SUBSCRIBE_ENDPOINT) return window.SIGN_GUY_SHOPIFY_SUBSCRIBE_ENDPOINT;
   if (!window.location.protocol.startsWith('http')) return '';
   return new URL('/api/shopify/subscribe', window.location.href).href;
@@ -927,12 +934,12 @@ function writeEmailMarketingSessionSet() {
 
 function renderSessionEmail() {
   if (!els.sessionEmailStat) return;
-  els.sessionEmailStat.textContent = state.customerEmail || 'No email';
+  els.sessionEmailStat.textContent = isLocalTesting() ? 'Local preview' : state.customerEmail || 'No email';
   syncMobileCommandBar();
 }
 
 function setupAdminMode() {
-  state.isAdmin = sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true';
+  state.isAdmin = sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true' && (isLocalTesting() || Boolean(sessionStorage.getItem('signGuyAdminToken')));
   renderAdminMode();
   els.adminLoginButton?.addEventListener('click', () => {
     if (state.isAdmin) {
@@ -1054,6 +1061,7 @@ function normalizeProductSelectionChoice(product, variant = '') {
   const variantText = String(variant || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
   const combined = `${productText}-${variantText}`;
   if (!productText && !variantText) return null;
+  if (combined.includes('locker')) return { key: 'locker', productType: 'locker' };
   if (combined.includes('bag')) return { key: 'bag', productType: 'bag' };
   if (combined.includes('spinner')) return { key: 'spinner-hype', productType: 'hype', hypeVariant: 'spinner' };
   if (combined.includes('classic') || combined.includes('hype-chain') || combined.includes('hype')) {
@@ -1074,6 +1082,8 @@ function getProductSelectionChoice(key) {
       return { key, productType: 'hype', hypeVariant: 'classic' };
     case 'spinner-hype':
       return { key, productType: 'hype', hypeVariant: 'spinner' };
+    case 'locker':
+      return { key, productType: 'locker' };
     case 'bag':
       return { key, productType: 'bag' };
     case 'plaque':
@@ -1104,7 +1114,7 @@ function renderProductSelectionAccess() {
     button.classList.toggle('is-locked', locked);
     if (lock) {
       lock.hidden = !locked;
-      lock.textContent = choice.hypeVariant === 'spinner' && !state.isAdmin ? 'Admin only' : 'Coming soon';
+      lock.textContent = (choice.productType === 'locker' || choice.hypeVariant === 'spinner') && !state.isAdmin ? 'Admin only' : 'Coming soon';
     }
   });
 }
@@ -1173,6 +1183,7 @@ function hideProductSelectionMenu() {
 }
 
 function canAccessProduct(productType) {
+  if (productType === 'locker') return state.isAdmin || isLocalTesting();
   return productType === 'bag' || productType === 'led' || productType === 'hype' || productType === 'plaque' || state.isAdmin;
 }
 
@@ -1196,6 +1207,10 @@ function renderProductAccess() {
 }
 
 function selectProductType(productType, options = {}) {
+  productType = canAccessProduct(productType) ? productType : 'led';
+  document.body.classList.toggle('product-locker', productType === 'locker');
+  document.querySelector('#lockerSignControls').hidden = productType !== 'locker';
+  document.querySelector('#lockerSignPreview').hidden = productType !== 'locker';
   document.body.classList.toggle('product-bag', productType === 'bag');
   document.querySelector('#bagTagControls').hidden = productType !== 'bag';
   document.querySelector('#bagTagPreview').hidden = productType !== 'bag';
@@ -1216,6 +1231,7 @@ function selectProductType(productType, options = {}) {
   }
   state.productType = next;
   if (next === 'bag') setProjectSectionExpanded(true);
+  if (next === 'locker') setProjectSectionExpanded(false);
   if (els.projectSectionHeading) {
     els.projectSectionHeading.setAttribute('role', next === 'bag' ? 'heading' : 'button');
     els.projectSectionHeading.setAttribute('tabindex', next === 'bag' ? '-1' : '0');
@@ -1236,7 +1252,10 @@ function selectProductType(productType, options = {}) {
   els.plaqueStudio?.classList.toggle('hidden', next !== 'plaque');
   els.hypePreview?.classList.toggle('hidden', next !== 'hype');
   updateDefaultLedSavedPreview();
-  if (next === 'bag') {
+  if (next === 'locker') {
+    cancelPlaqueBuild();
+    activateLockerSign();
+  } else if (next === 'bag') {
     cancelPlaqueBuild();
     activateBagTag();
   } else if (next === 'hype') {
@@ -1327,7 +1346,7 @@ function getActiveUsagePreset() {
 }
 
 function applyPreviewMode() {
-  if (state.productType === 'bag') return;
+  if (state.productType === 'bag' || state.productType === 'locker') return;
   if (!els.stage) return;
   let mode = ['day', 'night', 'wall'].includes(state.previewMode) ? state.previewMode : 'night';
   if (state.productType === 'led' && mode === 'wall') mode = 'night';
@@ -1444,7 +1463,7 @@ function applyPreviewEnvironment() {
 
 function updateProductCta() {
   if (!els.placeOrder) return;
-  els.placeOrder.textContent = state.orderInProgress ? 'Placing Order...' : state.productType==='bag'?bagOrderButtonLabel():'Place Order';
+  els.placeOrder.textContent = state.orderInProgress ? (state.productType==='locker'?'Preparing...':'Placing Order...') : state.productType==='locker'?'Email design':state.productType==='bag'?bagOrderButtonLabel():'Place Order';
   syncMobileCommandBar();
 }
 
@@ -1650,13 +1669,13 @@ function setupMobileAccordion(section, heading) {
 function syncMobileCommandBar() {
   if (els.mobilePlaceOrder && els.placeOrder) {
     els.mobilePlaceOrder.disabled = els.placeOrder.disabled;
-    els.mobilePlaceOrder.textContent = state.orderInProgress ? 'Placing Order...' : state.productType==='bag'?bagOrderButtonLabel():'Place Order';
+    els.mobilePlaceOrder.textContent = state.orderInProgress ? (state.productType==='locker'?'Preparing...':'Placing Order...') : state.productType==='locker'?'Email design':state.productType==='bag'?bagOrderButtonLabel():'Place Order';
   }
   if (els.mobileSaveProject && els.saveProject) {
     els.mobileSaveProject.disabled = els.saveProject.disabled;
   }
   if (els.mobileProductSummary) {
-    els.mobileProductSummary.textContent = state.productType === 'bag' ? 'Bag Tag' : state.productType === 'hype'
+    els.mobileProductSummary.textContent = state.productType === 'locker' ? 'Locker Room Sign' : state.productType === 'bag' ? 'Bag Tag' : state.productType === 'hype'
       ? 'Hype Chain'
       : (state.productType === 'plaque' ? '3D Plaque' : 'LED Sign');
   }
@@ -1671,6 +1690,7 @@ function syncMobileCommandBar() {
 }
 
 function getMobileCheckoutSelectionLabel() {
+  if (state.productType === 'locker') { return '9″ circle · '+(lockerState().style==='flat'?'Double-sided flat':'Single-sided layered'); }
   if (state.productType === 'bag') return `${bagDimensionLabel()} · Front only`;
   if (state.productType === 'hype') {
     return 'Custom pendant chain';
@@ -1686,6 +1706,7 @@ function getMobileCheckoutSelectionLabel() {
 }
 
 function getMobilePlaceOrderDisabledReason() {
+  if (state.productType === 'locker') { return 'Admin preview · Email your finished design'; }
   if (state.productType === 'bag') {
     const b=bagState();
     if(b.busy)return 'Preparing your logo';
@@ -2699,6 +2720,7 @@ async function loginAdmin() {
 function logoutAdmin() {
   state.isAdmin = false;
   sessionStorage.removeItem(ADMIN_SESSION_KEY);
+  sessionStorage.removeItem('signGuyAdminToken');
   renderAdminMode();
   setStatus('Ready');
 }
@@ -2721,6 +2743,7 @@ async function verifyAdminPassword(password) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ password }),
   });
+  if (response.ok) { const result = await response.json(); if (result.adminToken) sessionStorage.setItem('signGuyAdminToken', result.adminToken); }
   return response.ok;
 }
 
@@ -3670,6 +3693,7 @@ async function reprocess(options = {}) {
     return;
   }
   if (!state.artwork) return;
+  const lockerSession = lockerUploadSession;
   setStatus('Processing');
   els.stage.classList.add('regenerating');
   const previousColourSnapshot = state.processed?.colours?.map((region, idx) => ({
@@ -3679,9 +3703,13 @@ async function reprocess(options = {}) {
   })) || null;
   await waitFrame();
   try {
+    if (lockerSession && lockerUploadSession !== lockerSession) return;
     state.processed = processArtwork(state.artwork, getProcessArtworkOptions());
     state.processingDirty = false;
-    if (!options.preserveTargetColorCount && !state.frontColoursCustomized && state.processed.naturalColourCount) {
+    if (lockerSession?.autoColourCount) {
+      state.targetColorCount = state.processed.colours.length;
+      lockerSession.autoColourCount = false;
+    } else if (!options.preserveTargetColorCount && !state.frontColoursCustomized && state.processed.naturalColourCount) {
       state.targetColorCount = state.processed.naturalColourCount;
     }
     syncColorOverrides(previousColourSnapshot);
@@ -3840,6 +3868,7 @@ function openWizard(step) {
 
 function closeWizard() {
   if (bagUploadSession) cancelBagLogoWizard();
+  if (lockerUploadSession) cancelLockerLogoWizard();
   state.wizardStep = null;
   closeColourPopover();
   document.body.classList.remove('wizard-open');
@@ -3864,6 +3893,7 @@ function getProcessArtworkOptions() {
 }
 
 function renderEditStep() {
+  if (lockerUploadSession) { renderLockerEditStep(); return; }
   if (isResponsiveViewport()) state.edit.cropAspect = 'free';
   els.wizardTitle.textContent = 'Edit Your Image';
   els.wizardImage.onload = () => updateCropBox();
@@ -3963,7 +3993,7 @@ function renderVectorStep() {
   setWizardPreview(renderMappedArtworkUrl(state.processed) || state.processed?.artworkUrl || state.artwork.dataUrl);
   els.wizardSide.innerHTML = `
     <h3>Vectorized result</h3>
-    <p>The artwork has been flattened into printable colour regions and a custom outer silhouette. If this does not look right, try again or go back to crop/background cleanup.</p>
+    <p>${state.uploadTarget === 'locker' ? 'Your circle design has been flattened into printable colour regions. Go back to adjust the logo placement or background.' : 'The artwork has been flattened into printable colour regions and a custom outer silhouette. If this does not look right, try again or go back to crop/background cleanup.'}</p>
     <div class="detail-list vector-summary-list">
       <div class="detail-row vector-summary-row"><span class="map-number">${state.processed?.colours.length || 0}</span><span>detected colours</span><strong>max 8</strong></div>
       <div class="detail-row vector-summary-row"><span class="map-number">${state.tolerance}</span><span>merge tolerance</span><strong>auto</strong></div>
@@ -4151,6 +4181,7 @@ function readableTextColour(hex) {
 }
 
 function setWizardPreview(src) {
+  hideLockerCircleEditor();
   els.wizardImage.onload = null;
   els.wizardImage.onload = () => {
     if (state.wizardStep !== 'edit') centerWizardPreview();
@@ -4200,6 +4231,11 @@ function bindWizardButtons() {
 }
 
 async function handleWizardAction(action) {
+  if (lockerUploadSession && ['to-vector','to-details','confirm'].includes(action) && !lockerCircleValidation().ok) {
+    if (state.wizardStep !== 'edit') openWizard('edit');
+    paintLockerCircleEditor();return;
+  }
+  const lockerSession = lockerUploadSession;
   if (action === 'cancel') {
     if (state.uploadTarget === 'hype') restoreLedUploadState();
     closeWizard();
@@ -4211,7 +4247,9 @@ async function handleWizardAction(action) {
   }
   if (action === 'to-vector') {
     try {
+      if (lockerUploadSession && !(await prepareLockerCircleArtwork())) return;
       if (!state.processed || state.processingDirty) await reprocess({ skipWizardRender: true });
+      if (lockerSession && lockerUploadSession !== lockerSession) return;
       openWizard('vector');
     } catch (error) {
       console.error('Could not process artwork before vector step', error);
@@ -4223,6 +4261,7 @@ async function handleWizardAction(action) {
   if (action === 'try-vector') {
     state.tolerance = clamp(state.tolerance + 8, 18, 90);
     await reprocess({ skipWizardRender: true });
+    if (lockerSession && lockerUploadSession !== lockerSession) return;
     openWizard('vector');
     return;
   }
@@ -4251,6 +4290,7 @@ async function handleWizardAction(action) {
     return;
   }
   if (action === 'confirm') {
+    if (state.uploadTarget === 'locker') { await completeLockerLogoWizard(); return; }
     if (state.uploadTarget === 'bag') { await completeBagLogoWizard(); return; }
     if (state.uploadTarget === 'hype') {
       completeHypeLogoImport();
@@ -4427,6 +4467,7 @@ function updateCropBox() {
 }
 
 function setWizardZoom(value) {
+  if (lockerUploadSession && state.wizardStep === 'edit') { zoomLockerCircleEditor(value); return; }
   state.edit.zoom = clamp(value, 0.7, 1.8);
   els.wizardImage.style.setProperty('--wizard-zoom', state.edit.zoom);
   requestAnimationFrame(updateCropBox);
@@ -4567,6 +4608,19 @@ function setPopoverTab(tab) {
 function renderUsedColourGrid() {
   if (!els.usedGrid) return;
   const label = els.usedPane?.querySelector('p');
+  if (state.productType === 'locker' && lockerUploadSession?.logo) {
+    if (label) label.textContent = 'Uploaded design colours';
+    const mapped = Boolean(state.processed?.colours.length);
+    els.usedGrid.innerHTML = renderUsedColourGroup(mapped || lockerEditorTextBoxes().length ? 'Current design' : 'Uploaded logo',getLockerWizardUsedColours())
+      + renderUsedColourGroup('Circle',[lockerUploadSession.edit.backing]);
+    bindUsedColourButtons();return;
+  }
+  if (state.productType === 'locker') {
+    if (label) label.textContent = 'Locker sign colours';
+    const s=lockerState();
+    els.usedGrid.innerHTML=renderUsedColourGroup('Hanger',[s.stick,s.glove,s.textColour,s.rings])+renderUsedColourGroup('Circle sign',[s.backing,...s.palette.map(p=>p.colour)]);
+    bindUsedColourButtons();return;
+  }
   if (state.productType === 'hype') {
     if (label) label.textContent = 'Used colours';
     const chainColours = uniqueHexColours(getHypePatternColours());
@@ -4654,6 +4708,17 @@ function updatePopoverInputs(hex) {
 
 function applySelectedColour(hex) {
   const normalized = normalizeHex(hex);
+  if (state.selectedColourTarget.type === 'lockerEditorText' && lockerUploadSession) {
+    const box=lockerEditorTextBoxes().find(b=>b.id===state.selectedColourTarget.id);if(!box)return;box.colour=normalized;invalidateLockerEditorText(true);
+    document.querySelector('#lockerBoxColour i')?.style.setProperty('background',normalized);updatePopoverInputs(normalized);return;
+  }
+  if (state.selectedColourTarget.type === 'lockerCircleBacking' && lockerUploadSession) {
+    lockerUploadSession.edit.backing = normalized;lockerUploadSession.composed = null;state.processingDirty = true;
+    updatePopoverInputs(normalized);paintLockerCircleEditor();return;
+  }
+  if (state.selectedColourTarget.type === 'locker') {
+    applyLockerColour(state.selectedColourTarget.part,normalized,state.selectedColourTarget.index);updatePopoverInputs(normalized);return;
+  }
   if (state.selectedColourTarget.type === 'shell') {
     state.shellColours[state.selectedColourTarget.part] = normalized;
     renderShellColourControls();
@@ -5884,6 +5949,7 @@ function processArtwork(artwork, options = {}) {
   let naturalColourCount = Math.min(Math.max(
     stableClusters.length,
     artwork.type === 'svg' ? meaningfulColourCount : 0,
+    state.productType === 'locker' && artwork.lockerSolidPalette ? printableClusters.length : 0,
     printableClusters.length ? 1 : 0,
   ), 8);
   const requestedColourCount = clamp(Number(state.targetColorCount) || 8, 1, 8);
@@ -7279,7 +7345,7 @@ function buildWarnings({ artwork, clusters, main, islands, tinyShapes, opaqueCou
 }
 
 function renderPreview() {
-  if (state.productType === 'bag') return;
+  if (state.productType === 'bag' || state.productType === 'locker') return;
   if (state.previewRenderTimer) {
     clearTimeout(state.previewRenderTimer);
     state.previewRenderTimer = null;
@@ -7430,6 +7496,7 @@ function resetRotation() {
 }
 
 function updateStats() {
+  if (state.productType === 'locker') { els.dimensionStat.textContent = '9″ / 228.6 mm · Hockey mount'; if(els.depthStat)els.depthStat.textContent=lockerState().style==='flat'?'Double-sided · Flat':'Single-sided · Layered';syncMobileCommandBar(); return; }
   if (state.productType === 'bag') { els.dimensionStat.textContent = bagDimensionLabel(); syncMobileCommandBar(); return; }
   const preset = SIZE_PRESETS[state.size];
   const usage = USAGE_PRESETS[state.usage] || USAGE_PRESETS.indoor;
@@ -7507,6 +7574,7 @@ function svgPointArea(points) {
 }
 
 function updateProjectControls() {
+  if (state.productType === 'locker') { els.saveProject.disabled = !lockerReady() || state.orderInProgress; els.placeOrder.disabled = !lockerReady() || state.orderInProgress; els.placeOrder.textContent = state.orderInProgress ? 'Preparing...' : 'Email design'; syncMobileCommandBar(); return; }
   if (state.productType === 'bag') { els.saveProject.disabled = !bagReady() || state.orderInProgress; els.placeOrder.disabled = !bagReady() || !state.customerEmail || state.orderInProgress; els.placeOrder.textContent = state.orderInProgress ? 'Preparing Order...' : bagOrderButtonLabel(); syncMobileCommandBar(); return; }
   if (!els.saveProject) return;
   const hasLedArtwork = hasOrderableLedArtwork();
@@ -7524,6 +7592,7 @@ function updateProjectControls() {
 }
 
 function getDesignName() {
+  if (state.productType === 'locker') { return lockerState().name || `${lockerState().text || 'Custom'} Locker Room Sign`; }
   if (state.productType === 'bag') return bagState().name || `${bagState().text} Bag Tag`;
   if (state.productType === 'plaque') return state.designName.trim() || 'My Custom 3D Plaque';
   return state.designName.trim() || 'My Custom LED Sign';
@@ -7543,6 +7612,7 @@ function updateRangeFill(input) {
 }
 
 function renderPreviewTitle() {
+  if (state.productType === 'locker') { els.previewTitle.textContent = lockerState().name || 'Custom Locker Room Sign'; return; }
   if (state.productType === 'bag') { els.previewTitle.textContent = bagState().name || 'Custom Bag Tag'; return; }
   if (state.productType === 'hype') {
     const hypeDesignName = state.designName.trim();
@@ -7559,6 +7629,7 @@ function renderPreviewTitle() {
 }
 
 function startDesignNameEdit() {
+  if (state.productType === 'locker') { els.previewTitle.hidden=true;els.editDesignName.hidden=true;els.designName.hidden=false;els.designName.value=getDesignName();els.designName.focus();els.designName.select();return; }
   if (state.productType === 'bag') { els.previewTitle.hidden = true; els.editDesignName.hidden = true; els.designName.hidden = false; els.designName.value = bagState().name || getDesignName(); els.designName.focus(); els.designName.select(); return; }
   if (state.isDefaultPreview) {
     state.isDefaultPreview = false;
@@ -7573,6 +7644,7 @@ function startDesignNameEdit() {
 }
 
 function finishDesignNameEdit() {
+  if (state.productType === 'locker') { lockerState().name=els.designName.value.trim();els.designName.hidden=true;els.previewTitle.hidden=false;els.editDesignName.hidden=false;renderPreviewTitle();return; }
   if (state.productType === 'bag') { bagState().name = els.designName.value.trim(); els.designName.hidden = true; els.previewTitle.hidden = false; els.editDesignName.hidden = false; renderPreviewTitle(); return; }
   if (els.designName.hidden) return;
   state.designName = els.designName.value.trim();
@@ -7584,6 +7656,7 @@ function finishDesignNameEdit() {
 }
 
 async function saveProjectFile() {
+  if (state.productType === 'locker') { return saveLockerProject(); }
   if (state.productType === 'bag') return saveBagProject();
   if (state.productType === 'hype') {
     await saveHypeChainProjectFile();
@@ -7644,6 +7717,7 @@ async function saveProjectFile() {
 }
 
 async function placeOrderRequest() {
+  if (state.productType === 'locker') return emailLockerDesign();
   if (state.orderInProgress) return;
   if (state.productType === 'bag') return orderBagTag();
   if (state.productType === 'hype') {
@@ -7732,6 +7806,7 @@ async function openProjectFiles(fileList) {
 }
 
 async function buildSignGuyProject() {
+  if (state.productType === 'locker') { return buildLockerProject(); }
   if (state.productType === 'bag') return buildBagProject();
   renderThree();
   const screenshotBlob = await captureVisualizerBlob();
@@ -7836,6 +7911,7 @@ async function getArtworkProjectDataUrl() {
 }
 
 async function restoreSignGuyProject(project, options = {}) {
+  if (project?.type === 'SignGuy.LockerSignStudio') { validateSignGuyProject(project); return restoreLockerProject(project); }
   if (project?.type === 'SignGuy.BagTagStudio') { validateSignGuyProject(project); return restoreBagProject(project); }
   validateSignGuyProject(project);
   const isExampleProject = options.isExampleProject === true;
@@ -7985,7 +8061,7 @@ async function restoreSignGuyProject(project, options = {}) {
 }
 
 function validateSignGuyProject(project) {
-  const supported = project?.type === 'SignGuy.BagTagStudio' || project?.type === 'SignGuy.LightboxStudio'
+  const supported = project?.type === 'SignGuy.LockerSignStudio' || project?.type === 'SignGuy.BagTagStudio' || project?.type === 'SignGuy.LightboxStudio'
     || project?.type === 'SignGuy.HypeChainStudio'
     || project?.type === 'SignGuy.WallPlaqueStudio';
   if (!project || !supported || !project.source?.dataUrl) {
@@ -8159,7 +8235,7 @@ async function uploadProjectFolder(project, options = {}) {
   if (!blobUploadEndpoint || !window.SignStudioPrivateBlob?.upload) {
     throw new Error('Private Blob upload client is unavailable.');
   }
-  queueEmailMarketingSubscription(project.customerEmail || state.customerEmail);
+  if (project.type !== 'SignGuy.LockerSignStudio') queueEmailMarketingSubscription(project.customerEmail || state.customerEmail);
   const uploadProject = options.sendOrderEmail ? await makeCompactOrderProject(project) : project;
   const projectName = `${projectFileBaseName(uploadProject)}.SignGuy`;
   const logoFile = await makeProjectUploadLogoFile(uploadProject, { compact: Boolean(options.sendOrderEmail) });
@@ -8180,6 +8256,7 @@ async function uploadProjectFolder(project, options = {}) {
       file: logoFile,
     },
   ];
+  if (project.type === 'SignGuy.LockerSignStudio') assets.push(...lockerOutputFiles(uploadProject));
 
   if (options.sendOrderEmail) {
     const logoPreview = await makeEmailLogoPreviewFile(uploadProject);
@@ -8209,12 +8286,13 @@ async function uploadProjectFolder(project, options = {}) {
 
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(project.type === 'SignGuy.LockerSignStudio' && sessionStorage.getItem('signGuyAdminToken') ? { Authorization: 'Bearer ' + sessionStorage.getItem('signGuyAdminToken') } : {}) },
     body: JSON.stringify({
       orderId,
       customerEmail: uploadProject.customerEmail || state.customerEmail,
       projectName,
       sendOrderEmail: Boolean(options.sendOrderEmail),
+      adminDesignPreview: project.type === 'SignGuy.LockerSignStudio' && Boolean(options.adminDesignPreview),
       subject: options.subject || ORDER_SUBMISSION_SUBJECT,
       message: options.message || makeEmailBody('Shopify checkout order started'),
       messageHtml: options.messageHtml || '',
@@ -8248,7 +8326,7 @@ async function uploadPrivateBlobAsset({ orderId, asset, endpoint }) {
       access: 'private',
       handleUploadUrl: endpoint,
       contentType: file.type || 'application/octet-stream',
-      clientPayload: JSON.stringify({ orderId, kind: asset.kind }),
+      clientPayload: JSON.stringify({ orderId, kind: asset.kind, ...(/^finalArtwork/.test(asset.kind) ? { adminToken: sessionStorage.getItem('signGuyAdminToken') } : {}) }),
     });
     return {
       kind: asset.kind,
@@ -8335,6 +8413,7 @@ function isLocalTesting() {
 }
 
 async function makeEmailLogoPreviewFile(project) {
+  if (project.type === 'SignGuy.LockerSignStudio') return dataUrlToFile(project.outputArtwork.pngDataUrl, 'locker-sign-finished-circle-preview.png');
   try {
     const dataUrl = ['SignGuy.HypeChainStudio', 'SignGuy.BagTagStudio'].includes(project.type)
       ? project.source?.dataUrl
@@ -8358,6 +8437,7 @@ async function makeEmailLogoPreviewFile(project) {
 
 async function makeProjectUploadLogoFile(project, options = {}) {
   const sourceDataUrl = project.source?.dataUrl || '';
+  if (project.type === 'SignGuy.LockerSignStudio') return dataUrlToFile(sourceDataUrl, project.source.fileName || 'locker-sign-original.png');
   const sourceName = project.source?.fileName || (project.type === 'SignGuy.HypeChainStudio' ? 'hype-chain-logo.png' : `${baseName()}.png`);
   if (!options.compact) {
     return ['SignGuy.HypeChainStudio', 'SignGuy.BagTagStudio'].includes(project.type)
@@ -8369,7 +8449,7 @@ async function makeProjectUploadLogoFile(project, options = {}) {
 
 async function makeCompactOrderProject(project) {
   const compact = JSON.parse(JSON.stringify(project));
-  if (compact.source?.dataUrl && compact.type !== 'SignGuy.BagTagStudio') {
+  if (compact.source?.dataUrl && !['SignGuy.BagTagStudio','SignGuy.LockerSignStudio'].includes(compact.type)) {
     const sourceName = compact.source.fileName || 'uploaded-logo.png';
     compact.source.dataUrl = await makeCompactLogoDataUrl(compact.source.dataUrl);
     compact.source.fileName = sourceName.replace(/\.(heic|heif|jpe?g|png)$/i, '.png') || 'uploaded-logo.png';
@@ -8633,6 +8713,7 @@ function clearCheckoutFallback() {
 }
 
 function getShopifyVariantId() {
+  if (state.productType === 'locker') return '';
   if (state.productType === 'bag') return window.SIGN_STUDIO_BAG_TAG_VARIANT_ID || BAG_TAG_VARIANTS[bagState().usage] || '';
   if (state.productType === 'hype') return SHOPIFY_HYPE_CHAIN_VARIANTS[state.hype.variant] || SHOPIFY_HYPE_CHAIN_VARIANTS.classic;
   if (state.productType === 'plaque') return SHOPIFY_CUSTOM_3D_WALL_PLAQUE_VARIANTS[state.size]?.[getPlaqueUsageKey()] || '';
@@ -8864,6 +8945,7 @@ function summarizeProjectRecord(project) {
 }
 
 function currentProjectType() {
+  if (state.productType === 'locker') { return 'SignGuy.LockerSignStudio'; }
   if (state.productType === 'bag') return 'SignGuy.BagTagStudio';
   if (state.productType === 'hype') return 'SignGuy.HypeChainStudio';
   if (state.productType === 'plaque') return 'SignGuy.WallPlaqueStudio';
@@ -8972,6 +9054,7 @@ function describeSubmitError(error) {
 }
 
 async function captureSubmissionScreenshots() {
+  if (state.productType === 'locker') { return captureLockerShots(); }
   if (state.productType === 'bag') return captureBagShots();
   const originalRotation = { ...state.rotation };
   const shots = [];
@@ -9038,6 +9121,7 @@ async function submitDesignToEndpoint({ endpoint, subject, body, screenshots }) 
 }
 
 function captureVisualizerBlob() {
+  if (state.productType === 'locker') { renderLockerView(); return new Promise(resolve => lockerView.renderer.domElement.toBlob(resolve, 'image/png')); }
   if (state.productType === 'bag') { renderBagView(); return new Promise(resolve => bagView.renderer.domElement.toBlob(resolve, 'image/png')); }
   return new Promise((resolve, reject) => {
     const source = state.three?.renderer?.domElement;

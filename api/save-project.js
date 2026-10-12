@@ -10,8 +10,9 @@
 import { createPreviewToken } from '../src/preview-token.js';
 import { saveDesignRecord } from '../src/design-records.js';
 import { enqueueEmail } from '../src/order-notifications.js';
+import { hasAdminSession } from '../src/admin-session.js';
 
-const FILE_KINDS = ['projectFile', 'logoPreview', 'logo', ...Array.from({length:100},(_,index)=>`renderScreenshot${index+1}`)];
+const FILE_KINDS = ['projectFile', 'logoPreview', 'logo', 'finalArtworkPng', 'finalArtworkSvg', ...Array.from({length:100},(_,index)=>`renderScreenshot${index+1}`)];
 
 export function createSaveHandler({ save = saveDesignRecord, enqueue = enqueueEmail, previewToken = createPreviewToken } = {}) {
  return async function handler(req, res) {
@@ -25,9 +26,9 @@ export function createSaveHandler({ save = saveDesignRecord, enqueue = enqueueEm
     const submission = validateSubmission(payload);
     const preview=submission.files.find(file=>file.kind==='renderScreenshot1');
     const previewUrl=preview?`https://sign-studio-by-sign-guy.vercel.app/uploads/${previewToken(preview.pathname)}/design-preview.png`:null;
-    const record = await save(submission, { previewUrl });
+    const record = await save(submission, { previewUrl, adminAuthorized: hasAdminSession(req) });
     // Only durable queue acceptance is awaited, never SMTP delivery.
-    if (submission.sendOrderEmail) await enqueue(record, { kind: 'submitted' });
+    if (submission.sendOrderEmail) await enqueue(record, record.product === 'Locker Room Sign' && submission.adminDesignPreview ? { kind: 'admin_design', lineItems: [{ title: 'Locker Room Sign', quantity: 1 }] } : { kind: 'submitted' });
     res.status(200).json({
       ok: true,
       folder: `orders/${submission.orderId}`,
@@ -39,7 +40,7 @@ export function createSaveHandler({ save = saveDesignRecord, enqueue = enqueueEm
     });
   } catch (error) {
     console.error('Could not finalize Studio submission.', { errorType: error?.name || 'Error' });
-    res.status(503).json({ error: 'Could not finalize the saved design. Please try again.' });
+    res.status(error.statusCode || 503).json({ error: error.statusCode === 403 ? 'Admin login is required for Locker Room Signs.' : 'Could not finalize the saved design. Please try again.' });
   }
  };
 }
@@ -74,7 +75,7 @@ export function validateSubmission(payload) {
   const orderId = String(payload?.orderId || '').trim();
   if (!/^[a-z0-9_-]{8,96}$/i.test(orderId)) throw new Error('A valid orderId is required.');
 
-  if(!Array.isArray(payload?.files)||payload.files.length>103)throw new Error('Too many uploaded files.');
+  if(!Array.isArray(payload?.files)||payload.files.length>105)throw new Error('Too many uploaded files.');
   const files = Array.isArray(payload?.files) ? payload.files.map((file) => validateBlobFile(file, orderId)) : [];
   const kinds = new Set(files.map((file) => file.kind));
   if (!kinds.has('projectFile') || !kinds.has('logo')) {
@@ -87,6 +88,7 @@ export function validateSubmission(payload) {
     customerEmail,
     projectName: safeFileName(payload?.projectName || 'sign-studio-project.SignGuy'),
     sendOrderEmail: payload?.sendOrderEmail === true,
+    ...(payload?.adminDesignPreview === true ? { adminDesignPreview: true } : {}),
     subject: String(payload?.subject || '').trim().slice(0, 240),
     message: String(payload?.message || '').trim().slice(0, 30000),
     messageHtml: String(payload?.messageHtml || '').trim().slice(0, 120000),
