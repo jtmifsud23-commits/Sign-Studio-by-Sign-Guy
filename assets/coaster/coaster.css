@@ -74,8 +74,7 @@
 .coaster-camera-tools .active{background:#ffe500;color:#050505}
 .product-coaster #coasterPreview .coaster-zoom-tools{display:grid!important;right:16px;bottom:0;grid-template-columns:34px 50px 34px}
 .coaster-zoom-tools #coasterZoomReset{font-size:11px!important;min-width:0}
-.coaster-preview-note,.coaster-gesture-hint{position:absolute;left:10px;right:10px;bottom:64px;margin:0;text-align:center;font-size:11px;line-height:1.4;color:var(--muted);pointer-events:none}
-.coaster-gesture-hint{bottom:46px}
+.coaster-gesture-hint{position:absolute;left:10px;right:10px;bottom:46px;margin:0;text-align:center;font-size:11px;line-height:1.4;color:var(--muted);pointer-events:none}
 @media(max-width:880px){#coasterPreview{top:140px;bottom:var(--coaster-mobile-footer,190px)}}
 @media(max-width:767px){
  .product-coaster .visualizer-report-menu{top:152px;right:12px}
@@ -85,7 +84,6 @@
  .coaster-text-field .locker-font-button{background:#fff;color:#1b1f21;border-color:#bfc3c1}
  .product-coaster #previewTitle{font-size:16px;min-width:0;max-width:calc(100vw - 72px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
  .coaster-controls{padding:12px}
- .coaster-preview-note{font-size:10px}
  .coaster-camera-tools{left:10px;grid-template-columns:36px 44px;gap:3px;padding:4px}
  .product-coaster #coasterPreview .coaster-zoom-tools{right:10px;grid-template-columns:26px 40px 26px;gap:3px;padding:4px}
 }
