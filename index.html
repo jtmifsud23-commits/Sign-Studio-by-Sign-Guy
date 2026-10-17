@@ -130,7 +130,6 @@
 
 <section class="panel-section coaster-controls" id="coasterControls" hidden aria-label="Custom coaster configurator">
   <div class="section-heading"><h2>Custom Coasters</h2><span class="coaster-pack-badge">4-PACK</span></div>
-  <p class="coaster-spec">101.66 mm diameter × 4 mm thick</p>
   <div class="coaster-upload-row"><button class="primary-button upload-button" id="coasterChooseFile" type="button">Upload your logo</button><button class="secondary-button" id="coasterEditDesign" type="button" hidden>Edit design</button></div>
   <input id="coasterLogoFile" type="file" hidden accept="image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg" />
   <p class="coaster-helper">Place your logo and add text to the circle. One design, repeated on all four coasters.</p>
@@ -139,8 +138,6 @@
     <div class="coaster-colour-group"><span>Logo &amp; text</span><div id="coasterPalette" class="hype-colour-row" aria-label="Artwork and text colours"></div></div>
     <p class="coaster-helper">Up to 8 colours across the entire coaster. Reusing a colour counts once.</p>
   </section>
-  <div class="coaster-quantity"><label for="coasterPacks">Packs of four</label><input id="coasterPacks" type="number" min="1" max="99" step="1" value="1" inputmode="numeric"/><output id="coasterQuantity" aria-live="polite">4 coasters · 1 pack of 4</output></div>
-  <p class="coaster-helper">Flat artwork and text. Plain reverse. All four coasters are identical.</p>
   <p id="coasterMessage" class="coaster-message" role="status" aria-live="polite"></p>
   <p class="coaster-local-note">Local preview · Save your design or download the finished artwork.</p>
 </section>
@@ -543,7 +540,7 @@
           </section>
           <img class="default-led-preview-image" id="defaultLedPreviewImage" alt="" hidden />
 <section id="coasterPreview" hidden aria-label="Coaster visualizer"><div id="coasterCanvas"></div>
-  <div class="coaster-camera-tools" role="group" aria-label="Coaster view"><button type="button" class="zoom-button" data-coaster-view="top" aria-pressed="false">Top</button><button type="button" class="zoom-button active" data-coaster-view="angled" aria-pressed="true">Angled</button><button type="button" class="zoom-button" data-coaster-view="pack" aria-pressed="false">4-pack</button></div>
+  <div class="coaster-camera-tools" role="group" aria-label="Coaster view"><button type="button" class="zoom-button active" data-coaster-view="top" aria-pressed="true">Top</button><button type="button" class="zoom-button" data-coaster-view="pack" aria-pressed="false">4-pack</button></div>
   <div class="visualizer-zoom-controls coaster-zoom-tools" role="group" aria-label="Coaster zoom"><button type="button" class="zoom-button" data-coaster-zoom="0.85" aria-label="Zoom out">−</button><button type="button" class="zoom-button" id="coasterZoomReset" aria-label="Reset zoom">100%</button><button type="button" class="zoom-button" data-coaster-zoom="1.18" aria-label="Zoom in">+</button></div>
   <p class="coaster-preview-note">101.66 mm × 4 mm · Flat face · Four identical coasters</p><p class="coaster-gesture-hint">Drag to rotate · Pinch or scroll to zoom</p>
 </section>

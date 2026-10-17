@@ -15,10 +15,9 @@ This is a separate checkout on `codex/coaster-designer`, based on published base
 1. Upload a PNG, JPEG, WebP, or SVG logo.
 2. Use the adapted Locker Room circle editor: place/crop the logo, resize, move, centre, change the background, and add independent text boxes. Fonts, text size in millimetres, colours, multiline text, drag handles, and keyboard movement are available.
 3. Review the colour conversion, adjust mapping, and confirm.
-4. Use the standard colour swatches and Top / Angled / 4-pack views. The four-pack view shows three coasters stacked flat with a fourth leaning against the stack, matching the supplied reference. All four remain the same physical size.
-5. Choose a number of packs. Each pack contains four identical coasters.
-6. Save a `.SignGuy` project, reopen it through the folder button or saved-design card, and use Edit design to continue editing.
-7. Download artwork to obtain the finished circle as PNG and SVG.
+4. Use the standard colour swatches and Top / 4-pack views. The four-pack view shows three coasters stacked flat with a fourth leaning against the stack, matching the supplied reference. All four remain the same physical size.
+5. Save a `.SignGuy` project, reopen it through the folder button or saved-design card, and use Edit design to continue editing.
+6. Download artwork to obtain the finished circle as PNG and SVG.
 
 For a prepared example, open `verification/coaster-review.SignGuy` through the folder button.
 
@@ -32,9 +31,9 @@ For a prepared example, open `verification/coaster-review.SignGuy` through the f
 
 ## Verification
 
-- `node verification/check-coaster.cjs`: upload, circle/text placement, out-of-bounds blocking, palette changes, quantity validation, local save, file restore, re-edit/cancel, product switching, and 320 / 390 / 768 px layouts. Zero browser errors and zero outbound POSTs.
+- `node verification/check-coaster.cjs`: upload, circle/text placement, out-of-bounds blocking, palette changes, local save, file restore, re-edit/cancel, product switching, and 320 / 390 / 768 px layouts. Zero browser errors and zero outbound POSTs.
 - `node verification/check-coaster-limits.cjs`: eight-colour limit with background and text included, background replacement at the limit, invalid-size rejection, PNG/SVG download, and export comparison. All 810,693 interior pixels match between PNG and rendered SVG. Zero failed network responses or browser errors.
-- `node verification/check-coaster-pack.cjs`: three horizontal bodies at 0–4, 4–8, and 8–12 mm, one leaning body with its bottom at the same floor level, unchanged local body dimensions, identical artwork, and unclipped framing at 1440 / 1024 / 768 / 390 / 320 px. Top/Angled reset correctly and screenshot capture restores the selected view.
+- `node verification/check-coaster-pack.cjs`: three horizontal bodies at 0–4, 4–8, and 8–12 mm, one leaning body with its bottom at the same floor level, unchanged local body dimensions, identical artwork, and unclipped framing at 1440 / 1024 / 768 / 390 / 320 px. Top view resets correctly and screenshot capture restores the selected view.
 - `node --test tests/*.test.js`: all 32 existing tests pass.
 - Four-pack geometry measured 101.660003662 mm × 101.660003662 mm × 4.000000000 mm per body (normal floating-point vertex precision).
 - Screenshots and machine-readable results are in `verification/coaster-*`.
