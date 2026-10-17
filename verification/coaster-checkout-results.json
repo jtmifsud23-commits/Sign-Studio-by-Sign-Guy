@@ -1,0 +1,23 @@
+{
+  "variantId": "63132097249420",
+  "productVariantConfigured": true,
+  "localReviewNoOutgoingWrites": true,
+  "snapshotMetadata": true,
+  "cloudUploadSimulated": true,
+  "originalUploadPreserved": true,
+  "assets": [
+    "projectFile",
+    "logo",
+    "finalArtworkPng",
+    "finalArtworkSvg",
+    "logoPreview",
+    "renderScreenshot1",
+    "renderScreenshot2",
+    "renderScreenshot3"
+  ],
+  "plainSaveDoesNotEmail": true,
+  "failedSavePreventsCheckout": true,
+  "paidOrderTested": false,
+  "published": false,
+  "errors": []
+}

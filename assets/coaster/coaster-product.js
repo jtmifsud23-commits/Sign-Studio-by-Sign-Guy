@@ -2,6 +2,8 @@
 const COASTER_DIAMETER_MM = 101.66;
 const COASTER_DEPTH_MM = 4;
 const COASTER_PACK_SIZE = 4;
+const COASTER_PRODUCT_URL = 'https://mysignguy.ca/products/custom-drink-coaster';
+const COASTER_SHOPIFY_VARIANT_ID = '63132097249420';
 // Measured from the supplied, unscaled Coaster Holder.stl. STL Z is up.
 const COASTER_HOLDER = Object.freeze({widthMm:108,depthMm:30,heightMm:46,cradleCentreHeightMm:56,cradleRadiusMm:52.0085,pitchMm:5.5});
 const COASTER_SIGN_DEFAULTS = Object.freeze({backing:'#191b1e',font:'Bebas Neue Bold',packs:1});
@@ -123,7 +125,31 @@ function buildCoasterFinalArtwork(){
  const svgText=`<svg xmlns="http://www.w3.org/2000/svg" width="${diameter}mm" height="${diameter}mm" viewBox="0 0 ${n} ${n}"><defs><clipPath id="coaster"><circle cx="512" cy="512" r="512"/></clipPath></defs><g clip-path="url(#coaster)"><circle cx="512" cy="512" r="512" fill="${coasterState().backing}"/>${paths}</g></svg>`;
  return {pngDataUrl:canvas.toDataURL('image/png'),svgText,widthMm:diameter,heightMm:diameter,depthMm:4,raisedMm:0};
 }
-async function saveCoasterProject(){setStatus('Saving');try{const project=await buildCoasterProject();await saveProjectRecord(project);coasterState().projectId=project.id;downloadProjectPayload(project);await refreshProjectLog();els.projectNote.textContent=`${project.name} saved locally and downloaded as a .SignGuy file.`;setStatus('Saved');}catch(error){els.projectNote.textContent=error.message;setStatus('Save failed');}finally{updateProjectControls();}}
+async function saveCoasterProject(){setStatus('Saving');try{const project=await buildCoasterProject();if(!isLocalTesting())await uploadProjectFolder(project,{screenshots:await captureCoasterShots(),message:coasterOrderText(project)});await saveProjectRecord(project);coasterState().projectId=project.id;downloadProjectPayload(project);await refreshProjectLog();els.projectNote.textContent=`${project.name} saved ${isLocalTesting()?'locally':'to your project folder'} and downloaded as a .SignGuy file.`;setStatus('Saved');}catch(error){els.projectNote.textContent=error.message;setStatus('Save failed');}finally{updateProjectControls();}}
+function coasterOrderButtonLabel(){return state.orderInProgress?'Preparing Order...':'Place Order';}
+function coasterOutputFiles(project){const output=project.outputArtwork;if(!output?.pngDataUrl||!output?.svgText)throw new Error('The finished coaster artwork is missing.');return [{kind:'finalArtworkPng',file:dataUrlToFile(output.pngDataUrl,'coaster-finished-circle.png')},{kind:'finalArtworkSvg',file:new File([output.svgText],'coaster-finished-circle.svg',{type:'image/svg+xml'})}];}
+function coasterOrderText(project){
+ const c=project.config.coaster,text=(c.wizardEdit?.textBoxes||[]).map((box,i)=>`Text ${i+1}: ${box.text}\nFont: ${box.font}\nColour: ${box.colour}`).join('\n');
+ return `Custom Drink Coaster\nDesign: ${project.name}\nQuantity: ${c.packs} four-pack(s), ${c.packs*4} identical coasters\nDimensions: 101.66 mm diameter × 4 mm total thickness\nConstruction: flat face, flush artwork and text, plain reverse\nBody/background: ${c.backing}\nColours: ${uniqueHexColours([c.backing,...c.palette.map(p=>p.colour)]).join(', ')}${text?'\n'+text:''}`;
+}
+function coasterOrderHtml(project){const c=project.config.coaster;return makeOrderEmailHtml({title:'Custom Drink Coaster request',context:'Shopify checkout started · payment not yet confirmed',logoTitle:'Finished coaster artwork',details:[['Design',project.name],['Quantity',`${c.packs} four-pack(s) · ${c.packs*4} identical coasters`],['Dimensions','101.66 mm diameter × 4 mm'],['Construction','Flush artwork and text · plain reverse'],...(c.wizardEdit?.textBoxes||[]).flatMap((box,i)=>[[`Text ${i+1}`,box.text],[`Text ${i+1} font`,box.font]])],colourSections:[{title:'Body and background',colours:[{label:'Background, sides and back',hex:c.backing}]},{title:'Artwork and text',colours:c.palette.map((p,i)=>({label:`Colour ${i+1}`,hex:p.colour}))}]});}
+async function orderCoasters(){
+ if(!coasterReady()||!state.customerEmail||state.orderInProgress)return;
+ state.orderInProgress=true;updateProjectControls();els.submitNote.textContent='';
+ try{
+  const project=await buildCoasterProject();coasterState().projectId=project.id;
+  if(isLocalTesting()){
+   await saveProjectRecord(project);downloadProjectPayload(project);
+   const params=new URL(buildShopifyCheckoutUrl(project,{designId:`local-review-${project.id}`})).searchParams;
+   const review={localPreview:true,productUrl:COASTER_PRODUCT_URL,variantId:COASTER_SHOPIFY_VARIANT_ID,packs:project.config.coaster.packs,totalCoasters:project.config.totalCoasters,cartParameters:Object.fromEntries(params)};
+   downloadBlob(JSON.stringify(review,null,2),'coaster-checkout-review.json','application/json');await refreshProjectLog();
+   els.submitNote.textContent='Coaster order files downloaded for review. Local testing does not send email or open checkout.';setStatus('Order preview ready');
+  }else{
+   const result=await uploadProjectFolder(project,{screenshots:await captureCoasterShots(),sendOrderEmail:true,subject:makeOrderEmailSubject('Custom Drink Coaster'),message:coasterOrderText(project),messageHtml:coasterOrderHtml(project)});
+   await saveProjectRecord(project);redirectToShopifyCheckout(project,result);
+  }
+ }catch(error){els.submitNote.textContent=error.message;setStatus('Order not placed');}finally{state.orderInProgress=false;updateProjectControls();}
+}
 async function exportCoasterArtwork(){try{const project=await buildCoasterProject();downloadBlob(dataUrlToFile(project.outputArtwork.pngDataUrl,'coaster-finished-circle.png'),'coaster-finished-circle.png','image/png');downloadBlob(project.outputArtwork.svgText,'coaster-finished-circle.svg','image/svg+xml');els.submitNote.textContent='Finished coaster PNG and SVG downloaded. Four identical coasters per pack.';}catch(error){els.submitNote.textContent=error.message;}}
 async function restoreCoasterProject(project){
  const c=project.config?.coaster,d=project.config?.dimensions;if(!c||!project.source?.dataUrl||!c.preparedDataUrl||!Array.isArray(c.palette)||!c.palette.length||c.palette.length>8||d?.diameterMm!==101.66||d?.depthMm!==4||project.config.packSize!==4)throw new Error('Invalid coaster project. Expected a 101.66 mm × 4 mm coaster, in packs of four.');

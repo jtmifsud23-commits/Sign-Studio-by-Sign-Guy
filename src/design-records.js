@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { get } from '@vercel/blob';
 import { createOnce, studioStore } from './studio-storage.js';
+import { validateCoasterProject } from './coaster-project.js';
 
 const PRODUCTS = {
   'SignGuy.LightboxStudio': 'LED Sign',
@@ -8,6 +9,7 @@ const PRODUCTS = {
   'SignGuy.HypeChainStudio': 'Hype Chain',
   'SignGuy.BagTagStudio': 'Bag Tag',
   'SignGuy.LockerSignStudio': 'Locker Room Sign',
+  'SignGuy.CoasterStudio': 'Drink Coasters',
 };
 export const validDesignId = id => typeof id === 'string' && /^[a-z0-9_-]{8,96}$/i.test(id);
 export function designPath(id) {
@@ -30,6 +32,10 @@ export async function saveDesignRecord(submission, {
   if (product === 'Locker Room Sign') {
     if (submission.adminDesignPreview && !adminAuthorized) throw Object.assign(new Error('Admin login is required for admin design previews.'), { statusCode: 403 });
     if (!project.outputArtwork?.pngDataUrl || !project.outputArtwork?.svgText || !['finalArtworkPng','finalArtworkSvg'].every(kind => submission.files.some(file => file.kind === kind))) throw new Error('Finished circle PNG and SVG are required');
+  }
+  if(product==='Drink Coasters'){
+    validateCoasterProject(project);
+    if(!['finalArtworkPng','finalArtworkSvg'].every(kind=>submission.files.some(file=>file.kind===kind)))throw new Error('Finished coaster PNG and SVG are required');
   }
   if (String(project.customerEmail || '').trim().toLowerCase() !== submission.customerEmail) {
     throw new Error('Project customer does not match the submission');

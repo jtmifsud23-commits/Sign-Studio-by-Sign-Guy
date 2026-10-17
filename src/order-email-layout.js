@@ -12,7 +12,7 @@ const colourNames = { '#000000': 'Black', '#020201': 'Black', '#FFFFFF': 'White'
 
 // A bounded, product-specific brief; the complete saved settings remain in .SignGuy.
 export function productionBrief(record, event) {
-  const config = record.settings || {}, preview = record.preview || {}, hype = config.hype || {}, bag = config.bag || {}, plaque = config.plaque || {}, locker = config.locker || {};
+  const config = record.settings || {}, preview = record.preview || {}, hype = config.hype || {}, bag = config.bag || {}, plaque = config.plaque || {}, locker = config.locker || {}, coaster=config.coaster||{}, isCoaster=record.product==='Drink Coasters';
   const details = [], colours = [], facts = [];
   const add = (label, value) => { if (value != null && value !== '' && typeof value !== 'object') details.push([label, String(value)]); };
   const colourGroup = (title, entries) => {
@@ -28,10 +28,19 @@ export function productionBrief(record, event) {
   const faceSize = unit(dimension.faceInches, 'in');
   const tagDimensions = [dimension.widthMm, dimension.heightMm, dimension.depthMm].filter(value => number(value) != null).map(number).join(' × ');
   const quantity = (event.lineItems || []).reduce((sum, line) => sum + Number(line.quantity || 0), 0);
-  const quantityLabel = `${quantity} ${record.product === 'Hype Chain' ? (quantity === 1 ? 'chain' : 'chains') : record.product === 'Bag Tag' ? (quantity === 1 ? 'tag' : 'tags') : record.product === '3D Plaque' ? (quantity === 1 ? 'plaque' : 'plaques') : (quantity === 1 ? 'sign' : 'signs')}`;
+  const quantityLabel = isCoaster?`${quantity} ${quantity===1?'pack':'packs'} · ${quantity*4} coasters`:`${quantity} ${record.product === 'Hype Chain' ? (quantity === 1 ? 'chain' : 'chains') : record.product === 'Bag Tag' ? (quantity === 1 ? 'tag' : 'tags') : record.product === '3D Plaque' ? (quantity === 1 ? 'plaque' : 'plaques') : (quantity === 1 ? 'sign' : 'signs')}`;
   facts.push([['admin_design', 'locker_design'].includes(event.kind) ? 'Quantity' : 'Quantity ordered', quantityLabel]);
   let productTitle = record.product;
-  if (record.product === 'Hype Chain') {
+  if(isCoaster){
+    productTitle='Custom Drink Coaster · Four-Pack';
+    facts.push(['Coaster size','101.66 mm diameter × 4 mm']);
+    add('Pack contents','4 identical coasters per pack');
+    add('Construction','Flat face · flush artwork and text · plain reverse');
+    (coaster.wizardEdit?.textBoxes||[]).forEach((box,i)=>{add(`Text ${i+1}`,box.text);add(`Text ${i+1} font`,box.font);add(`Text ${i+1} box`,`${number(box.width*101.66)} × ${number(box.height*101.66)} mm`);});
+    colourGroup('Body and background',[{label:'Background, sides and back',value:coaster.backing}]);
+    colourGroup('Coaster artwork colours',(coaster.palette||[]).map((p,i)=>({label:`Colour ${i+1} · flat`,value:p.colour})));
+    colourGroup('Added text colours',(coaster.wizardEdit?.textBoxes||[]).map((box,i)=>({label:`Text ${i+1}`,value:box.colour})));
+  }else if (record.product === 'Hype Chain') {
     const style = hype.variant === 'spinner' ? 'Spinner' : 'Classic';
     productTitle = `${style} Hype Chain`;
     const length = [display(hype.chainLength), unit(hype.linkCount, 'links')].filter(Boolean).join(' · ');
@@ -98,12 +107,12 @@ export function productionBrief(record, event) {
   const warning = roster.length && rosterQuantity !== quantity ? `CHECK QUANTITIES: the saved roster totals ${rosterQuantity}; Shopify ordered ${quantity}. Confirm the roster before production.` : null;
   const files = record.files || [];
   const screenshots = files.filter(file => /^renderScreenshot\d+$/.test(file.kind)).sort((a, b) => Number(a.kind.slice(16)) - Number(b.kind.slice(16)));
-  const previews = screenshots.slice(0, record.product === 'Bag Tag' ? 4 : 2).map((file, i) => ({
+  const previews = screenshots.slice(0, record.product === 'Bag Tag' ? 4 : isCoaster?3:2).map((file, i) => ({
     cid: `bag-tag-${file.kind.slice(16)}`,
-    label: record.product === 'Bag Tag' ? `Tag ${Number(file.kind.slice(16))}${roster[Number(file.kind.slice(16)) - 1]?.name ? ` · ${roster[Number(file.kind.slice(16)) - 1].name}` : ''}` : record.product === 'Locker Room Sign' ? i === 0 ? 'Saved design · assembly' : 'Saved design · circle front' : i === 0 ? 'Saved design · front' : record.product === 'Hype Chain' ? 'Saved design · chain view' : 'Saved design · angled',
+    label: isCoaster?['Saved design · coaster top','Saved design · four-pack','Saved design · holder view'][Number(file.kind.slice(16))-1]||'Saved coaster design':record.product === 'Bag Tag' ? `Tag ${Number(file.kind.slice(16))}${roster[Number(file.kind.slice(16)) - 1]?.name ? ` · ${roster[Number(file.kind.slice(16)) - 1].name}` : ''}` : record.product === 'Locker Room Sign' ? i === 0 ? 'Saved design · assembly' : 'Saved design · circle front' : i === 0 ? 'Saved design · front' : record.product === 'Hype Chain' ? 'Saved design · chain view' : 'Saved design · angled',
   }));
   if (!previews.length && files.some(file => file.kind === 'logoPreview' || file.kind === 'logo')) previews.push({ cid: 'uploaded-logo', label: 'Uploaded artwork · design preview unavailable' });
-  else if (record.product === 'Locker Room Sign' && files.some(file => file.kind === 'logoPreview')) previews.push({ cid: 'uploaded-logo', label: 'Finished circle artwork · logo and added text' });
+  else if ((isCoaster||record.product === 'Locker Room Sign') && files.some(file => file.kind === 'logoPreview')) previews.push({ cid: 'uploaded-logo', label: 'Finished circle artwork · logo and added text' });
   const shop = String(event.shop || '');
   const orderUrl = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop) && /^\d+$/.test(String(event.orderId || ''))
     ? `https://admin.shopify.com/store/${shop.split('.')[0]}/orders/${event.orderId}` : null;

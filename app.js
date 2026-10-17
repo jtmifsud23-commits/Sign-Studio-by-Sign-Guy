@@ -1473,7 +1473,7 @@ function applyPreviewEnvironment() {
 
 function updateProductCta() {
   if (!els.placeOrder) return;
-  els.placeOrder.textContent = state.orderInProgress ? (state.productType==='locker'?'Preparing...':'Placing Order...') : state.productType==='coaster'?'Download artwork':state.productType==='locker'?'Email design':state.productType==='bag'?bagOrderButtonLabel():'Place Order';
+  els.placeOrder.textContent = state.orderInProgress ? (state.productType==='locker'?'Preparing...':'Placing Order...') : state.productType==='coaster'?coasterOrderButtonLabel():state.productType==='locker'?'Email design':state.productType==='bag'?bagOrderButtonLabel():'Place Order';
   syncMobileCommandBar();
 }
 
@@ -1679,7 +1679,7 @@ function setupMobileAccordion(section, heading) {
 function syncMobileCommandBar() {
   if (els.mobilePlaceOrder && els.placeOrder) {
     els.mobilePlaceOrder.disabled = els.placeOrder.disabled;
-    els.mobilePlaceOrder.textContent = state.orderInProgress ? (state.productType==='locker'?'Preparing...':'Placing Order...') : state.productType==='coaster'?'Download artwork':state.productType==='locker'?'Email design':state.productType==='bag'?bagOrderButtonLabel():'Place Order';
+    els.mobilePlaceOrder.textContent = state.orderInProgress ? (state.productType==='locker'?'Preparing...':'Placing Order...') : state.productType==='coaster'?coasterOrderButtonLabel():state.productType==='locker'?'Email design':state.productType==='bag'?bagOrderButtonLabel():'Place Order';
   }
   if (els.mobileSaveProject && els.saveProject) {
     els.mobileSaveProject.disabled = els.saveProject.disabled;
@@ -1717,7 +1717,7 @@ function getMobileCheckoutSelectionLabel() {
 }
 
 function getMobilePlaceOrderDisabledReason() {
-  if(state.productType==='coaster')return coasterState().error || 'Upload and confirm your coaster design';
+  if(state.productType==='coaster')return coasterState().error||(!coasterReady()?'Upload and confirm your coaster design':!state.customerEmail?'Enter your email first':'');
   if (state.productType === 'locker') { return 'Email your finished design'; }
   if (state.productType === 'bag') {
     const b=bagState();
@@ -7605,7 +7605,7 @@ function svgPointArea(points) {
 }
 
 function updateProjectControls() {
-  if(state.productType==='coaster'){els.saveProject.disabled=!coasterReady();els.placeOrder.disabled=!coasterReady();els.placeOrder.textContent='Download artwork';syncMobileCommandBar();return;}
+  if(state.productType==='coaster'){els.saveProject.disabled=!coasterReady()||state.orderInProgress;els.placeOrder.disabled=!coasterReady()||!state.customerEmail||state.orderInProgress;els.placeOrder.textContent=coasterOrderButtonLabel();syncMobileCommandBar();return;}
   if (state.productType === 'locker') { els.saveProject.disabled = !lockerReady() || state.orderInProgress; els.placeOrder.disabled = !lockerReady() || state.orderInProgress; els.placeOrder.textContent = state.orderInProgress ? 'Preparing...' : 'Email design'; syncMobileCommandBar(); return; }
   if (state.productType === 'bag') { els.saveProject.disabled = !bagReady() || state.orderInProgress; els.placeOrder.disabled = !bagReady() || !state.customerEmail || state.orderInProgress; els.placeOrder.textContent = state.orderInProgress ? 'Preparing Order...' : bagOrderButtonLabel(); syncMobileCommandBar(); return; }
   if (!els.saveProject) return;
@@ -7754,7 +7754,7 @@ async function saveProjectFile() {
 }
 
 async function placeOrderRequest() {
-  if (state.productType === 'coaster') return exportCoasterArtwork();
+  if (state.productType === 'coaster') return orderCoasters();
   if (state.productType === 'locker') return emailLockerDesign();
   if (state.orderInProgress) return;
   if (state.productType === 'bag') return orderBagTag();
@@ -8297,6 +8297,7 @@ async function uploadProjectFolder(project, options = {}) {
     },
   ];
   if (project.type === 'SignGuy.LockerSignStudio') assets.push(...lockerOutputFiles(uploadProject));
+  if (project.type === 'SignGuy.CoasterStudio') assets.push(...coasterOutputFiles(uploadProject));
 
   if (options.sendOrderEmail) {
     const logoPreview = await makeEmailLogoPreviewFile(uploadProject);
@@ -8453,6 +8454,7 @@ function isLocalTesting() {
 }
 
 async function makeEmailLogoPreviewFile(project) {
+  if(project.type==='SignGuy.CoasterStudio')return dataUrlToFile(project.outputArtwork.pngDataUrl,'coaster-finished-circle-preview.png');
   if (project.type === 'SignGuy.LockerSignStudio') return dataUrlToFile(project.outputArtwork.pngDataUrl, 'locker-sign-finished-circle-preview.png');
   try {
     const dataUrl = ['SignGuy.HypeChainStudio', 'SignGuy.BagTagStudio'].includes(project.type)
@@ -8477,6 +8479,7 @@ async function makeEmailLogoPreviewFile(project) {
 
 async function makeProjectUploadLogoFile(project, options = {}) {
   const sourceDataUrl = project.source?.dataUrl || '';
+  if(project.type==='SignGuy.CoasterStudio')return dataUrlToFile(sourceDataUrl,project.source.fileName||'coaster-original.png');
   if (project.type === 'SignGuy.LockerSignStudio') return dataUrlToFile(sourceDataUrl, project.source.fileName || 'locker-sign-original.png');
   const sourceName = project.source?.fileName || (project.type === 'SignGuy.HypeChainStudio' ? 'hype-chain-logo.png' : `${baseName()}.png`);
   if (!options.compact) {
@@ -8489,7 +8492,7 @@ async function makeProjectUploadLogoFile(project, options = {}) {
 
 async function makeCompactOrderProject(project) {
   const compact = JSON.parse(JSON.stringify(project));
-  if (compact.source?.dataUrl && !['SignGuy.BagTagStudio','SignGuy.LockerSignStudio'].includes(compact.type)) {
+  if (compact.source?.dataUrl && !['SignGuy.BagTagStudio','SignGuy.LockerSignStudio','SignGuy.CoasterStudio'].includes(compact.type)) {
     const sourceName = compact.source.fileName || 'uploaded-logo.png';
     compact.source.dataUrl = await makeCompactLogoDataUrl(compact.source.dataUrl);
     compact.source.fileName = sourceName.replace(/\.(heic|heif|jpe?g|png)$/i, '.png') || 'uploaded-logo.png';
@@ -8584,29 +8587,41 @@ async function makeRasterLogoPreviewDataUrl(dataUrl) {
   return canvas.toDataURL('image/png');
 }
 
-function redirectToShopifyCheckout(project, uploadResult = {}) {
+function buildShopifyCheckoutUrl(project, uploadResult = {}) {
   const designId = String(uploadResult.designId || '');
   if (!/^[a-z0-9_-]{8,96}$/i.test(designId)) throw new Error('The design record was not confirmed. Please try placing your order again.');
   // Use the saved design, not mutable controls after the asynchronous upload.
   const hype = project.type === 'SignGuy.HypeChainStudio' ? project.config.hype : null;
-  const variantId = hype ? SHOPIFY_HYPE_CHAIN_VARIANTS[hype.variant] : getShopifyVariantId();
+  const coaster=project.type==='SignGuy.CoasterStudio'?project.config.coaster:null;
+  const variantId = coaster?COASTER_SHOPIFY_VARIANT_ID:hype ? SHOPIFY_HYPE_CHAIN_VARIANTS[hype.variant] : getShopifyVariantId();
+  if(coaster&&(!Number.isInteger(coaster.packs)||coaster.packs<1||coaster.packs>99))throw new Error('Invalid coaster pack quantity.');
   if (!variantId) throw new Error('No matching Shopify variant was found.');
   const projectName = `${projectFileBaseName(project)}.SignGuy`;
   const params = new URLSearchParams();
 
   params.set('id', variantId);
-  params.set('quantity', project.type === 'SignGuy.BagTagStudio' ? String(bagTotalQuantity(project.config.bag)) : '1');
+  params.set('quantity', coaster?String(coaster.packs):project.type === 'SignGuy.BagTagStudio' ? String(bagTotalQuantity(project.config.bag)) : '1');
   params.set('return_to', '/cart');
   setShopifyOrderField(params, '_Studio design ID', designId);
 
-  if (state.customerEmail) {
-    params.set('checkout[email]', state.customerEmail);
+  const customerEmail=coaster?project.customerEmail:state.customerEmail;
+  if (customerEmail) {
+    params.set('checkout[email]', customerEmail);
   }
 
-  setShopifyOrderField(params, project.type==='SignGuy.BagTagStudio'?'_Customer email':'Customer email', state.customerEmail || '');
+  setShopifyOrderField(params, project.type==='SignGuy.BagTagStudio'?'_Customer email':'Customer email', customerEmail || '');
   setShopifyOrderField(params, project.type==='SignGuy.BagTagStudio'?'Design':'Design name', project.name || getDesignName());
 
-  if (project.type === 'SignGuy.BagTagStudio') {
+  if (coaster) {
+    setShopifyOrderField(params,'Product','Custom Drink Coaster');
+    setShopifyOrderField(params,'Pack size','4 identical coasters');
+    setShopifyOrderField(params,'Coaster size','101.66 mm diameter × 4 mm');
+    setShopifyOrderField(params,'Construction','Flush artwork and text · plain reverse');
+    setShopifyOrderField(params,'Body colour',getOrderColourName(coaster.backing));
+    setShopifyOrderField(params,'_Coaster colours',JSON.stringify(uniqueHexColours([coaster.backing,...coaster.palette.map(p=>p.colour)])));
+    (coaster.wizardEdit?.textBoxes||[]).forEach((box,i)=>{setShopifyOrderField(params,`Text ${i+1}`,box.text);setShopifyOrderField(params,`_Text ${i+1} font`,box.font);});
+    if(uploadResult.previewUrl)setShopifyOrderField(params,'Design preview',uploadResult.previewUrl);
+  } else if (project.type === 'SignGuy.BagTagStudio') {
     const bag = project.config.bag;
     if(uploadResult.previewUrl)params.set('properties[Preview]',uploadResult.previewUrl);
     setShopifyOrderField(params, '_Product', 'Custom Team Bag Tag');
@@ -8656,13 +8671,18 @@ function redirectToShopifyCheckout(project, uploadResult = {}) {
   }
   setShopifyOrderField(params, project.type==='SignGuy.BagTagStudio'?'_SignGuy file':'SignGuy file', projectName);
 
+  return `${SHOPIFY_CHECKOUT_BASE_URL}/add?${params.toString()}`;
+}
+
+function redirectToShopifyCheckout(project, uploadResult = {}) {
+  const checkoutUrl=buildShopifyCheckoutUrl(project,uploadResult);
   trackSignStudioEvent('add_to_cart', {
     ecommerce: {
       currency: 'CAD',
       items: [getAnalyticsProductItem(project)],
     },
   });
-  navigateToCheckoutUrl(`${SHOPIFY_CHECKOUT_BASE_URL}/add?${params.toString()}`);
+  navigateToCheckoutUrl(checkoutUrl);
 }
 
 function setShopifyOrderField(params, label, value) {
@@ -8753,7 +8773,7 @@ function clearCheckoutFallback() {
 }
 
 function getShopifyVariantId() {
-  if (state.productType === 'coaster') return '';
+  if (state.productType === 'coaster') return COASTER_SHOPIFY_VARIANT_ID;
   if (state.productType === 'locker') return '';
   if (state.productType === 'bag') return window.SIGN_STUDIO_BAG_TAG_VARIANT_ID || BAG_TAG_VARIANTS[bagState().usage] || '';
   if (state.productType === 'hype') return SHOPIFY_HYPE_CHAIN_VARIANTS[state.hype.variant] || SHOPIFY_HYPE_CHAIN_VARIANTS.classic;

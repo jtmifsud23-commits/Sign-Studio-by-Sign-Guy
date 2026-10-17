@@ -17,7 +17,7 @@ This is a separate checkout on `codex/coaster-designer`, based on published base
 3. Review the colour conversion, adjust mapping, and confirm.
 4. Use the standard colour swatches and Top / 4-pack / Holder views. The four-pack view shows three coasters stacked flat with a fourth leaning against the stack. Holder shows four upright coasters nested in the supplied holder STL. All four remain the same physical size.
 5. Save a `.SignGuy` project, reopen it through the folder button or saved-design card, and use Edit design to continue editing.
-6. Download artwork to obtain the finished circle as PNG and SVG.
+6. Use Place Order. Locally this downloads the editable design and a checkout-review JSON file, without sending email or opening checkout. Finished PNG/SVG artwork remains included in the editable file.
 
 For a prepared example, open `verification/coaster-review.SignGuy` through the folder button.
 
@@ -35,13 +35,20 @@ For a prepared example, open `verification/coaster-review.SignGuy` through the f
 - `node verification/check-coaster-limits.cjs`: eight-colour limit with background and text included, background replacement at the limit, invalid-size rejection, PNG/SVG download, and export comparison. All 810,693 interior pixels match between PNG and rendered SVG. Zero failed network responses or browser errors.
 - `node verification/check-coaster-pack.cjs`: three horizontal bodies at 0–4, 4–8, and 8–12 mm, one leaning body with its bottom at the same floor level, unchanged local body dimensions, identical artwork, and unclipped framing at 1440 / 1024 / 768 / 390 / 320 px. Top view resets correctly and screenshot capture restores the selected view.
 - `node verification/check-coaster-holder.cjs`: the bundled STL hash matches the supplied original; its 3,106 triangles are preserved at 1:1 scale. Four unchanged 101.66 × 4 mm bodies share the design texture, sit upright in the cradle, and have 1.5 mm gaps between them and about 0.7585 mm clearance at each end of the holder's cavity. Holder visibility, save/reopen, three screenshot views, framing, and separate camera/zoom buttons pass on five desktop/mobile sizes, with no browser errors or failed requests. The circular cradle measures about 104.017 mm across. These measurements establish preview placement, not physical print fit.
-- `node --test tests/*.test.js`: all 32 existing tests pass.
+- `node verification/check-coaster-checkout.cjs`: correct live product variant, saved-design metadata despite switched controls, original upload preservation, finished PNG/SVG and three screenshot descriptors, plain-save versus order email flags, upload failure blocking, and desktop/mobile Place Order buttons. Cloud requests and navigation are simulated; no live cart, email or paid order is created.
+- `node --test tests/*.test.js`: all 36 tests pass, including coaster record validation, unpaid submission handling, actual paid pack quantities, and exact production attachments through a mocked mail transport.
 - Four-pack geometry measured 101.660003662 mm × 101.660003662 mm × 4.000000000 mm per body (normal floating-point vertex precision).
 - Screenshots and machine-readable results are in `verification/coaster-*`.
 
 ## Publication boundary
 
-This implements the local designer and review exports. Coaster checkout, pricing, cloud upload, paid-order metadata, and production email integration are not connected. The action button downloads artwork. Local analytics are disabled. No live site, Shopify product, or deployment was changed.
+The local code is connected to the existing Shopify product `https://mysignguy.ca/products/custom-drink-coaster`, variant `63132097249420` (SKU `MSG-COA-CUSTOM`). On October 17, 2026 Shopify confirmed it is active and available for sale at $30 CAD per four-pack, with inventory untracked. No product settings or pricing were changed.
+
+On a deployed host, Place Order uploads and confirms the saved design, original logo, finished circle PNG/SVG, artwork preview and Top / 4-pack / Holder renders before opening the native Shopify cart. Cart quantity is the number of four-packs. Metadata stays on the specific cart item and includes the Studio design ID, pack size, dimensions, construction, colours, text and fonts, preview link, and editable file name. Production email uses Shopify's actual paid quantity and calculates total coasters as paid packs × four. Unpaid submissions remain labelled unpaid; plain saves queue no email.
+
+Local Place Order is a dry run and downloads review files. Cloud upload, mail delivery, and cart navigation were verified with local test doubles; the paid webhook path was verified with mocked storage and mail. No live site or deployment was changed. A live cart/checkout and real paid-email delivery remain to be verified after publication is approved. Local analytics remain disabled.
+
+Checkout uses the existing [Shopify Cart API](https://shopify.dev/docs/api/ajax/reference/cart) integration and line-item properties.
 
 The SVG contains flat, solid-colour artwork paths at the requested physical dimensions. Editable logo placement and text live in the `.SignGuy` file. The 3D view demonstrates the coaster body and flush face; it is not a production multicolour 3MF export or a physical print validation.
 
