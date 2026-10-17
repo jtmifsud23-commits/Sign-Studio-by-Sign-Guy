@@ -15,7 +15,7 @@ This is a separate checkout on `codex/coaster-designer`, based on published base
 1. Upload a PNG, JPEG, WebP, or SVG logo.
 2. Use the adapted Locker Room circle editor: place/crop the logo, resize, move, centre, change the background, and add independent text boxes. Fonts, text size in millimetres, colours, multiline text, drag handles, and keyboard movement are available.
 3. Review the colour conversion, adjust mapping, and confirm.
-4. Use the standard colour swatches and Top / 4-pack views. The four-pack view shows three coasters stacked flat with a fourth leaning against the stack, matching the supplied reference. All four remain the same physical size.
+4. Use the standard colour swatches and Top / 4-pack / Holder views. The four-pack view shows three coasters stacked flat with a fourth leaning against the stack. Holder shows four upright coasters nested in the supplied holder STL. All four remain the same physical size.
 5. Save a `.SignGuy` project, reopen it through the folder button or saved-design card, and use Edit design to continue editing.
 6. Download artwork to obtain the finished circle as PNG and SVG.
 
@@ -34,6 +34,7 @@ For a prepared example, open `verification/coaster-review.SignGuy` through the f
 - `node verification/check-coaster.cjs`: upload, circle/text placement, out-of-bounds blocking, palette changes, local save, file restore, re-edit/cancel, product switching, and 320 / 390 / 768 px layouts. Zero browser errors and zero outbound POSTs.
 - `node verification/check-coaster-limits.cjs`: eight-colour limit with background and text included, background replacement at the limit, invalid-size rejection, PNG/SVG download, and export comparison. All 810,693 interior pixels match between PNG and rendered SVG. Zero failed network responses or browser errors.
 - `node verification/check-coaster-pack.cjs`: three horizontal bodies at 0–4, 4–8, and 8–12 mm, one leaning body with its bottom at the same floor level, unchanged local body dimensions, identical artwork, and unclipped framing at 1440 / 1024 / 768 / 390 / 320 px. Top view resets correctly and screenshot capture restores the selected view.
+- `node verification/check-coaster-holder.cjs`: the bundled STL hash matches the supplied original; its 3,106 triangles are preserved at 1:1 scale. Four unchanged 101.66 × 4 mm bodies share the design texture, sit upright in the cradle, and have 1.5 mm gaps between them and about 0.7585 mm clearance at each end of the holder's cavity. Holder visibility, save/reopen, three screenshot views, framing, and separate camera/zoom buttons pass on five desktop/mobile sizes, with no browser errors or failed requests. The circular cradle measures about 104.017 mm across. These measurements establish preview placement, not physical print fit.
 - `node --test tests/*.test.js`: all 32 existing tests pass.
 - Four-pack geometry measured 101.660003662 mm × 101.660003662 mm × 4.000000000 mm per body (normal floating-point vertex precision).
 - Screenshots and machine-readable results are in `verification/coaster-*`.
@@ -43,3 +44,5 @@ For a prepared example, open `verification/coaster-review.SignGuy` through the f
 This implements the local designer and review exports. Coaster checkout, pricing, cloud upload, paid-order metadata, and production email integration are not connected. The action button downloads artwork. Local analytics are disabled. No live site, Shopify product, or deployment was changed.
 
 The SVG contains flat, solid-colour artwork paths at the requested physical dimensions. Editable logo placement and text live in the `.SignGuy` file. The 3D view demonstrates the coaster body and flush face; it is not a production multicolour 3MF export or a physical print validation.
+
+The original `Coaster Holder.stl` remains untouched at its supplied location. A byte-identical preview copy is bundled at `assets/coaster/coaster-holder.stl`; `assets/coaster/coaster-holder-source.json` records the source, hash, measured cavity, and coaster placement. The holder is a view option, with no holder purchase option or price added.

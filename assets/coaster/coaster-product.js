@@ -2,8 +2,10 @@
 const COASTER_DIAMETER_MM = 101.66;
 const COASTER_DEPTH_MM = 4;
 const COASTER_PACK_SIZE = 4;
+// Measured from the supplied, unscaled Coaster Holder.stl. STL Z is up.
+const COASTER_HOLDER = Object.freeze({widthMm:108,depthMm:30,heightMm:46,cradleCentreHeightMm:56,cradleRadiusMm:52.0085,pitchMm:5.5});
 const COASTER_SIGN_DEFAULTS = Object.freeze({backing:'#191b1e',font:'Bebas Neue Bold',packs:1});
-let coasterSign, coasterView, coasterImage, coasterRevision=0;
+let coasterSign, coasterView, coasterImage, coasterRevision=0, coasterHolderPromise;
 function coasterState(){return coasterSign ||= {...COASTER_SIGN_DEFAULTS,palette:[],source:null,wizardEdit:null,name:'',projectId:null,busy:false,error:'',view:'top',angle:0,tilt:0,zoom:1,backingIndex:-1};}
 function coasterDimensions(){return {diameterMm:COASTER_DIAMETER_MM,widthMm:COASTER_DIAMETER_MM,heightMm:COASTER_DIAMETER_MM,depthMm:COASTER_DEPTH_MM,baseMm:COASTER_DEPTH_MM,raisedMm:0};}
 function coasterColours(){const s=coasterState();return uniqueHexColours([s.backing,...s.palette.map(p=>p.colour)]);}
@@ -15,11 +17,30 @@ function setupCoaster(){
  document.querySelector('#coasterLogoFile').addEventListener('change',async event=>{const file=event.target.files[0];if(!file)return;try{await beginCoasterLogoWizard(file);}catch(error){coasterState().error=error.message;syncCoasterControls();updateProjectControls();setStatus('Upload failed');}finally{event.target.value='';}});
  document.querySelector('#coasterEditDesign').addEventListener('click',editExistingCoasterDesign);
  document.querySelector('#coasterBackground').addEventListener('click',event=>openCoasterColourPopover(coasterState().backingIndex,event.currentTarget));
- document.querySelectorAll('[data-coaster-view]').forEach(button=>button.addEventListener('click',()=>{const s=coasterState();s.view=button.dataset.coasterView;s.angle=s.view==='top'?0:.12;s.tilt=s.view==='top'?0:.32;s.zoom=1;renderCoasterView();}));
+ document.querySelectorAll('[data-coaster-view]').forEach(button=>button.addEventListener('click',()=>{const s=coasterState();s.view=button.dataset.coasterView;s.angle=s.view==='top'?0:s.view==='holder'?.58:.12;s.tilt=s.view==='top'?0:.32;s.zoom=1;renderCoasterView();}));
  document.querySelectorAll('[data-coaster-zoom]').forEach(button=>button.addEventListener('click',()=>{coasterState().zoom=clamp(coasterState().zoom*Number(button.dataset.coasterZoom),.6,2.5);renderCoasterView();}));
  document.querySelector('#coasterZoomReset').addEventListener('click',()=>{coasterState().zoom=1;renderCoasterView();});
 }
-async function activateCoaster(){setupCoaster();if(!coasterView)initCoasterView();await buildCoaster();}
+async function activateCoaster(){setupCoaster();if(!coasterView)initCoasterView();await loadCoasterHolder();await buildCoaster();}
+async function loadCoasterHolder(){
+ if(coasterView.holder)return;
+ if(!coasterHolderPromise)coasterHolderPromise=(async()=>{
+  const response=await fetch('./assets/coaster/coaster-holder.stl');if(!response.ok)throw new Error('Could not load the coaster holder. Please refresh and try again.');
+  const buffer=await response.arrayBuffer();if(buffer.byteLength<84)throw new Error('The coaster holder model is incomplete.');
+  const data=new DataView(buffer),triangles=data.getUint32(80,true);if(buffer.byteLength!==84+triangles*50)throw new Error('Invalid coaster holder STL.');
+  const vertices=new Float32Array(triangles*9);
+  for(let triangle=0;triangle<triangles;triangle++)for(let vertex=0;vertex<3;vertex++){
+   const offset=84+triangle*50+12+vertex*12,k=triangle*9+vertex*3;
+   // Rigid rotation/translation only. Preserve every source triangle at 1:1 mm.
+   vertices[k]=data.getFloat32(offset,true)-COASTER_HOLDER.widthMm/2;
+   vertices[k+1]=data.getFloat32(offset+8,true);
+   vertices[k+2]=COASTER_HOLDER.depthMm/2-data.getFloat32(offset+4,true);
+  }
+  const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(vertices,3));geometry.computeVertexNormals();geometry.computeBoundingBox();geometry.computeBoundingSphere();
+  const holder=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:new THREE.Color('#24262a').convertSRGBToLinear(),roughness:.88,metalness:0}));holder.name='supplied-coaster-holder';holder.visible=false;holder.userData={source:'Coaster Holder.stl',scaleMm:1,triangleCount:triangles};coasterView.scene.add(holder);coasterView.holder=holder;
+ })().catch(error=>{coasterHolderPromise=null;throw error;});
+ await coasterHolderPromise;
+}
 function initCoasterView(){
  const host=document.querySelector('#coasterCanvas'),renderer=new THREE.WebGLRenderer({antialias:true,alpha:true,preserveDrawingBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.outputEncoding=THREE.sRGBEncoding;
  const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(34,1,1,2000),group=new THREE.Group();scene.add(group);
@@ -71,10 +92,15 @@ function layoutCoasterPack(pack){
  });
 }
 function renderCoasterView(){
- if(!coasterView||state.productType!=='coaster')return;const s=coasterState(),host=document.querySelector('#coasterCanvas'),w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;
+ if(!coasterView||!coasterView.group.children.length||state.productType!=='coaster')return;const s=coasterState(),host=document.querySelector('#coasterCanvas'),w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;
  if(isMobileControlLayout()){const bar=els.mobileCommandBar.getBoundingClientRect(),stage=els.stage.getBoundingClientRect();if(bar.height>0&&!document.body.classList.contains('mobile-controls-open'))document.querySelector('#coasterPreview').style.setProperty('--coaster-mobile-footer',Math.max(16,stage.bottom-bar.top+16)+'px');}
- const pack=s.view==='pack';layoutCoasterPack(pack);
- const bounds=new THREE.Box3();coasterView.group.children.filter(d=>d.visible).forEach(d=>bounds.union(new THREE.Box3().setFromObject(d)));const eye=new THREE.Vector3(Math.sin(s.angle)*Math.cos(s.tilt),Math.sin(s.tilt),Math.cos(s.angle)*Math.cos(s.tilt)),target=bounds.getCenter(new THREE.Vector3());
+ const pack=s.view==='pack',holderView=s.view==='holder';layoutCoasterPack(pack);
+ if(coasterView.holder)coasterView.holder.visible=holderView;
+ if(holderView){
+  const seatHeight=COASTER_HOLDER.cradleCentreHeightMm-COASTER_HOLDER.cradleRadiusMm+COASTER_DIAMETER_MM/2;
+  coasterView.group.children.forEach((disk,i)=>{disk.visible=true;disk.rotation.set(0,0,0);disk.position.set(0,seatHeight,(1.5-i)*COASTER_HOLDER.pitchMm);});
+ }
+ const bounds=new THREE.Box3();coasterView.group.children.filter(d=>d.visible).forEach(d=>bounds.union(new THREE.Box3().setFromObject(d)));if(holderView&&coasterView.holder)bounds.union(new THREE.Box3().setFromObject(coasterView.holder));const eye=new THREE.Vector3(Math.sin(s.angle)*Math.cos(s.tilt),Math.sin(s.tilt),Math.cos(s.angle)*Math.cos(s.tilt)),target=bounds.getCenter(new THREE.Vector3());
  const {renderer,camera,scene}=coasterView;renderer.setSize(w,h,false);camera.aspect=w/h;camera.position.copy(target).addScaledVector(eye,fitLockerCameraDistance(bounds,target,eye,camera.aspect)/s.zoom);camera.lookAt(target);camera.updateProjectionMatrix();renderer.render(scene,camera);
  document.querySelectorAll('[data-coaster-view]').forEach(button=>{const active=button.dataset.coasterView===s.view;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});document.querySelector('#coasterZoomReset').textContent=Math.round(s.zoom*100)+'%';
 }
@@ -103,7 +129,7 @@ async function restoreCoasterProject(project){
  const c=project.config?.coaster,d=project.config?.dimensions;if(!c||!project.source?.dataUrl||!c.preparedDataUrl||!Array.isArray(c.palette)||!c.palette.length||c.palette.length>8||d?.diameterMm!==101.66||d?.depthMm!==4||project.config.packSize!==4)throw new Error('Invalid coaster project. Expected a 101.66 mm × 4 mm coaster, in packs of four.');
  const image=await loadImage(c.preparedDataUrl),candidate={...COASTER_SIGN_DEFAULTS,...c,source:{...project.source},name:project.name,projectId:project.id,busy:false,error:'',backing:normalizeHex(c.backing),packs:Number(c.packs),palette:c.palette.map(p=>{if(!Array.isArray(p.rgb)||p.rgb.length!==3||p.rgb.some(v=>!Number.isFinite(v)))throw new Error('Invalid coaster colours.');return {rgb:p.rgb.map(v=>clamp(v,0,255)),colour:normalizeHex(p.colour),height:0};})};
  if(!Number.isInteger(candidate.packs)||candidate.packs<1||candidate.packs>99||uniqueHexColours([candidate.backing,...candidate.palette.map(p=>p.colour)]).length>8)throw new Error('Invalid coaster pack quantity or colour count.');
- if(!['top','pack'].includes(candidate.view)){candidate.view='top';candidate.angle=0;candidate.tilt=0;candidate.zoom=1;}
+ if(!['top','pack','holder'].includes(candidate.view)){candidate.view='top';candidate.angle=0;candidate.tilt=0;candidate.zoom=1;}
  coasterSign=candidate;coasterImage=image;++coasterRevision;state.productSelectionMenuResolved=true;hideProductSelectionMenu();selectProductType('coaster');await activateCoaster();await refreshProjectLog();
 }
-async function captureCoasterShots(){const s=coasterState(),old={view:s.view,angle:s.angle,tilt:s.tilt,zoom:s.zoom},shots=[];try{for(const view of ['top','pack']){Object.assign(s,{view,angle:view==='top'?0:.12,tilt:view==='top'?0:.32,zoom:1});renderCoasterView();const blob=await new Promise(resolve=>coasterView.renderer.domElement.toBlob(resolve,'image/png')),fileName=`coaster-${view}.png`;shots.push({label:view,fileName,blob,file:new File([blob],fileName,{type:'image/png'})});}}finally{Object.assign(s,old);renderCoasterView();}return shots;}
+async function captureCoasterShots(){const s=coasterState(),old={view:s.view,angle:s.angle,tilt:s.tilt,zoom:s.zoom},shots=[];try{for(const view of ['top','pack','holder']){Object.assign(s,{view,angle:view==='top'?0:view==='holder'?.58:.12,tilt:view==='top'?0:.32,zoom:1});renderCoasterView();const blob=await new Promise(resolve=>coasterView.renderer.domElement.toBlob(resolve,'image/png')),fileName=`coaster-${view}.png`;shots.push({label:view,fileName,blob,file:new File([blob],fileName,{type:'image/png'})});}}finally{Object.assign(s,old);renderCoasterView();}return shots;}

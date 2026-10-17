@@ -1,0 +1,185 @@
+{
+  "sourceHash": "600365f27ff50ba0195e4ab0d6b031f3e48aa99a3795a6024f6918e02328dfbe",
+  "exactSourceCopy": true,
+  "geometry": {
+    "holderSize": [
+      108,
+      46,
+      30.00000762939453
+    ],
+    "holderScale": [
+      1,
+      1,
+      1
+    ],
+    "triangles": 3106,
+    "coasters": [
+      {
+        "size": [
+          101.66000366210938,
+          101.66000366210938,
+          4.000000000000022
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "centre": [
+          0,
+          54.8215,
+          8.25
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "visible": true
+      },
+      {
+        "size": [
+          101.66000366210938,
+          101.66000366210938,
+          4.000000000000022
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "centre": [
+          0,
+          54.8215,
+          2.75
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "visible": true
+      },
+      {
+        "size": [
+          101.66000366210938,
+          101.66000366210938,
+          4.000000000000022
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "centre": [
+          0,
+          54.8215,
+          -2.75
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "visible": true
+      },
+      {
+        "size": [
+          101.66000366210938,
+          101.66000366210938,
+          4.000000000000022
+        ],
+        "scale": [
+          1,
+          1,
+          1
+        ],
+        "centre": [
+          0,
+          54.8215,
+          -8.25
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "visible": true
+      }
+    ],
+    "sharedArtwork": true,
+    "holderVisible": true
+  },
+  "radialClearanceMm": 1.1785,
+  "depthClearanceEachEndMm": 0.7585,
+  "interCoasterGapMm": 1.5,
+  "responsive": [
+    {
+      "width": 1440,
+      "height": 1000,
+      "minX": -0.5361940794923822,
+      "maxX": 0.6085667623558481,
+      "minY": -0.9000000000000002,
+      "maxY": 0.7057252423594271,
+      "overflow": false,
+      "buttonOverlap": false
+    },
+    {
+      "width": 1024,
+      "height": 768,
+      "minX": -0.6894529991714514,
+      "maxX": 0.7825117724155336,
+      "minY": -0.9000000000000002,
+      "maxY": 0.7057252423594271,
+      "overflow": false,
+      "buttonOverlap": false
+    },
+    {
+      "width": 768,
+      "height": 900,
+      "minX": -0.4328278754213566,
+      "maxX": 0.4912487266772918,
+      "minY": -0.9000000000000002,
+      "maxY": 0.7057252423594271,
+      "overflow": false,
+      "buttonOverlap": false
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "minX": -0.7256390826190893,
+      "maxX": 0.8235820648494141,
+      "minY": -0.9000000000000002,
+      "maxY": 0.7057252423594271,
+      "overflow": false,
+      "buttonOverlap": false
+    },
+    {
+      "width": 320,
+      "height": 568,
+      "minX": -0.3308877194340872,
+      "maxX": 0.37554921962202226,
+      "minY": -0.9000000000000002,
+      "maxY": 0.7057252423594271,
+      "overflow": false,
+      "buttonOverlap": false
+    }
+  ],
+  "captures": [
+    {
+      "label": "top",
+      "size": 72626
+    },
+    {
+      "label": "pack",
+      "size": 89091
+    },
+    {
+      "label": "holder",
+      "size": 83521
+    }
+  ],
+  "errors": [],
+  "failed": [],
+  "physicalFitTested": false
+}

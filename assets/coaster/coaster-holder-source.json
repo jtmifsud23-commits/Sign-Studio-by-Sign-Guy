@@ -1,0 +1,38 @@
+{
+  "sourceFile": "C:\\Users\\johnm\\iCloudDrive\\Desktop\\Desktop - John\u2019s MacBook Pro\\3D Printing\\Drink Coasters\\Coaster Holder.stl",
+  "bundledFile": "assets\\coaster\\coaster-holder.stl",
+  "sha256": "600365f27ff50ba0195e4ab0d6b031f3e48aa99a3795a6024f6918e02328dfbe",
+  "bundledSha256": "600365f27ff50ba0195e4ab0d6b031f3e48aa99a3795a6024f6918e02328dfbe",
+  "triangleCount": 3106,
+  "sourceBoundsMm": {
+    "x": [
+      0,
+      108
+    ],
+    "y": [
+      0,
+      30
+    ],
+    "z": [
+      0,
+      46
+    ]
+  },
+  "cradle": {
+    "centreXmm": 54,
+    "centreZmm": 56,
+    "radiusMm": 52.0085,
+    "floorZmm": 3.9915,
+    "frontInnerYmm": 3.9915,
+    "backInnerYmm": 26.0085
+  },
+  "coaster": {
+    "diameterMm": 101.66,
+    "thicknessMm": 4,
+    "quantity": 4,
+    "centreZmm": 54.8215,
+    "depthPitchMm": 5.5,
+    "frontBackClearanceMm": 0.7585
+  },
+  "fitStatus": "Computational preview placement; physically untested"
+}
