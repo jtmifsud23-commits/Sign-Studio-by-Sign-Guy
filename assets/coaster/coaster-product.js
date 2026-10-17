@@ -37,7 +37,7 @@ async function loadCoasterHolder(){
    vertices[k+2]=COASTER_HOLDER.depthMm/2-data.getFloat32(offset+4,true);
   }
   const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(vertices,3));geometry.computeVertexNormals();geometry.computeBoundingBox();geometry.computeBoundingSphere();
-  const holder=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:new THREE.Color('#24262a').convertSRGBToLinear(),roughness:.88,metalness:0}));holder.name='supplied-coaster-holder';holder.visible=false;holder.userData={source:'Coaster Holder.stl',scaleMm:1,triangleCount:triangles};coasterView.scene.add(holder);coasterView.holder=holder;
+  const holder=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:new THREE.Color('#000000'),roughness:.88,metalness:0}));holder.name='supplied-coaster-holder';holder.visible=false;holder.userData={source:'Coaster Holder.stl',scaleMm:1,triangleCount:triangles};coasterView.scene.add(holder);coasterView.holder=holder;
  })().catch(error=>{coasterHolderPromise=null;throw error;});
  await coasterHolderPromise;
 }
