@@ -1,4 +1,4 @@
-/* Compact six-product menu. Scoped to the chooser so configurators retain their layouts. */
+/* Seven-product chooser: balanced desktop rows, spacious phone rows. */
 #productSelectionMenu {
   --product-menu-yellow: #ffdc00;
   display: grid;
@@ -25,7 +25,7 @@
   align-items: center;
   justify-content: center;
   gap: 18px;
-  margin: 0 0 34px;
+  margin: 0 0 28px;
 }
 
 #productSelectionMenu .product-selection-mascot {
@@ -66,19 +66,20 @@
 }
 
 #productSelectionMenu .product-selection-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 16px;
   margin: 0;
 }
 
 #productSelectionMenu .product-selection-card {
   min-width: 0;
-  min-height: 156px;
-  grid-template-columns: 88px minmax(0, 1fr) 12px;
+  grid-column: span 2;
+  min-height: 152px;
+  grid-template-columns: 64px minmax(0, 1fr) 10px;
   grid-template-rows: 1fr;
   align-items: center;
-  gap: 14px;
-  padding: 18px 16px;
+  gap: 12px;
+  padding: 16px 14px;
   border: 1px solid #383b3c;
   border-radius: 12px;
   background: linear-gradient(145deg, #222526, #191c1d);
@@ -88,6 +89,11 @@
   text-align: left;
   transition: border-color 150ms ease, background 150ms ease;
 }
+
+/* Offset the lower row by half a card so all seven choices carry equal weight. */
+#productSelectionMenu .product-selection-card:nth-child(5) { grid-column: 2 / span 2; }
+#productSelectionMenu .product-selection-card:nth-child(6) { grid-column: 4 / span 2; }
+#productSelectionMenu .product-selection-card:nth-child(7) { grid-column: 6 / span 2; }
 
 #productSelectionMenu .product-selection-card:hover,
 #productSelectionMenu .product-selection-card:focus-visible {
@@ -103,8 +109,8 @@
 }
 
 #productSelectionMenu .product-selection-art {
-  width: 88px;
-  height: 88px;
+  width: 64px;
+  height: 64px;
   min-height: 0;
   aspect-ratio: 1;
   border-radius: 8px;
@@ -130,7 +136,7 @@
 }
 
 #productSelectionMenu .product-selection-card-copy strong {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 800;
   line-height: 1.14;
   text-shadow: none;
@@ -198,10 +204,19 @@
   color: #707477;
 }
 
+@media (min-width: 901px) and (max-width: 1099px) {
+  #productSelectionMenu .product-selection-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  #productSelectionMenu .product-selection-card:nth-child(n) { grid-column: span 2; min-height: 120px; }
+  #productSelectionMenu .product-selection-card:last-child { grid-column: 3 / span 2; }
+  #productSelectionMenu .product-selection-header { margin-bottom: 20px; }
+  #productSelectionMenu .product-selection-helper { margin-top: 18px; }
+}
+
 @media (min-width: 681px) and (max-width: 900px) {
   #productSelectionMenu { padding: 24px; }
   #productSelectionMenu .product-selection-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  #productSelectionMenu .product-selection-card { min-height: 140px; }
+  #productSelectionMenu .product-selection-card:nth-child(n) { grid-column: auto; min-height: 120px; }
+  #productSelectionMenu .product-selection-card:last-child { grid-column: 1 / -1; width: calc((100% - 16px) / 2); justify-self: center; }
   #productSelectionMenu .product-selection-header { margin-bottom: 26px; }
 }
 
@@ -217,7 +232,8 @@
   #productSelectionMenu .product-selection-title-main { font-size: 28px; letter-spacing: -0.7px; }
   #productSelectionMenu .product-selection-subheadline { font-size: 14px; }
   #productSelectionMenu .product-selection-grid { grid-template-columns: 1fr; gap: 10px; }
-  #productSelectionMenu .product-selection-card {
+  #productSelectionMenu .product-selection-card:nth-child(n) {
+    grid-column: auto;
     min-height: 88px;
     grid-template-columns: 62px minmax(0, 1fr) 14px;
     gap: 12px;
@@ -244,7 +260,7 @@
 @media (min-width: 901px) and (max-height: 600px) {
   #productSelectionMenu { padding-top: 18px; padding-bottom: 18px; }
   #productSelectionMenu .product-selection-header { margin-bottom: 20px; }
-  #productSelectionMenu .product-selection-card { min-height: 140px; }
+  #productSelectionMenu .product-selection-card { min-height: 128px; }
   #productSelectionMenu .product-selection-helper { margin-top: 18px; }
 }
 
