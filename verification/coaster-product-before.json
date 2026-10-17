@@ -1,0 +1,35 @@
+{
+  "id": "gid://shopify/Product/10783452921996",
+  "title": "Custom Drink Coaster - 4Pack",
+  "vendor": "Sign Guy",
+  "status": "ACTIVE",
+  "productType": "Drink Coasters",
+  "descriptionHtml": "<div class=\"sg-locker-details sg-coaster-details\">\n<h2>Your logo. Your colours. Your table.</h2>\n<p class=\"sg-locker-intro\">Turn your team logo, business branding or custom artwork into a set of four drink coasters. Made to order by Sign Guy in Ontario for your home bar, desk, game-night table or next event.</p>\n<div class=\"sg-locker-detail-grid\">\n<section><h3>Make it yours</h3>\n<ul>\n<li>\n<strong>Your artwork:</strong> Upload your logo or image using Image Upload above.</li>\n<li>\n<strong>Your coaster colour:</strong> Choose one coaster colour to match your team, brand or space.</li>\n<li>\n<strong>Your set:</strong> Four matching custom drink coasters in every pack.</li>\n</ul>\n<p>Clear logos with bold shapes and readable text work best. Upload the cleanest file you have; very fine lines and small details may need simplifying for a clean print.</p></section>\n<section><h3>Your custom drink coasters</h3>\n<ul>\n<li>\n<strong>4-pack:</strong> Four coasters featuring your custom design for $30.00 CAD.</li>\n<li>\n<strong>Surface protection:</strong> A place for your drink that helps protect the surface underneath.</li>\n<li>\n<strong>Made to order:</strong> Custom printed by Sign Guy in Ontario.</li>\n</ul>\n<p>Choose the number of 4-packs with the quantity selector. One pack contains four coasters; two packs contain eight.</p></section>\n</div>\n<div class=\"sg-locker-detail-grid\">\n<section><h3>How to order</h3>\n<ol>\n<li>Choose your Coaster colour.</li>\n<li>Upload your logo or artwork.</li>\n<li>Choose how many 4-packs you would like, add to cart and check out.</li>\n</ol>\n<p class=\"sg-locker-note\">For different artwork or colours, add each design to your cart separately.</p></section>\n<section><h3>Made for your setup</h3>\n<ul>\n<li>Team gifts and game-night gatherings</li>\n<li>Home bars, coffee tables and desks</li>\n<li>Business branding, events and custom gifts</li>\n</ul></section>\n</div>\n<div class=\"sg-locker-detail-grid\">\n<section><h3>A few helpful answers</h3>\n<p><strong>How many coasters are included?</strong><br>Each $30.00 CAD pack includes four matching custom coasters.</p>\n<p><strong>Can I choose more than one coaster colour?</strong><br>Choose one coaster colour per pack. Add another pack separately if you want a different colour.</p>\n<p><strong>Need measurements or care details?</strong><br><a href=\"mailto:hey@mysignguy.ca\">Ask Sign Guy</a> before ordering if you need a specific fit or cleaning guidance.</p></section>\n<section><h3>Complete your setup</h3>\n<p>Pair your coasters with a <a href=\"/products/hype-chainz-custom-pendant\">Custom Classic Hype Chain</a>, <a href=\"/products/custom-logo-bar-light\">Custom Logo LED Sign</a> or <a href=\"/products/custom-3d-wall-plaque\">Custom 3D Plaque</a> using the same team logo or branding.</p></section>\n</div>\n</div>",
+  "tags": [
+    "coaster",
+    "custom",
+    "custom-coaster",
+    "fan-gift",
+    "made-in-ontario"
+  ],
+  "totalInventory": 0,
+  "featuredImageUrl": "https://cdn.shopify.com/s/files/1/0663/2584/0012/files/custom-drink-coaster-customize-your-own.png?v=1792272851",
+  "images": [
+    {
+      "url": "https://cdn.shopify.com/s/files/1/0663/2584/0012/files/custom-drink-coaster-customize-your-own.png?v=1792272851",
+      "altText": "Four silver custom drink coasters in a black holder with purple, white and yellow Customize Your Own artwork",
+      "mediaId": "gid://shopify/MediaImage/41783064133772"
+    }
+  ],
+  "totalVariants": 1,
+  "variants": [
+    {
+      "id": "gid://shopify/ProductVariant/63132097249420",
+      "title": "Default Title",
+      "sku": "MSG-COA-CUSTOM",
+      "price": "30.00",
+      "inventoryQuantity": 0
+    }
+  ],
+  "currencyCode": "CAD"
+}

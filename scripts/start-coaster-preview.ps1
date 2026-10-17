@@ -4,7 +4,7 @@ $previewUrl = 'http://127.0.0.1:8782/?product=coaster'
 $listener = Get-NetTCPConnection -LocalPort 8782 -State Listen -ErrorAction SilentlyContinue
 if ($listener) {
     $response = Invoke-WebRequest -Uri ($previewUrl + '&check=coaster') -UseBasicParsing
-    if ($response.Content -notmatch 'coaster-local-1') { throw 'Port 8782 is already used by another application.' }
+    if ($response.Content -notmatch 'assets/coaster/coaster-product.js') { throw 'Port 8782 is already used by another application.' }
     Write-Output $previewUrl
     exit
 }
