@@ -1,0 +1,1 @@
+query CoasterHostTemplates { theme(id: "gid://shopify/OnlineStoreTheme/158955503756") { id files(first: 10, filenames: ["templates/page.sign-studio-1-5.json", "templates/page.sign-studio-1-5.context.ca.json"]) { nodes { filename body { ... on OnlineStoreThemeFileBodyText { content } } } pageInfo { hasNextPage endCursor } } } }

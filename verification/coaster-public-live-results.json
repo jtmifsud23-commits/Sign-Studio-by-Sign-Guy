@@ -1,0 +1,28 @@
+{
+  "build": "3.6.0",
+  "published": true,
+  "paidOrderTested": false,
+  "checkoutCompleted": false,
+  "publicCoasterAccess": true,
+  "fourCoastersAndBlackHolder": true,
+  "mobileWidths": [
+    390,
+    320
+  ],
+  "publicCloudSave": {
+    "designId": "coaster-public-save-360-1792274225819-98ee26fb-c1c5-46e0-afe0-db38864fe74b",
+    "files": [
+      "coaster-review-logo.SignGuy",
+      "coaster-review-logo.svg",
+      "coaster-finished-circle.png",
+      "coaster-finished-circle.svg",
+      "coaster-top.png",
+      "coaster-pack.png",
+      "coaster-holder.png"
+    ],
+    "emailQueued": false
+  },
+  "checkoutUrlUsesConfirmedDesignAndCorrectFourPack": true,
+  "errors": [],
+  "apiErrors": []
+}

@@ -1,0 +1,27 @@
+{
+  "publishedAt": "2026-10-17",
+  "build": "3.6.0",
+  "commit": "5cca219916965ada56a37e38f57a8b0ab7ec84c1",
+  "target": "production",
+  "state": "READY",
+  "vercelProject": "sign-studio-by-sign-guy",
+  "vercelTeam": "team_InaCl2xafKqSZCzNHNcnYiSC",
+  "deploymentDashboard": "https://vercel.com/jtmifsud23-3832s-projects/sign-studio-by-sign-guy/e5gk1jWKPkq8UEMxvWqY5WTmTLsG",
+  "designerUrl": "https://mysignguy.ca/pages/sign-studio?product=coaster",
+  "publicAssetSourceMatches": true,
+  "publicCloudSavePassed": true,
+  "emailsQueuedByVerification": 0,
+  "paidOrderTested": false,
+  "checkoutCompleted": false,
+  "shopifyHostTheme": "gid://shopify/OnlineStoreTheme/158955503756",
+  "hostTemplatesMatchPreparedChange": true,
+  "hostProductSelected": "coaster",
+  "productPageDesignerLinksVerified": true,
+  "notes": [
+    "Both default and Canadian template allowlists now include coaster.",
+    "Product copy received concurrent updates including the supplied stand; those updates were preserved.",
+    "Concurrent local product-menu changes in index.html, package.json and assets/product-menu/product-menu.css are outside this release and were left untouched.",
+    "Vercel connector returned 403 and CLI had no credentials; deployment was confirmed via GitHub successful Vercel check plus live served source.",
+    "Direct designer browser and API checks returned no errors; real paid order and production email delivery remain for the paid test."
+  ]
+}

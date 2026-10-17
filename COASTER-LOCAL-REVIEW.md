@@ -8,7 +8,7 @@ To restart it from this directory:
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-coaster-preview.ps1
 ```
 
-This is a separate checkout on `codex/coaster-designer`, based on published baseline `895adce`. The original checkout remains at `C:\Users\johnm\Documents\SIGN STUDIO\sign-studio-locker-local-preview`. Nothing has been deployed or pushed.
+This is a separate checkout on `codex/coaster-designer`, based on published baseline `895adce`. The original checkout remains at `C:\Users\johnm\Documents\SIGN STUDIO\sign-studio-locker-local-preview`. The coaster release was published as Build 3.6.0, commit `5cca219`, on October 17, 2026.
 
 ## Review flow
 
@@ -46,7 +46,7 @@ The local code is connected to the existing Shopify product `https://mysignguy.c
 
 On a deployed host, Place Order uploads and confirms the saved design, original logo, finished circle PNG/SVG, artwork preview and Top / 4-pack / Holder renders before opening the native Shopify cart. Cart quantity is the number of four-packs. Metadata stays on the specific cart item and includes the Studio design ID, pack size, dimensions, construction, colours, text and fonts, preview link, and editable file name. Production email uses Shopify's actual paid quantity and calculates total coasters as paid packs × four. Unpaid submissions remain labelled unpaid; plain saves queue no email.
 
-Local Place Order is a dry run and downloads review files. Cloud upload, mail delivery, and cart navigation were verified with local test doubles; the paid webhook path was verified with mocked storage and mail. No live site or deployment was changed. A live cart/checkout and real paid-email delivery remain to be verified after publication is approved. Local analytics remain disabled.
+Local Place Order remains a dry run and downloads review files. Build 3.6.0 is now published at https://mysignguy.ca/pages/sign-studio?product=coaster. Public access, all three preview views, the black holder, mobile layouts, original logo and finished PNG/SVG uploads, and an unpaid plain save were verified live. No email was queued by the live verification. The Shopify page's default and Canadian template allowlists now forward `product=coaster` into the app. Product-page designer links were also verified. Real cart/checkout and paid-email delivery remain for a paid test order. Local analytics remain disabled. Release evidence is in `verification/coaster-release-360.json` and `verification/coaster-public-live-results.json`.
 
 Checkout uses the existing [Shopify Cart API](https://shopify.dev/docs/api/ajax/reference/cart) integration and line-item properties.
 
