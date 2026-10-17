@@ -16,7 +16,7 @@ function setupCoaster(){
  document.querySelector('#coasterEditDesign').addEventListener('click',editExistingCoasterDesign);
  document.querySelector('#coasterPacks').addEventListener('input',event=>{const raw=Number(event.target.value);coasterState().packs=Number.isInteger(raw)&&raw>=1&&raw<=99?raw:0;syncCoasterQuantity();updateProjectControls();});
  document.querySelector('#coasterBackground').addEventListener('click',event=>openCoasterColourPopover(coasterState().backingIndex,event.currentTarget));
- document.querySelectorAll('[data-coaster-view]').forEach(button=>button.addEventListener('click',()=>{const s=coasterState();s.view=button.dataset.coasterView;s.angle=s.view==='top'?0:.12;s.tilt=s.view==='top'?0:.62;s.zoom=1;renderCoasterView();}));
+ document.querySelectorAll('[data-coaster-view]').forEach(button=>button.addEventListener('click',()=>{const s=coasterState();s.view=button.dataset.coasterView;s.angle=s.view==='top'?0:.12;s.tilt=s.view==='top'?0:s.view==='pack'?.32:.62;s.zoom=1;renderCoasterView();}));
  document.querySelectorAll('[data-coaster-zoom]').forEach(button=>button.addEventListener('click',()=>{coasterState().zoom=clamp(coasterState().zoom*Number(button.dataset.coasterZoom),.6,2.5);renderCoasterView();}));
  document.querySelector('#coasterZoomReset').addEventListener('click',()=>{coasterState().zoom=1;renderCoasterView();});
 }
@@ -48,18 +48,35 @@ async function buildCoaster(){
  const previous=[...coasterView.group.children];previous.forEach(child=>{coasterView.group.remove(child);child.traverse(mesh=>{if(mesh.geometry)mesh.geometry.dispose();if(mesh.material)mesh.material.dispose();});});coasterView.texture?.dispose();
  const texture=new THREE.CanvasTexture(canvas);texture.encoding=THREE.sRGBEncoding;texture.anisotropy=coasterView.renderer.capabilities.getMaxAnisotropy();coasterView.texture=texture;
  for(let i=0;i<4;i++){
-  const disk=new THREE.Group(),body=new THREE.Mesh(new THREE.CylinderGeometry(COASTER_DIAMETER_MM/2,COASTER_DIAMETER_MM/2,COASTER_DEPTH_MM,192),new THREE.MeshStandardMaterial({color:s.backing,roughness:.82,metalness:0}));body.rotation.x=Math.PI/2;disk.add(body);
+  const disk=new THREE.Group(),body=new THREE.Mesh(new THREE.CylinderGeometry(COASTER_DIAMETER_MM/2,COASTER_DIAMETER_MM/2,COASTER_DEPTH_MM,192),new THREE.MeshStandardMaterial({color:new THREE.Color(s.backing).convertSRGBToLinear(),roughness:.82,metalness:0}));body.rotation.x=Math.PI/2;disk.add(body);
   // Coplanar face, with polygon offset only for rendering. Geometry stays at z=2 mm.
   const face=new THREE.Mesh(new THREE.CircleGeometry(COASTER_DIAMETER_MM/2,192),new THREE.MeshBasicMaterial({map:texture,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1}));face.position.z=COASTER_DEPTH_MM/2;disk.add(face);disk.userData={diameterMm:COASTER_DIAMETER_MM,depthMm:COASTER_DEPTH_MM,designIndex:0};coasterView.group.add(disk);
  }
  syncCoasterControls();renderCoasterView();renderPreviewTitle();updateStats();updateProjectControls();
 }
+function layoutCoasterPack(pack){
+ const radius=COASTER_DIAMETER_MM/2,depth=COASTER_DEPTH_MM,lean=.18;
+ const stackX=radius*.5,stackZ=-radius*.2,standingX=-radius*.58;
+ const standingY=radius*Math.cos(lean)+depth/2*Math.sin(lean);
+ // Rest the standing coaster on the floor and its reverse against the top
+ // stack edge. All transforms are rigid: diameter and thickness stay exact.
+ const contactLocalY=(3*depth-standingY+depth/2*Math.sin(lean))/Math.cos(lean);
+ const contactX=standingX+Math.sqrt(radius**2-contactLocalY**2);
+ const stackFrontZ=stackZ+Math.sqrt(radius**2-(contactX-stackX)**2);
+ const standingZ=stackFrontZ+Math.sin(lean)*contactLocalY+depth/2*Math.cos(lean);
+ coasterView.group.children.forEach((disk,i)=>{
+  disk.visible=pack||i===0;disk.rotation.set(0,0,0);disk.position.set(0,0,0);
+  if(!pack)return;
+  if(i===0){disk.rotation.x=-lean;disk.position.set(standingX,standingY,standingZ);}
+  else{disk.rotation.x=-Math.PI/2;disk.position.set(stackX,(i-.5)*depth,stackZ);}
+ });
+}
 function renderCoasterView(){
  if(!coasterView||state.productType!=='coaster')return;const s=coasterState(),host=document.querySelector('#coasterCanvas'),w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;
  if(isMobileControlLayout()){const bar=els.mobileCommandBar.getBoundingClientRect(),stage=els.stage.getBoundingClientRect();if(bar.height>0&&!document.body.classList.contains('mobile-controls-open'))document.querySelector('#coasterPreview').style.setProperty('--coaster-mobile-footer',Math.max(16,stage.bottom-bar.top+16)+'px');}
- const pack=s.view==='pack';coasterView.group.children.forEach((disk,i)=>{disk.visible=pack||i===0;disk.position.set(pack?(i%2-.5)*113:0,pack?(.5-Math.floor(i/2))*113:0,0);});
- const bounds=new THREE.Box3();coasterView.group.children.filter(d=>d.visible).forEach(d=>bounds.union(new THREE.Box3().setFromObject(d)));const eye=new THREE.Vector3(Math.sin(s.angle)*Math.cos(s.tilt),Math.sin(s.tilt),Math.cos(s.angle)*Math.cos(s.tilt)),target=new THREE.Vector3();
- const {renderer,camera,scene}=coasterView;renderer.setSize(w,h,false);camera.aspect=w/h;camera.position.copy(eye).multiplyScalar(fitLockerCameraDistance(bounds,target,eye,camera.aspect)/s.zoom);camera.lookAt(target);camera.updateProjectionMatrix();renderer.render(scene,camera);
+ const pack=s.view==='pack';layoutCoasterPack(pack);
+ const bounds=new THREE.Box3();coasterView.group.children.filter(d=>d.visible).forEach(d=>bounds.union(new THREE.Box3().setFromObject(d)));const eye=new THREE.Vector3(Math.sin(s.angle)*Math.cos(s.tilt),Math.sin(s.tilt),Math.cos(s.angle)*Math.cos(s.tilt)),target=bounds.getCenter(new THREE.Vector3());
+ const {renderer,camera,scene}=coasterView;renderer.setSize(w,h,false);camera.aspect=w/h;camera.position.copy(target).addScaledVector(eye,fitLockerCameraDistance(bounds,target,eye,camera.aspect)/s.zoom);camera.lookAt(target);camera.updateProjectionMatrix();renderer.render(scene,camera);
  document.querySelectorAll('[data-coaster-view]').forEach(button=>{const active=button.dataset.coasterView===s.view;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});document.querySelector('#coasterZoomReset').textContent=Math.round(s.zoom*100)+'%';
 }
 function syncCoasterQuantity(){const s=coasterState();document.querySelector('#coasterQuantity').textContent=s.packs?`${s.packs*4} coasters · ${s.packs} ${s.packs===1?'pack':'packs'} of 4`:'Enter 1–99 packs';}
@@ -90,4 +107,4 @@ async function restoreCoasterProject(project){
  if(!Number.isInteger(candidate.packs)||candidate.packs<1||candidate.packs>99||uniqueHexColours([candidate.backing,...candidate.palette.map(p=>p.colour)]).length>8)throw new Error('Invalid coaster pack quantity or colour count.');
  coasterSign=candidate;coasterImage=image;++coasterRevision;state.productSelectionMenuResolved=true;hideProductSelectionMenu();selectProductType('coaster');await activateCoaster();await refreshProjectLog();
 }
-async function captureCoasterShots(){const s=coasterState(),old={view:s.view,angle:s.angle,tilt:s.tilt,zoom:s.zoom},shots=[];try{for(const view of ['top','angled','pack']){Object.assign(s,{view,angle:view==='top'?0:.12,tilt:view==='top'?0:.62,zoom:1});renderCoasterView();const blob=await new Promise(resolve=>coasterView.renderer.domElement.toBlob(resolve,'image/png')),fileName=`coaster-${view}.png`;shots.push({label:view,fileName,blob,file:new File([blob],fileName,{type:'image/png'})});}}finally{Object.assign(s,old);renderCoasterView();}return shots;}
+async function captureCoasterShots(){const s=coasterState(),old={view:s.view,angle:s.angle,tilt:s.tilt,zoom:s.zoom},shots=[];try{for(const view of ['top','angled','pack']){Object.assign(s,{view,angle:view==='top'?0:.12,tilt:view==='top'?0:view==='pack'?.32:.62,zoom:1});renderCoasterView();const blob=await new Promise(resolve=>coasterView.renderer.domElement.toBlob(resolve,'image/png')),fileName=`coaster-${view}.png`;shots.push({label:view,fileName,blob,file:new File([blob],fileName,{type:'image/png'})});}}finally{Object.assign(s,old);renderCoasterView();}return shots;}
