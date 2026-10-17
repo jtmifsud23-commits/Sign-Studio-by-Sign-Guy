@@ -134,12 +134,12 @@
   <input id="coasterLogoFile" type="file" hidden accept="image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg" />
   <p class="coaster-helper">Place your logo and add text to the circle. One design, repeated on all four coasters.</p>
   <section class="coaster-colours" aria-label="Coaster colours"><div class="section-heading"><h3>Colours</h3><output id="coasterColourCount" aria-live="polite">1 of 8 colours used</output></div>
-    <div class="coaster-colour-group"><span>Background · sides · back</span><button type="button" id="coasterBackground" class="hype-colour-chip" aria-label="Background and body colour"><i></i></button></div>
-    <div class="coaster-colour-group"><span>Logo &amp; text</span><div id="coasterPalette" class="hype-colour-row" aria-label="Artwork and text colours"></div></div>
-    <p class="coaster-helper">Up to 8 colours across the entire coaster. Reusing a colour counts once.</p>
+    <div class="coaster-colour-row">
+      <div class="coaster-colour-group"><span>Body</span><button type="button" id="coasterBackground" class="hype-colour-chip" aria-label="Background and body colour" title="Background, sides and back"><i></i></button></div>
+      <div class="coaster-colour-group coaster-artwork-group"><span>Logo &amp; text</span><div id="coasterPalette" class="hype-colour-row" aria-label="Artwork and text colours"></div></div>
+    </div>
   </section>
   <p id="coasterMessage" class="coaster-message" role="status" aria-live="polite"></p>
-  <p class="coaster-local-note">Local preview · Save your design or download the finished artwork.</p>
 </section>
 <section class="panel-section locker-controls" id="lockerSignControls" hidden aria-label="Locker Room Sign configurator">
   <div class="section-heading"><h2>Locker Room Sign</h2></div>

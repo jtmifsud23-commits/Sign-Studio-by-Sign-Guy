@@ -39,6 +39,9 @@
 .coaster-text-actions{display:flex;gap:8px}
 /* Coaster product controls and stage. Match the established Studio UI. */
 .product-coaster .control-panel{grid-template-columns:minmax(0,1fr)}
+.product-coaster #projectList{min-height:0;max-height:100px;padding-bottom:0}
+.product-coaster #projectSection{min-height:0}
+.product-coaster .control-panel>.menu-build-version{display:none}
 .product-coaster .control-panel>*{flex-shrink:0}
 .product-coaster .product-switcher,.product-coaster .visualizer-product-switcher{flex-wrap:wrap;grid-template-columns:repeat(3,minmax(0,1fr))}
 .product-coaster .product-switcher .product-tab{flex:1 1 28%;min-height:34px}
@@ -56,13 +59,16 @@
 .product-coaster #coasterControls #coasterChooseFile{display:block;font-size:14px!important;line-height:1.3!important;white-space:nowrap;text-align:center!important}
 #coasterEditDesign{font-size:12px;padding:8px 10px;white-space:nowrap}
 .product-coaster #coasterControls #coasterEditDesign{font-size:12px!important;line-height:1.3!important;min-height:40px}
-.coaster-helper,.coaster-local-note{font-size:12px;line-height:1.5;color:var(--muted);margin:8px 0}
-.coaster-local-note{border-top:1px solid var(--line);padding-top:12px;font-size:11px}
-.coaster-colours{border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:15px 0;margin:16px 0}
-.coaster-colours>.section-heading{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.coaster-helper{font-size:12px;line-height:1.5;color:var(--muted);margin:8px 0}
+.coaster-colours{border-top:1px solid var(--line);padding:12px 0 0;margin:12px 0 0}
+.product-coaster .coaster-colours>.section-heading{display:flex;flex-direction:row;flex-wrap:nowrap;justify-content:space-between;gap:8px;align-items:center;margin-bottom:0;text-align:left}
 #coasterColourCount{font-size:10px;white-space:nowrap;color:#ffe500;padding:4px 6px;border:1px solid #ffe50040;border-radius:5px}
-.coaster-colour-group{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:14px 0;font-size:12px}
-#coasterPalette{justify-content:flex-end;flex:1;min-height:34px;flex-wrap:wrap;gap:6px}
+.coaster-colour-row{display:flex;align-items:flex-start;gap:18px;margin-top:10px}
+.coaster-colour-group{display:grid;gap:7px;font-size:11px}
+.coaster-colour-group>span{line-height:16px}
+.coaster-artwork-group{min-width:0;flex:1}
+.product-coaster #coasterPalette{display:flex;justify-content:flex-start;align-items:center;min-height:32px;flex-wrap:nowrap;gap:6px;padding:0;border:0;background:none;box-shadow:none}
+.product-coaster .coaster-colour-row .hype-colour-chip{width:32px;height:32px;min-width:32px;min-height:32px;padding:3px;flex:0 0 32px}
 #coasterPalette:empty::after{content:'Upload a logo';color:var(--muted);font-size:11px;padding-top:8px}
 .coaster-message{font-size:12px;line-height:1.5;color:#ffe500}.coaster-message:empty{display:none}
 #coasterPreview{position:absolute;inset:146px 0 16px;z-index:3}
@@ -76,6 +82,43 @@
 .coaster-zoom-tools #coasterZoomReset{font-size:11px!important;min-width:0}
 .coaster-gesture-hint{position:absolute;left:10px;right:10px;bottom:46px;margin:0;text-align:center;font-size:11px;line-height:1.4;color:var(--muted);pointer-events:none}
 @media(max-width:880px){#coasterPreview{top:140px;bottom:var(--coaster-mobile-footer,190px)}}
+@media(min-width:881px) and (max-height:760px){
+ .product-coaster .control-panel{padding:8px;gap:7px}
+ .product-coaster .brand-row{min-height:60px;padding:8px}
+ .product-coaster .brand-row h1{font-size:18px}
+ .product-coaster .brand-mark{width:42px;height:42px}
+ .product-coaster .product-switcher{gap:4px;padding:6px}
+ .product-coaster .product-switcher .product-tab{min-height:30px;padding:5px}
+ .product-coaster #coasterControls,.product-coaster #projectSection{padding:10px}
+ .product-coaster #projectActions .project-icon-button{min-height:32px}
+ .product-coaster .submit-section{padding:8px}
+}
+@media(max-width:880px){
+ .product-coaster .control-panel{max-height:calc(var(--app-vh,100dvh) - 16px);gap:8px;padding:8px 10px calc(8px + env(safe-area-inset-bottom))}
+ .product-coaster .mobile-sheet-header{min-height:52px;padding:8px 10px}
+ .product-coaster #projectList{max-height:80px}
+ .product-coaster #projectSection .mobile-helper-text{display:none}
+ .coaster-colour-row{gap:12px}
+ .product-coaster .coaster-colour-row .hype-colour-chip{width:28px;height:28px;min-width:28px;min-height:28px;flex-basis:28px}
+ .product-coaster #coasterPalette{gap:4px;min-height:28px}
+}
+@media(max-height:760px){
+ .product-coaster #projectList{max-height:56px;grid-template-columns:repeat(auto-fill,72px);grid-auto-rows:54px}
+ .product-coaster #projectList .project-thumb{height:54px;aspect-ratio:auto;object-fit:contain}
+ .product-coaster #coasterControls{padding:10px}
+ .product-coaster #coasterControls>.section-heading{margin-bottom:0}
+ .product-coaster .coaster-upload-row{margin:10px 0 6px}
+ .product-coaster .coaster-helper{margin:6px 0;font-size:11px}
+ .product-coaster .coaster-colours{margin-top:10px;padding-top:10px}
+}
+@media(max-width:880px) and (max-height:680px){
+ .product-coaster .mobile-sheet-header .eyebrow{display:none}
+ .product-coaster .mobile-sheet-header{min-height:44px;padding:6px 10px}
+ .product-coaster .mobile-sheet-header h2{font-size:18px}
+ .product-coaster #projectSection{padding:8px 10px;gap:6px}
+ .product-coaster #projectActions .project-icon-button{min-height:34px}
+ .product-coaster #backToVisualizer{min-height:36px;padding:6px 10px}
+}
 @media(max-width:767px){
  .product-coaster .visualizer-report-menu{top:152px;right:12px}
  .product-coaster #coasterPreview{top:188px}
