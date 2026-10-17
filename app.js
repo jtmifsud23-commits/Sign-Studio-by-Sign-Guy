@@ -62,6 +62,7 @@ function trackSignStudioEvent(eventName, parameters = {}) {
 }
 
 function getAnalyticsProductItem(project = null) {
+  if (project?.type === 'SignGuy.CoasterStudio' || state.productType === 'coaster') return {item_id:'coaster_custom',item_name:'Custom Coaster Four-Pack',item_category:'Coasters',quantity:project?.config?.coaster?.packs||coasterState().packs};
   if (project?.type === 'SignGuy.LockerSignStudio' || state.productType === 'locker') return {item_id:'locker_custom',item_name:'Custom Locker Room Hanging Sign',item_category:'Locker Room Sign',quantity:1};
   if (project?.type === 'SignGuy.BagTagStudio' || state.productType === 'bag') return { item_id: getShopifyVariantId() || 'bag_custom', item_name: 'Custom Team Bag Tag', item_category: 'Bag Tag', quantity: bagTotalQuantity(project?.config?.bag || bagState()) };
   const productType = project?.type === 'SignGuy.HypeChainStudio'
@@ -1061,6 +1062,7 @@ function normalizeProductSelectionChoice(product, variant = '') {
   const variantText = String(variant || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
   const combined = `${productText}-${variantText}`;
   if (!productText && !variantText) return null;
+  if (combined.includes('coaster')) return { key: 'coaster', productType: 'coaster' };
   if (combined.includes('locker')) return { key: 'locker', productType: 'locker' };
   if (combined.includes('bag')) return { key: 'bag', productType: 'bag' };
   if (combined.includes('spinner')) return { key: 'spinner-hype', productType: 'hype', hypeVariant: 'spinner' };
@@ -1082,6 +1084,8 @@ function getProductSelectionChoice(key) {
       return { key, productType: 'hype', hypeVariant: 'classic' };
     case 'spinner-hype':
       return { key, productType: 'hype', hypeVariant: 'spinner' };
+    case 'coaster':
+      return { key, productType: 'coaster' };
     case 'locker':
       return { key, productType: 'locker' };
     case 'bag':
@@ -1183,7 +1187,7 @@ function hideProductSelectionMenu() {
 }
 
 function canAccessProduct(productType) {
-  return productType === 'locker' || productType === 'bag' || productType === 'led' || productType === 'hype' || productType === 'plaque' || state.isAdmin;
+  return productType === 'coaster' || productType === 'locker' || productType === 'bag' || productType === 'led' || productType === 'hype' || productType === 'plaque' || state.isAdmin;
 }
 
 function renderProductAccess() {
@@ -1207,6 +1211,9 @@ function renderProductAccess() {
 
 function selectProductType(productType, options = {}) {
   productType = canAccessProduct(productType) ? productType : 'led';
+  document.body.classList.toggle('product-coaster', productType === 'coaster');
+  document.querySelector('#coasterControls').hidden = productType !== 'coaster';
+  document.querySelector('#coasterPreview').hidden = productType !== 'coaster';
   document.body.classList.toggle('product-locker', productType === 'locker');
   document.querySelector('#lockerSignControls').hidden = productType !== 'locker';
   document.querySelector('#lockerSignPreview').hidden = productType !== 'locker';
@@ -1231,6 +1238,7 @@ function selectProductType(productType, options = {}) {
   state.productType = next;
   if (next === 'bag') setProjectSectionExpanded(true);
   if (next === 'locker') setProjectSectionExpanded(false);
+  if (next === 'coaster') setProjectSectionExpanded(true);
   if (els.projectSectionHeading) {
     els.projectSectionHeading.setAttribute('role', next === 'bag' ? 'heading' : 'button');
     els.projectSectionHeading.setAttribute('tabindex', next === 'bag' ? '-1' : '0');
@@ -1251,7 +1259,10 @@ function selectProductType(productType, options = {}) {
   els.plaqueStudio?.classList.toggle('hidden', next !== 'plaque');
   els.hypePreview?.classList.toggle('hidden', next !== 'hype');
   updateDefaultLedSavedPreview();
-  if (next === 'locker') {
+  if (next === 'coaster') {
+    cancelPlaqueBuild();
+    activateCoaster().catch(error => {coasterState().error=error.message;syncCoasterControls();updateProjectControls();});
+  } else if (next === 'locker') {
     cancelPlaqueBuild();
     activateLockerSign();
   } else if (next === 'bag') {
@@ -1345,7 +1356,7 @@ function getActiveUsagePreset() {
 }
 
 function applyPreviewMode() {
-  if (state.productType === 'bag' || state.productType === 'locker') return;
+  if (state.productType === 'coaster' || state.productType === 'bag' || state.productType === 'locker') return;
   if (!els.stage) return;
   let mode = ['day', 'night', 'wall'].includes(state.previewMode) ? state.previewMode : 'night';
   if (state.productType === 'led' && mode === 'wall') mode = 'night';
@@ -1462,7 +1473,7 @@ function applyPreviewEnvironment() {
 
 function updateProductCta() {
   if (!els.placeOrder) return;
-  els.placeOrder.textContent = state.orderInProgress ? (state.productType==='locker'?'Preparing...':'Placing Order...') : state.productType==='locker'?'Email design':state.productType==='bag'?bagOrderButtonLabel():'Place Order';
+  els.placeOrder.textContent = state.orderInProgress ? (state.productType==='locker'?'Preparing...':'Placing Order...') : state.productType==='coaster'?'Download artwork':state.productType==='locker'?'Email design':state.productType==='bag'?bagOrderButtonLabel():'Place Order';
   syncMobileCommandBar();
 }
 
@@ -1668,13 +1679,13 @@ function setupMobileAccordion(section, heading) {
 function syncMobileCommandBar() {
   if (els.mobilePlaceOrder && els.placeOrder) {
     els.mobilePlaceOrder.disabled = els.placeOrder.disabled;
-    els.mobilePlaceOrder.textContent = state.orderInProgress ? (state.productType==='locker'?'Preparing...':'Placing Order...') : state.productType==='locker'?'Email design':state.productType==='bag'?bagOrderButtonLabel():'Place Order';
+    els.mobilePlaceOrder.textContent = state.orderInProgress ? (state.productType==='locker'?'Preparing...':'Placing Order...') : state.productType==='coaster'?'Download artwork':state.productType==='locker'?'Email design':state.productType==='bag'?bagOrderButtonLabel():'Place Order';
   }
   if (els.mobileSaveProject && els.saveProject) {
     els.mobileSaveProject.disabled = els.saveProject.disabled;
   }
   if (els.mobileProductSummary) {
-    els.mobileProductSummary.textContent = state.productType === 'locker' ? 'Locker Room Sign' : state.productType === 'bag' ? 'Bag Tag' : state.productType === 'hype'
+    els.mobileProductSummary.textContent = state.productType === 'coaster' ? 'Custom Coasters' : state.productType === 'locker' ? 'Locker Room Sign' : state.productType === 'bag' ? 'Bag Tag' : state.productType === 'hype'
       ? 'Hype Chain'
       : (state.productType === 'plaque' ? '3D Plaque' : 'LED Sign');
   }
@@ -1689,6 +1700,7 @@ function syncMobileCommandBar() {
 }
 
 function getMobileCheckoutSelectionLabel() {
+  if(state.productType==='coaster')return '101.66 mm × 4 mm · Packs of four';
   if (state.productType === 'locker') { return '9″ circle · '+(lockerState().style==='flat'?'Double-sided flat':'Single-sided layered'); }
   if (state.productType === 'bag') return `${bagDimensionLabel()} · Front only`;
   if (state.productType === 'hype') {
@@ -1705,6 +1717,7 @@ function getMobileCheckoutSelectionLabel() {
 }
 
 function getMobilePlaceOrderDisabledReason() {
+  if(state.productType==='coaster')return coasterState().error || 'Upload and confirm your coaster design';
   if (state.productType === 'locker') { return 'Email your finished design'; }
   if (state.productType === 'bag') {
     const b=bagState();
@@ -3693,6 +3706,7 @@ async function reprocess(options = {}) {
   }
   if (!state.artwork) return;
   const lockerSession = lockerUploadSession;
+  const coasterSession = coasterUploadSession;
   setStatus('Processing');
   els.stage.classList.add('regenerating');
   const previousColourSnapshot = state.processed?.colours?.map((region, idx) => ({
@@ -3702,10 +3716,12 @@ async function reprocess(options = {}) {
   })) || null;
   await waitFrame();
   try {
+    if (coasterSession && coasterUploadSession !== coasterSession) return;
     if (lockerSession && lockerUploadSession !== lockerSession) return;
     state.processed = processArtwork(state.artwork, getProcessArtworkOptions());
     state.processingDirty = false;
-    if (lockerSession?.autoColourCount) {
+    if (coasterSession?.autoColourCount) {state.targetColorCount=state.processed.colours.length;coasterSession.autoColourCount=false;}
+    else if (lockerSession?.autoColourCount) {
       state.targetColorCount = state.processed.colours.length;
       lockerSession.autoColourCount = false;
     } else if (!options.preserveTargetColorCount && !state.frontColoursCustomized && state.processed.naturalColourCount) {
@@ -3867,6 +3883,7 @@ function openWizard(step) {
 
 function closeWizard() {
   if (bagUploadSession) cancelBagLogoWizard();
+  if (coasterUploadSession) cancelCoasterLogoWizard();
   if (lockerUploadSession) cancelLockerLogoWizard();
   state.wizardStep = null;
   closeColourPopover();
@@ -3892,6 +3909,7 @@ function getProcessArtworkOptions() {
 }
 
 function renderEditStep() {
+  if (coasterUploadSession) {renderCoasterEditStep();return;}
   if (lockerUploadSession) { renderLockerEditStep(); return; }
   if (isResponsiveViewport()) state.edit.cropAspect = 'free';
   els.wizardTitle.textContent = 'Edit Your Image';
@@ -3992,7 +4010,8 @@ function renderVectorStep() {
   setWizardPreview(renderMappedArtworkUrl(state.processed) || state.processed?.artworkUrl || state.artwork.dataUrl);
   els.wizardSide.innerHTML = `
     <h3>Vectorized result</h3>
-    <p>${state.uploadTarget === 'locker' ? 'Your circle design has been flattened into printable colour regions. Go back to adjust the logo placement or background.' : 'The artwork has been flattened into printable colour regions and a custom outer silhouette. If this does not look right, try again or go back to crop/background cleanup.'}</p>
+    ${coasterUploadSession ? `<p class="coaster-budget-note">${coasterUploadSession.sourceColourCount>8?`${coasterUploadSession.sourceColourCount} source colours were simplified to the 8-colour limit. Review the result and adjust the mapping below.`:'Up to 8 colours total, including the background and text.'}</p>` : ''}
+    <p>${['coaster','locker'].includes(state.uploadTarget) ? 'Your circle design has been flattened into printable colour regions. Go back to adjust the logo placement or background.' : 'The artwork has been flattened into printable colour regions and a custom outer silhouette. If this does not look right, try again or go back to crop/background cleanup.'}</p>
     <div class="detail-list vector-summary-list">
       <div class="detail-row vector-summary-row"><span class="map-number">${state.processed?.colours.length || 0}</span><span>detected colours</span><strong>max 8</strong></div>
       <div class="detail-row vector-summary-row"><span class="map-number">${state.tolerance}</span><span>merge tolerance</span><strong>auto</strong></div>
@@ -4180,6 +4199,7 @@ function readableTextColour(hex) {
 }
 
 function setWizardPreview(src) {
+  hideCoasterCircleEditor();
   hideLockerCircleEditor();
   els.wizardImage.onload = null;
   els.wizardImage.onload = () => {
@@ -4230,11 +4250,13 @@ function bindWizardButtons() {
 }
 
 async function handleWizardAction(action) {
+  if(coasterUploadSession&&['to-vector','to-details','confirm'].includes(action)&&!coasterCircleValidation().ok){if(state.wizardStep!=='edit')openWizard('edit');paintCoasterCircleEditor();return;}
   if (lockerUploadSession && ['to-vector','to-details','confirm'].includes(action) && !lockerCircleValidation().ok) {
     if (state.wizardStep !== 'edit') openWizard('edit');
     paintLockerCircleEditor();return;
   }
   const lockerSession = lockerUploadSession;
+  const coasterSession = coasterUploadSession;
   if (action === 'cancel') {
     if (state.uploadTarget === 'hype') restoreLedUploadState();
     closeWizard();
@@ -4246,8 +4268,10 @@ async function handleWizardAction(action) {
   }
   if (action === 'to-vector') {
     try {
+      if (coasterUploadSession && !(await prepareCoasterCircleArtwork())) return;
       if (lockerUploadSession && !(await prepareLockerCircleArtwork())) return;
       if (!state.processed || state.processingDirty) await reprocess({ skipWizardRender: true });
+      if (coasterSession && coasterUploadSession !== coasterSession) return;
       if (lockerSession && lockerUploadSession !== lockerSession) return;
       openWizard('vector');
     } catch (error) {
@@ -4260,6 +4284,7 @@ async function handleWizardAction(action) {
   if (action === 'try-vector') {
     state.tolerance = clamp(state.tolerance + 8, 18, 90);
     await reprocess({ skipWizardRender: true });
+    if (coasterSession && coasterUploadSession !== coasterSession) return;
     if (lockerSession && lockerUploadSession !== lockerSession) return;
     openWizard('vector');
     return;
@@ -4289,6 +4314,7 @@ async function handleWizardAction(action) {
     return;
   }
   if (action === 'confirm') {
+    if (state.uploadTarget === 'coaster') {await completeCoasterLogoWizard();return;}
     if (state.uploadTarget === 'locker') { await completeLockerLogoWizard(); return; }
     if (state.uploadTarget === 'bag') { await completeBagLogoWizard(); return; }
     if (state.uploadTarget === 'hype') {
@@ -4466,6 +4492,7 @@ function updateCropBox() {
 }
 
 function setWizardZoom(value) {
+  if(coasterUploadSession&&state.wizardStep==='edit'){zoomCoasterCircleEditor(value);return;}
   if (lockerUploadSession && state.wizardStep === 'edit') { zoomLockerCircleEditor(value); return; }
   state.edit.zoom = clamp(value, 0.7, 1.8);
   els.wizardImage.style.setProperty('--wizard-zoom', state.edit.zoom);
@@ -4605,6 +4632,7 @@ function setPopoverTab(tab) {
 }
 
 function renderUsedColourGrid() {
+  if(state.productType==='coaster'){if(els.usedPane?.querySelector('p'))els.usedPane.querySelector('p').textContent='Coaster colours';const colours=coasterUploadSession?[...getCoasterWizardUsedColours(),coasterUploadSession.edit.backing]:coasterColours();els.usedGrid.innerHTML=renderUsedColourGroup('Current design',colours);bindUsedColourButtons();return;}
   if (!els.usedGrid) return;
   const label = els.usedPane?.querySelector('p');
   if (state.productType === 'locker' && lockerUploadSession?.logo) {
@@ -4707,6 +4735,9 @@ function updatePopoverInputs(hex) {
 
 function applySelectedColour(hex) {
   const normalized = normalizeHex(hex);
+  if(state.selectedColourTarget.type==='coasterEditorText'&&coasterUploadSession){const box=coasterEditorTextBoxes().find(b=>b.id===state.selectedColourTarget.id);if(!box)return;box.colour=normalized;invalidateCoasterEditorText(true);document.querySelector('#coasterBoxColour i')?.style.setProperty('background',normalized);updatePopoverInputs(normalized);return;}
+  if(state.selectedColourTarget.type==='coasterCircleBacking'&&coasterUploadSession){coasterUploadSession.edit.backing=normalized;coasterUploadSession.composed=null;state.processingDirty=true;updatePopoverInputs(normalized);paintCoasterCircleEditor();return;}
+  if(state.selectedColourTarget.type==='coaster'){applyCoasterColour(state.selectedColourTarget.index,normalized);updatePopoverInputs(normalized);return;}
   if (state.selectedColourTarget.type === 'lockerEditorText' && lockerUploadSession) {
     const box=lockerEditorTextBoxes().find(b=>b.id===state.selectedColourTarget.id);if(!box)return;box.colour=normalized;invalidateLockerEditorText(true);
     document.querySelector('#lockerBoxColour i')?.style.setProperty('background',normalized);updatePopoverInputs(normalized);return;
@@ -5948,7 +5979,7 @@ function processArtwork(artwork, options = {}) {
   let naturalColourCount = Math.min(Math.max(
     stableClusters.length,
     artwork.type === 'svg' ? meaningfulColourCount : 0,
-    state.productType === 'locker' && artwork.lockerSolidPalette ? printableClusters.length : 0,
+    (state.productType === 'coaster' && artwork.coasterSolidPalette || state.productType === 'locker' && artwork.lockerSolidPalette) ? printableClusters.length : 0,
     printableClusters.length ? 1 : 0,
   ), 8);
   const requestedColourCount = clamp(Number(state.targetColorCount) || 8, 1, 8);
@@ -7344,7 +7375,7 @@ function buildWarnings({ artwork, clusters, main, islands, tinyShapes, opaqueCou
 }
 
 function renderPreview() {
-  if (state.productType === 'bag' || state.productType === 'locker') return;
+  if (state.productType === 'coaster' || state.productType === 'bag' || state.productType === 'locker') return;
   if (state.previewRenderTimer) {
     clearTimeout(state.previewRenderTimer);
     state.previewRenderTimer = null;
@@ -7495,6 +7526,7 @@ function resetRotation() {
 }
 
 function updateStats() {
+  if(state.productType==='coaster'){els.dimensionStat.textContent='101.66 mm × 4 mm · 4 per pack';syncMobileCommandBar();return;}
   if (state.productType === 'locker') { els.dimensionStat.textContent = '9″ / 228.6 mm · Hockey mount'; if(els.depthStat)els.depthStat.textContent=lockerState().style==='flat'?'Double-sided · Flat':'Single-sided · Layered';syncMobileCommandBar(); return; }
   if (state.productType === 'bag') { els.dimensionStat.textContent = bagDimensionLabel(); syncMobileCommandBar(); return; }
   const preset = SIZE_PRESETS[state.size];
@@ -7573,6 +7605,7 @@ function svgPointArea(points) {
 }
 
 function updateProjectControls() {
+  if(state.productType==='coaster'){els.saveProject.disabled=!coasterReady();els.placeOrder.disabled=!coasterReady();els.placeOrder.textContent='Download artwork';syncMobileCommandBar();return;}
   if (state.productType === 'locker') { els.saveProject.disabled = !lockerReady() || state.orderInProgress; els.placeOrder.disabled = !lockerReady() || state.orderInProgress; els.placeOrder.textContent = state.orderInProgress ? 'Preparing...' : 'Email design'; syncMobileCommandBar(); return; }
   if (state.productType === 'bag') { els.saveProject.disabled = !bagReady() || state.orderInProgress; els.placeOrder.disabled = !bagReady() || !state.customerEmail || state.orderInProgress; els.placeOrder.textContent = state.orderInProgress ? 'Preparing Order...' : bagOrderButtonLabel(); syncMobileCommandBar(); return; }
   if (!els.saveProject) return;
@@ -7591,6 +7624,7 @@ function updateProjectControls() {
 }
 
 function getDesignName() {
+  if(state.productType==='coaster')return coasterState().name||'My Custom Coaster Set';
   if (state.productType === 'locker') { return lockerState().name || `${lockerState().text || 'Custom'} Locker Room Sign`; }
   if (state.productType === 'bag') return bagState().name || `${bagState().text} Bag Tag`;
   if (state.productType === 'plaque') return state.designName.trim() || 'My Custom 3D Plaque';
@@ -7611,6 +7645,7 @@ function updateRangeFill(input) {
 }
 
 function renderPreviewTitle() {
+  if(state.productType==='coaster'){els.previewTitle.textContent=getDesignName();return;}
   if (state.productType === 'locker') { els.previewTitle.textContent = lockerState().name || 'Custom Locker Room Sign'; return; }
   if (state.productType === 'bag') { els.previewTitle.textContent = bagState().name || 'Custom Bag Tag'; return; }
   if (state.productType === 'hype') {
@@ -7628,6 +7663,7 @@ function renderPreviewTitle() {
 }
 
 function startDesignNameEdit() {
+  if (state.productType === 'coaster') {els.previewTitle.hidden=true;els.editDesignName.hidden=true;els.designName.hidden=false;els.designName.value=getDesignName();els.designName.focus();els.designName.select();return;}
   if (state.productType === 'locker') { els.previewTitle.hidden=true;els.editDesignName.hidden=true;els.designName.hidden=false;els.designName.value=getDesignName();els.designName.focus();els.designName.select();return; }
   if (state.productType === 'bag') { els.previewTitle.hidden = true; els.editDesignName.hidden = true; els.designName.hidden = false; els.designName.value = bagState().name || getDesignName(); els.designName.focus(); els.designName.select(); return; }
   if (state.isDefaultPreview) {
@@ -7643,6 +7679,7 @@ function startDesignNameEdit() {
 }
 
 function finishDesignNameEdit() {
+  if (state.productType === 'coaster') {coasterState().name=els.designName.value.trim();els.designName.hidden=true;els.previewTitle.hidden=false;els.editDesignName.hidden=false;renderPreviewTitle();return;}
   if (state.productType === 'locker') { lockerState().name=els.designName.value.trim();els.designName.hidden=true;els.previewTitle.hidden=false;els.editDesignName.hidden=false;renderPreviewTitle();return; }
   if (state.productType === 'bag') { bagState().name = els.designName.value.trim(); els.designName.hidden = true; els.previewTitle.hidden = false; els.editDesignName.hidden = false; renderPreviewTitle(); return; }
   if (els.designName.hidden) return;
@@ -7655,6 +7692,7 @@ function finishDesignNameEdit() {
 }
 
 async function saveProjectFile() {
+  if (state.productType === 'coaster') return saveCoasterProject();
   if (state.productType === 'locker') { return saveLockerProject(); }
   if (state.productType === 'bag') return saveBagProject();
   if (state.productType === 'hype') {
@@ -7716,6 +7754,7 @@ async function saveProjectFile() {
 }
 
 async function placeOrderRequest() {
+  if (state.productType === 'coaster') return exportCoasterArtwork();
   if (state.productType === 'locker') return emailLockerDesign();
   if (state.orderInProgress) return;
   if (state.productType === 'bag') return orderBagTag();
@@ -7805,6 +7844,7 @@ async function openProjectFiles(fileList) {
 }
 
 async function buildSignGuyProject() {
+  if (state.productType === 'coaster') return buildCoasterProject();
   if (state.productType === 'locker') { return buildLockerProject(); }
   if (state.productType === 'bag') return buildBagProject();
   renderThree();
@@ -7910,6 +7950,7 @@ async function getArtworkProjectDataUrl() {
 }
 
 async function restoreSignGuyProject(project, options = {}) {
+  if (project?.type === 'SignGuy.CoasterStudio') {validateSignGuyProject(project);return restoreCoasterProject(project);}
   if (project?.type === 'SignGuy.LockerSignStudio') { validateSignGuyProject(project); return restoreLockerProject(project); }
   if (project?.type === 'SignGuy.BagTagStudio') { validateSignGuyProject(project); return restoreBagProject(project); }
   validateSignGuyProject(project);
@@ -8060,7 +8101,7 @@ async function restoreSignGuyProject(project, options = {}) {
 }
 
 function validateSignGuyProject(project) {
-  const supported = project?.type === 'SignGuy.LockerSignStudio' || project?.type === 'SignGuy.BagTagStudio' || project?.type === 'SignGuy.LightboxStudio'
+  const supported = project?.type === 'SignGuy.CoasterStudio' || project?.type === 'SignGuy.LockerSignStudio' || project?.type === 'SignGuy.BagTagStudio' || project?.type === 'SignGuy.LightboxStudio'
     || project?.type === 'SignGuy.HypeChainStudio'
     || project?.type === 'SignGuy.WallPlaqueStudio';
   if (!project || !supported || !project.source?.dataUrl) {
@@ -8712,6 +8753,7 @@ function clearCheckoutFallback() {
 }
 
 function getShopifyVariantId() {
+  if (state.productType === 'coaster') return '';
   if (state.productType === 'locker') return '';
   if (state.productType === 'bag') return window.SIGN_STUDIO_BAG_TAG_VARIANT_ID || BAG_TAG_VARIANTS[bagState().usage] || '';
   if (state.productType === 'hype') return SHOPIFY_HYPE_CHAIN_VARIANTS[state.hype.variant] || SHOPIFY_HYPE_CHAIN_VARIANTS.classic;
@@ -8944,6 +8986,7 @@ function summarizeProjectRecord(project) {
 }
 
 function currentProjectType() {
+  if(state.productType==='coaster')return 'SignGuy.CoasterStudio';
   if (state.productType === 'locker') { return 'SignGuy.LockerSignStudio'; }
   if (state.productType === 'bag') return 'SignGuy.BagTagStudio';
   if (state.productType === 'hype') return 'SignGuy.HypeChainStudio';
@@ -9053,6 +9096,7 @@ function describeSubmitError(error) {
 }
 
 async function captureSubmissionScreenshots() {
+  if (state.productType === 'coaster') return captureCoasterShots();
   if (state.productType === 'locker') { return captureLockerShots(); }
   if (state.productType === 'bag') return captureBagShots();
   const originalRotation = { ...state.rotation };
@@ -9120,6 +9164,7 @@ async function submitDesignToEndpoint({ endpoint, subject, body, screenshots }) 
 }
 
 function captureVisualizerBlob() {
+  if (state.productType === 'coaster') {renderCoasterView();return new Promise(resolve=>coasterView.renderer.domElement.toBlob(resolve,'image/png'));}
   if (state.productType === 'locker') { renderLockerView(); return new Promise(resolve => lockerView.renderer.domElement.toBlob(resolve, 'image/png')); }
   if (state.productType === 'bag') { renderBagView(); return new Promise(resolve => bagView.renderer.domElement.toBlob(resolve, 'image/png')); }
   return new Promise((resolve, reject) => {

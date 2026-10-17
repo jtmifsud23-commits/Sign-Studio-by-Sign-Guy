@@ -47,7 +47,7 @@
 
   const renderUsedColours = () => {
     const isHype = document.querySelector('[data-product-type="hype"]')?.classList.contains('active');
-    const isLocker=document.body.classList.contains('product-locker');
+    const isLocker=document.body.classList.contains('product-locker')||document.body.classList.contains('product-coaster');
     if ((isHype || isLocker) && typeof window.SignGuyRenderUsedColourGrid === 'function') {
       window.SignGuyRenderUsedColourGrid();
       return;

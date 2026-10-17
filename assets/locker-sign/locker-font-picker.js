@@ -14,7 +14,7 @@ function closeLockerFontPicker(restoreFocus=false){
 function attachLockerFontPicker(select){
  if(select.lockerFontButton)return;
  const button=document.createElement('button'),label=document.createElement('span');button.type='button';button.className='locker-font-button';button.append(label);
- button.setAttribute('aria-haspopup','listbox');button.setAttribute('aria-expanded','false');button.setAttribute('aria-label',select.id==='lockerBoxFont'?'Text font':'Stick font');
+ button.setAttribute('aria-haspopup','listbox');button.setAttribute('aria-expanded','false');button.setAttribute('aria-label',['lockerBoxFont','coasterBoxFont'].includes(select.id)?'Text font':'Stick font');
  select.classList.add('hidden');select.setAttribute('aria-hidden','true');select.tabIndex=-1;select.after(button);select.lockerFontButton=button;
  select.addEventListener('input',()=>syncLockerFontPicker(select));select.addEventListener('change',()=>syncLockerFontPicker(select));
  button.addEventListener('click',()=>{if(lockerOpenFontPicker?.button===button)closeLockerFontPicker();else openLockerFontPicker(select);});

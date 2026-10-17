@@ -1,0 +1,19 @@
+{
+  "eightColourUploadIncludingBackgroundAndText": true,
+  "backgroundReplacementAtEight": true,
+  "invalidDimensionsRejected": true,
+  "exportDownloads": [
+    "coaster-finished-circle.png",
+    "coaster-finished-circle.svg"
+  ],
+  "svgPngAgreement": {
+    "compared": 810693,
+    "different": 0
+  },
+  "networkErrors": [],
+  "browserErrors": [],
+  "mobileUploadButton": {
+    "height": 38,
+    "font": "14px"
+  }
+}

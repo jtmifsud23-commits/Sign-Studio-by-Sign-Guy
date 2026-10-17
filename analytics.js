@@ -1,4 +1,9 @@
 (() => {
+  // Local product reviews must not create storefront analytics events.
+  if (['localhost','127.0.0.1','::1'].includes(location.hostname) || location.protocol === 'file:') {
+    window.SignStudioAnalytics = Object.freeze({configured:false,containerId:'',track:()=>false});
+    return;
+  }
   const loader = document.currentScript;
   const containerId = String(loader?.dataset?.gtmId || '').trim().toUpperCase();
   const validContainerId = /^GTM-[A-Z0-9]+$/.test(containerId);

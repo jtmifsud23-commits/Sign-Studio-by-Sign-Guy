@@ -1,0 +1,40 @@
+{
+  "geometry": [
+    {
+      "x": 101.66000366210938,
+      "y": 101.66000366210938,
+      "z": 4.000000000000022,
+      "visible": true,
+      "designIndex": 0
+    },
+    {
+      "x": 101.66000366210938,
+      "y": 101.66000366210938,
+      "z": 4.000000000000022,
+      "visible": true,
+      "designIndex": 0
+    },
+    {
+      "x": 101.66000366210938,
+      "y": 101.66000366210938,
+      "z": 4.000000000000022,
+      "visible": true,
+      "designIndex": 0
+    },
+    {
+      "x": 101.66000366210938,
+      "y": 101.66000366210938,
+      "z": 4.000000000000022,
+      "visible": true,
+      "designIndex": 0
+    }
+  ],
+  "flow": "upload → circular placement + text → colour mapping → four-pack preview → local save → file restore → re-edit/cancel",
+  "responsive": [
+    320,
+    390,
+    768
+  ],
+  "errors": [],
+  "writes": []
+}
