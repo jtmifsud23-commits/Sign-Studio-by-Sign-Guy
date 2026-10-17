@@ -125,7 +125,7 @@ function buildCoasterFinalArtwork(){
  const svgText=`<svg xmlns="http://www.w3.org/2000/svg" width="${diameter}mm" height="${diameter}mm" viewBox="0 0 ${n} ${n}"><defs><clipPath id="coaster"><circle cx="512" cy="512" r="512"/></clipPath></defs><g clip-path="url(#coaster)"><circle cx="512" cy="512" r="512" fill="${coasterState().backing}"/>${paths}</g></svg>`;
  return {pngDataUrl:canvas.toDataURL('image/png'),svgText,widthMm:diameter,heightMm:diameter,depthMm:4,raisedMm:0};
 }
-async function saveCoasterProject(){setStatus('Saving');try{const project=await buildCoasterProject();if(!isLocalTesting())await uploadProjectFolder(project,{screenshots:await captureCoasterShots(),message:coasterOrderText(project)});await saveProjectRecord(project);coasterState().projectId=project.id;downloadProjectPayload(project);await refreshProjectLog();els.projectNote.textContent=`${project.name} saved ${isLocalTesting()?'locally':'to your project folder'} and downloaded as a .SignGuy file.`;setStatus('Saved');}catch(error){els.projectNote.textContent=error.message;setStatus('Save failed');}finally{updateProjectControls();}}
+async function saveCoasterProject(){setStatus('Saving');try{const project=await buildCoasterProject();if(!isLocalTesting())await uploadProjectFolder(project,{screenshots:await captureCoasterShots(),message:coasterOrderText(project)});await saveProjectRecord(project);coasterState().projectId=project.id;const downloaded=downloadProjectPayload(project);await refreshProjectLog();els.projectNote.textContent=`${project.name} saved ${isLocalTesting()?'to this device':'to your project folder'}.${downloaded?' .SignGuy downloaded.':''}`;setStatus('Saved');}catch(error){els.projectNote.textContent=error.message;setStatus('Save failed');}finally{updateProjectControls();}}
 function coasterOrderButtonLabel(){return state.orderInProgress?'Preparing Order...':'Place Order';}
 function coasterOutputFiles(project){const output=project.outputArtwork;if(!output?.pngDataUrl||!output?.svgText)throw new Error('The finished coaster artwork is missing.');return [{kind:'finalArtworkPng',file:dataUrlToFile(output.pngDataUrl,'coaster-finished-circle.png')},{kind:'finalArtworkSvg',file:new File([output.svgText],'coaster-finished-circle.svg',{type:'image/svg+xml'})}];}
 function coasterOrderText(project){
@@ -142,8 +142,8 @@ async function orderCoasters(){
    await saveProjectRecord(project);downloadProjectPayload(project);
    const params=new URL(buildShopifyCheckoutUrl(project,{designId:`local-review-${project.id}`})).searchParams;
    const review={localPreview:true,productUrl:COASTER_PRODUCT_URL,variantId:COASTER_SHOPIFY_VARIANT_ID,packs:project.config.coaster.packs,totalCoasters:project.config.totalCoasters,cartParameters:Object.fromEntries(params)};
-   downloadBlob(JSON.stringify(review,null,2),'coaster-checkout-review.json','application/json');await refreshProjectLog();
-   els.submitNote.textContent='Coaster order files downloaded for review. Local testing does not send email or open checkout.';setStatus('Order preview ready');
+   if(state.isAdmin)downloadBlob(JSON.stringify(review,null,2),'coaster-checkout-review.json','application/json');await refreshProjectLog();
+   els.submitNote.textContent=`Coaster order saved for review.${state.isAdmin?' Order files downloaded.':''} Local testing does not send email or open checkout.`;setStatus('Order preview ready');
   }else{
    const result=await uploadProjectFolder(project,{screenshots:await captureCoasterShots(),sendOrderEmail:true,subject:makeOrderEmailSubject('Custom Drink Coaster'),message:coasterOrderText(project),messageHtml:coasterOrderHtml(project)});
    await saveProjectRecord(project);redirectToShopifyCheckout(project,result);

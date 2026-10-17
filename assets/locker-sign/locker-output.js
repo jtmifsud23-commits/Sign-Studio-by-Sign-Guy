@@ -16,9 +16,9 @@ async function emailLockerDesign(){
  if(!lockerReady()||state.orderInProgress)return;state.orderInProgress=true;updateProjectControls();setStatus('Preparing design email');
  try{
   const project=await buildLockerProject();lockerState().projectId=project.id;
-  if(isLocalTesting()){downloadProjectPayload(project);lockerOutputFiles(project).forEach(asset=>downloadBlob(asset.file,asset.file.name,asset.file.type));els.submitNote.textContent='Finished circle PNG, SVG and .SignGuy downloaded for local review.';}
+  if(isLocalTesting()){if(state.isAdmin){downloadProjectPayload(project);lockerOutputFiles(project).forEach(asset=>downloadBlob(asset.file,asset.file.name,asset.file.type));}els.submitNote.textContent=state.isAdmin?'Finished circle PNG, SVG and .SignGuy downloaded for local review.':'Design saved for local review. Local testing does not send email.';}
   else{await uploadProjectFolder(project,{screenshots:await captureLockerShots(),sendOrderEmail:true,adminDesignPreview:state.isAdmin});els.submitNote.textContent='Locker sign design email queued with the finished circle PNG, SVG, original upload and editable project.';}
-  await saveProjectRecord(project);await refreshProjectLog();setStatus(isLocalTesting()?'Downloaded':'Email queued');
+  await saveProjectRecord(project);await refreshProjectLog();setStatus(isLocalTesting()?'Saved locally':'Email queued');
  }catch(error){els.submitNote.textContent=formatSaveFailureMessage(error,'Could not email this design.');setStatus('Email failed');}
  finally{state.orderInProgress=false;updateProjectControls();}
 }

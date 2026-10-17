@@ -745,7 +745,7 @@ async function initializeStudioAppOnce() {
   els.submitDesign?.addEventListener('click', () => submitDesignRequest());
   els.placeOrder.addEventListener('click', () => placeOrderRequest());
   els.saveProject.addEventListener('click', () => saveProjectFile());
-  els.openProject.addEventListener('click', () => els.projectFileInput.click());
+  els.openProject.addEventListener('click', () => { if (state.isAdmin) els.projectFileInput.click(); });
   els.projectFileInput.addEventListener('change', () => openProjectFiles(els.projectFileInput.files));
   els.designName.addEventListener('input', () => {
     state.designName = els.designName.value;
@@ -981,6 +981,13 @@ function updateViewportUnits() {
 }
 
 function renderAdminMode() {
+  if (els.openProject) els.openProject.hidden = !state.isAdmin;
+  if (els.projectFileInput) els.projectFileInput.hidden = !state.isAdmin;
+  const saveLabel = state.isAdmin ? 'Save design and download .SignGuy' : 'Save design';
+  els.saveProject?.setAttribute('aria-label', saveLabel);
+  els.mobileSaveProject?.setAttribute('aria-label', saveLabel);
+  const projectHelp = els.projectSection?.querySelector('.mobile-helper-text');
+  if (projectHelp) projectHelp.textContent = state.isAdmin ? 'Open recent work or import a .SignGuy file.' : 'Open your saved designs.';
   if (els.adminLoginButton) {
     els.adminLoginButton.textContent = state.isAdmin ? 'Admin: Logout' : 'Login';
     els.adminLoginButton.classList.toggle('active', state.isAdmin);
@@ -7708,9 +7715,7 @@ async function saveProjectFile() {
     state.projectId = project.id;
     const localSave = isLocalTesting();
     let serverSaveError = null;
-    if (localSave) {
-      if (state.isAdmin) downloadProjectPayload(project);
-    } else {
+    if (!localSave) {
       try {
         await uploadProjectFolder(project);
       } catch (error) {
@@ -7726,16 +7731,17 @@ async function saveProjectFile() {
     } catch (storageError) {
       console.warn(storageError);
       els.projectNote.textContent = localSave
-        ? 'The .SignGuy file was downloaded, but the local recent list could not be updated.'
+        ? 'The recent designs list could not be updated.'
         : 'The server folder was saved, but the local recent list could not be updated.';
     }
     if (serverSaveError && !recordSaved) throw serverSaveError;
+    if (state.isAdmin) downloadProjectPayload(project);
     els.projectNote.textContent = serverSaveError
       ? `${project.name} saved to this device. ${formatSaveFailureMessage(serverSaveError, 'Server folder was not saved.')}`
       : localSave
       ? state.isAdmin
         ? `${project.name}.SignGuy downloaded and logged for local testing.`
-        : ''
+        : `${project.name} saved to this device.`
       : `${project.name} saved to the ${state.customerEmail} server folder.`;
     setStatus(serverSaveError ? 'Saved locally' : 'Saved');
     trackSignStudioEvent('save_design', {
@@ -7745,7 +7751,7 @@ async function saveProjectFile() {
   } catch (error) {
     console.error(error);
     els.projectNote.textContent = isLocalTesting()
-      ? 'Could not download this .SignGuy file.'
+      ? 'Could not save this design.'
       : formatSaveFailureMessage(error, 'Could not save this project folder on the server.');
     setStatus('Save failed');
   } finally {
@@ -7802,7 +7808,7 @@ async function placeOrderRequest() {
       console.warn(storageError);
     }
     els.submitNote.textContent = localOrder
-      ? `${project.name}.SignGuy downloaded for local review. Local testing does not send email or open checkout.`
+      ? `${project.name} saved for local review.${state.isAdmin ? ' .SignGuy downloaded.' : ''} Local testing does not send email or open checkout.`
       : `${project.name} saved. Redirecting to checkout.`;
     setStatus(localOrder ? 'Saved locally' : 'Checkout');
     if (localOrder) { state.orderInProgress = false; updateProjectControls(); }
@@ -7819,6 +7825,7 @@ async function placeOrderRequest() {
 }
 
 async function openProjectFiles(fileList) {
+  if (!state.isAdmin) return;
   const file = fileList?.[0];
   if (!file) return;
   setStatus('Opening');
@@ -8172,7 +8179,7 @@ async function refreshProjectLog(options = {}) {
     updateProjectLogCount();
     if (isProjectSectionExpanded()) {
       els.projectList.innerHTML = '<p class="project-empty">Recent saves unavailable.</p>';
-      els.projectNote.textContent = 'Use Open .SignGuy to load saved project files.';
+      els.projectNote.textContent = state.isAdmin ? 'Use Open .SignGuy to load saved project files.' : 'Saved designs are temporarily unavailable. Try again.';
     }
   }
 }
@@ -8223,7 +8230,7 @@ function renderProjectLog() {
     const restoreProject = async () => {
       const project = await getProjectRecord(button.dataset.restoreProject);
       await restoreSignGuyProject(project);
-      els.projectNote.textContent = `${project.name || 'Saved design'}.SignGuy restored from recent saves.`;
+      els.projectNote.textContent = `${project.name || 'Saved design'} restored from recent saves.`;
       setStatus('Project open');
       if (isMobileControlLayout()) closeMobileControlSheet();
     };
@@ -8264,8 +8271,10 @@ async function hydrateProjectLogPreviews() {
 }
 
 function downloadProjectPayload(project) {
+  if (!state.isAdmin) return false;
   const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/x-signguy+json' });
   downloadBlob(blob, `${projectFileBaseName(project)}.SignGuy`, 'application/x-signguy+json');
+  return true;
 }
 
 async function uploadProjectFolder(project, options = {}) {
@@ -9673,12 +9682,14 @@ function safeFileName(value) {
 }
 
 function downloadBlob(blob, filename, type) {
+  if (!state.isAdmin && (/\.signguy$/i.test(String(filename).trim()) || [type, blob?.type].some(value => /^application\/x-signguy\+json(?:;|$)/i.test(value || '')))) return false;
   const url = URL.createObjectURL(blob instanceof Blob ? blob : new Blob([blob], { type }));
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return true;
 }
 
 function colourDistance(a, b) {

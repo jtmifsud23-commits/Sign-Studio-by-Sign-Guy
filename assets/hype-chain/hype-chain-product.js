@@ -3056,9 +3056,7 @@ async function saveHypeChainProjectFile() {
     const project = await buildHypeChainProject({ forceNewId: true });
     state.projectId = project.id;
     let serverSaveError = null;
-    if (isLocalTesting()) {
-      if (state.isAdmin) downloadProjectPayload(project);
-    } else {
+    if (!isLocalTesting()) {
       try {
         await uploadProjectFolder(project);
       } catch (error) {
@@ -3075,9 +3073,10 @@ async function saveHypeChainProjectFile() {
       console.warn(storageError);
     }
     if (serverSaveError && !recordSaved) throw serverSaveError;
+    if (state.isAdmin) downloadProjectPayload(project);
     els.projectNote.textContent = serverSaveError
       ? `${project.name} saved to this device. ${formatSaveFailureMessage(serverSaveError, 'Server folder was not saved.')}`
-      : isLocalTesting() && !state.isAdmin ? '' : `${project.name} saved.`;
+      : `${project.name} saved.${state.isAdmin ? ' .SignGuy downloaded.' : ''}`;
     setStatus(serverSaveError ? 'Saved locally' : 'Saved');
     trackSignStudioEvent('save_design', {
       product_type: 'hype',
@@ -3134,7 +3133,7 @@ async function placeHypeChainOrder() {
       console.warn(storageError);
     }
     els.submitNote.textContent = localOrder
-      ? `${project.name}.SignGuy downloaded for local review. Local testing does not send email or open checkout.`
+      ? `${project.name} saved for local review.${state.isAdmin ? ' .SignGuy downloaded.' : ''} Local testing does not send email or open checkout.`
       : `${project.name} saved. Redirecting to checkout.`;
     setStatus(localOrder ? 'Saved locally' : 'Checkout');
     if (localOrder) { state.orderInProgress = false; updateProjectControls(); }

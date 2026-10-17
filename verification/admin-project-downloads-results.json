@@ -1,0 +1,49 @@
+{
+  "build": "3.6.2",
+  "products": [
+    {
+      "product": "coaster",
+      "publicSavePersistsAndRestores": true,
+      "publicDownloads": 0,
+      "adminExport": "SignGuy.CoasterStudio",
+      "logoutBlocksExport": true
+    },
+    {
+      "product": "locker",
+      "publicSavePersistsAndRestores": true,
+      "publicDownloads": 0,
+      "adminExport": "SignGuy.LockerSignStudio",
+      "logoutBlocksExport": true
+    },
+    {
+      "product": "plaque",
+      "publicSavePersistsAndRestores": true,
+      "publicDownloads": 0,
+      "adminExport": "SignGuy.WallPlaqueStudio",
+      "logoutBlocksExport": true
+    },
+    {
+      "product": "classic",
+      "publicSavePersistsAndRestores": true,
+      "publicDownloads": 0,
+      "adminExport": "SignGuy.HypeChainStudio",
+      "logoutBlocksExport": true
+    },
+    {
+      "product": "spinner",
+      "publicSavePersistsAndRestores": true,
+      "publicDownloads": 0,
+      "adminExport": "SignGuy.HypeChainStudio",
+      "logoutBlocksExport": true
+    },
+    {
+      "product": "bag",
+      "publicSavePersistsAndRestores": true,
+      "publicDownloads": 0,
+      "adminExport": "SignGuy.BagTagStudio",
+      "logoutBlocksExport": true
+    }
+  ],
+  "mobilePublicSaveNoDownload": true,
+  "errors": []
+}

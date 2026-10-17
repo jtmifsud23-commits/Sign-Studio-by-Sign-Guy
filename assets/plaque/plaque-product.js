@@ -6188,7 +6188,7 @@ async function placePlaqueOrder() {
       console.warn(storageError);
     }
     els.submitNote.textContent = localOrder
-      ? `${project.name}.SignGuy downloaded for local review. Local testing does not send email or open checkout.`
+      ? `${project.name} saved for local review.${state.isAdmin ? ' .SignGuy downloaded.' : ''} Local testing does not send email or open checkout.`
       : `${project.name} saved. Redirecting to checkout.`;
     setStatus(localOrder ? 'Saved locally' : 'Checkout');
     if (localOrder) { state.orderInProgress = false; updateProjectControls(); }

@@ -486,7 +486,8 @@ async function restoreBagProject(project) {
 }
 async function saveBagProject() {
   try {setStatus('Saving');const project=await buildBagProject();bagState().projectId=project.id;await saveProjectRecord(project);await refreshProjectLog();
-    if(isLocalTesting()){downloadProjectPayload(project);els.projectNote.textContent='Bag Tag saved to this device and downloaded.';}
+    const downloaded=downloadProjectPayload(project);
+    if(isLocalTesting()){els.projectNote.textContent=`Bag Tag saved to this device.${downloaded?' .SignGuy downloaded.':''}`;}
     else {try{await uploadProjectFolder(project,{screenshots:await captureBagShots()});els.projectNote.textContent='Bag Tag saved to your project folder.';}catch(error){els.projectNote.textContent=`Saved to this device. ${formatSaveFailureMessage(error,'Server save failed.')}`;}}
     setStatus('Saved');
   }catch(error){els.projectNote.textContent=error.message;setStatus('Save failed');}finally{updateProjectControls();}
@@ -501,7 +502,7 @@ async function orderBagTag() {
   try{const project=await buildBagProject();bagState().projectId=project.id;
     if(!getShopifyVariantId())throw new Error('Bag Tag checkout is not configured yet. Your design can still be saved.');
     const message=`Bag Tag\nNames: ${bagOrderRows().map(row=>`${row.name} (quantity ${row.quantity})`).join('; ')}\nFont: ${bagState().font}\nQuantity: ${bagTotalQuantity()}\nUsage: ${bagState().usage}\n${bagDimensionLabel()}; 4 mm base + 2 mm relief; front only.\nBase: ${bagState().baseColour}\nText: ${bagState().textColour}\nLogo colours: ${JSON.stringify(bagState().palette)}`;
-    if(isLocalTesting()){await saveProjectRecord(project);downloadProjectPayload(project);els.submitNote.textContent='Bag Tag order file downloaded for review. Local testing does not send email or open checkout.';}
+    if(isLocalTesting()){await saveProjectRecord(project);downloadProjectPayload(project);els.submitNote.textContent=`Bag Tag order saved for review.${state.isAdmin?' .SignGuy downloaded.':''} Local testing does not send email or open checkout.`;}
     else{const result=await uploadProjectFolder(project,{screenshots:await captureBagOrderShots(project.config.bag),sendOrderEmail:true,subject:makeOrderEmailSubject('Bag Tag'),message,messageHtml:makeBagOrderEmailHtml(project)});await saveProjectRecord(project);redirectToShopifyCheckout(project,result);}
   }catch(error){els.submitNote.textContent=error.message;setStatus('Order not placed');}finally{state.orderInProgress=false;updateProjectControls();}
 }

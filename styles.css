@@ -1782,6 +1782,15 @@ output,
   place-items: center;
 }
 
+#openProject[hidden],
+#projectFileInput[hidden] {
+  display: none !important;
+}
+
+#openProject[hidden] + #saveProject {
+  grid-column: 1 / -1;
+}
+
 .project-icon-button svg {
   width: 22px;
   height: 22px;

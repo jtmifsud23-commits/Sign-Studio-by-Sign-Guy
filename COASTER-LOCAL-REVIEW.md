@@ -16,10 +16,10 @@ This is a separate checkout on `codex/coaster-designer`, based on published base
 2. Use the adapted Locker Room circle editor: place/crop the logo, resize, move, centre, change the background, and add independent text boxes. Fonts, text size in millimetres, colours, multiline text, drag handles, and keyboard movement are available.
 3. Review the colour conversion, adjust mapping, and confirm.
 4. Use the standard colour swatches and Top / 4-pack / Holder views. The four-pack view shows three coasters stacked flat with a fourth leaning against the stack. Holder shows four upright coasters nested in the supplied holder STL. All four remain the same physical size.
-5. Save a `.SignGuy` project, reopen it through the folder button or saved-design card, and use Edit design to continue editing.
-6. Use Place Order. Locally this downloads the editable design and a checkout-review JSON file, without sending email or opening checkout. Finished PNG/SVG artwork remains included in the editable file.
+5. Save a design and reopen it through its saved-design card. Customers do not receive a file download. Admin login enables `.SignGuy` export and the folder button for import.
+6. Use Place Order. Locally this saves for review without sending email or opening checkout. Only admins receive the editable design and checkout-review JSON downloads. Production uploads and emails retain all design files.
 
-For a prepared example, open `verification/coaster-review.SignGuy` through the folder button.
+For a prepared example, log in as admin and open `verification/coaster-review.SignGuy` through the folder button.
 
 ## Fixed product specification
 
@@ -46,7 +46,7 @@ The local code is connected to the existing Shopify product `https://mysignguy.c
 
 On a deployed host, Place Order uploads and confirms the saved design, original logo, finished circle PNG/SVG, artwork preview and Top / 4-pack / Holder renders before opening the native Shopify cart. Cart quantity is the number of four-packs. Metadata stays on the specific cart item and includes the Studio design ID, pack size, dimensions, construction, colours, text and fonts, preview link, and editable file name. Production email uses Shopify's actual paid quantity and calculates total coasters as paid packs × four. Unpaid submissions remain labelled unpaid; plain saves queue no email.
 
-Local Place Order remains a dry run and downloads review files. Build 3.6.0 is now published at https://mysignguy.ca/pages/sign-studio?product=coaster. Public access, all three preview views, the black holder, mobile layouts, original logo and finished PNG/SVG uploads, and an unpaid plain save were verified live. No email was queued by the live verification. The Shopify page's default and Canadian template allowlists now forward `product=coaster` into the app. Product-page designer links were also verified. Real cart/checkout and paid-email delivery remain for a paid test order. Local analytics remain disabled. Release evidence is in `verification/coaster-release-360.json` and `verification/coaster-public-live-results.json`.
+Local Place Order remains a dry run; review file downloads are admin-only. Build 3.6.0 is now published at https://mysignguy.ca/pages/sign-studio?product=coaster. Public access, all three preview views, the black holder, mobile layouts, original logo and finished PNG/SVG uploads, and an unpaid plain save were verified live. No email was queued by the live verification. The Shopify page's default and Canadian template allowlists now forward `product=coaster` into the app. Product-page designer links were also verified. Real cart/checkout and paid-email delivery remain for a paid test order. Local analytics remain disabled. Release evidence is in `verification/coaster-release-360.json` and `verification/coaster-public-live-results.json`.
 
 Checkout uses the existing [Shopify Cart API](https://shopify.dev/docs/api/ajax/reference/cart) integration and line-item properties.
 
